@@ -10,6 +10,7 @@ from fixed.stores import new_id, now_iso
 
 #툴!!!툴!!!!!!!!!!!!!!!!!!!
 #툴 수정!!!!!!!!1
+#툴 수정입니다!!!
 PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 
 
