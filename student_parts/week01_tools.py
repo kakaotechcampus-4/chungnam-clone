@@ -8,7 +8,7 @@ from langchain.tools import tool
 from fixed.runtime_clock import next_weekday_iso
 from fixed.stores import new_id, now_iso
 
-
+#툴!!!툴!!!!!!!!!!!!!!!!!!!
 PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 
 
