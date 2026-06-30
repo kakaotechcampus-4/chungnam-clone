@@ -87,6 +87,29 @@
   - `start_time`, `end_time` 인자는 `HH:MM` 형식임을 명시한다.
 - docstring 작성도 `[수강생 구현 가이드]` 주석을 베끼지 않고 위 3가지 요구사항만 반영해서 직접 쓴다.
 
+# personal_list_schedules 구현 명세
+
+- 이 `@tool`은 **조회 전용** 함수다. `PERSONAL_SCHEDULES`를 추가/삭제/수정하지 않는다.
+- 매개변수는 이미 작성된 함수 시그니처를 그대로 따른다.
+  (`date_from: str | None = None`, `date_to: str | None = None`)
+  - `date_from`, `date_to` 모두 주어질 경우 `YYYY-MM-DD` 형식을 따른다.
+- 조회 절차
+  1. 먼저 `_current_session_schedules()`를 호출해서 현재 대화 범위(`session_id`)에 속한 일정만 가져온다.
+  2. 그 결과에 대해서만 `date_from`/`date_to` 기간 조회를 수행한다.
+     - `date_from`이 주어지면 그 날짜 이상인 일정만 남긴다.
+     - `date_to`가 주어지면 그 날짜 이하인 일정만 남긴다.
+     - 날짜 비교는 `YYYY-MM-DD` 문자열 비교로 충분하다.
+  - 특정 기간 조회는 별도 함수로 분리하지 않고 `personal_list_schedules` 안에서 직접 구현한다.
+- 반환값은 `_json(...)`으로 감싸기 전 기준으로, `personal_create_schedule`의 반환 형태(`ok`, `tool_name`,
+  `<결과 데이터 필드>` 3개 키로 구성되는 dict 형태)와 동일한 패턴을 따른다.
+  ```python
+  {
+      "ok": bool,
+      "tool_name": "personal_list_schedules",
+      "schedules": list[dict],
+  }
+  ```
+
 # `@tool` 데코레이터 작성법 (langchain_core 1.4.0 / langchain 1.3.2 기준)
 
 `langchain.tools.tool`은 데코레이터로 쓸 때 두 가지 형태를 지원한다.
