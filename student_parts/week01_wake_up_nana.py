@@ -202,8 +202,25 @@ def personal_create_schedule(
 def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
-    # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    ...
+    # ① 현재 대화 범위의 일정만 가져온다. (헬퍼가 새 list를 만들어 주므로
+    #    아래에서 걸러도 원본 PERSONAL_SCHEDULES는 그대로 보존된다.)
+    schedules = _current_session_schedules()
+
+    # ② 날짜 범위 필터 — 인자가 들어온 경우에만 적용한다.
+    #    date가 "YYYY-MM-DD" 문자열이라 사전식(문자열) 비교만으로 날짜 대소가 맞는다.
+    if date_from:
+        schedules = [s for s in schedules if s["date"] >= date_from]
+    if date_to:
+        schedules = [s for s in schedules if s["date"] <= date_to]
+
+    # ③ 조회 결과를 JSON 문자열로 반환.
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_list_schedules",
+            "schedules": schedules,
+        }
+    )
 
 
 @tool
