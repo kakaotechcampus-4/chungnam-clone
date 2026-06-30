@@ -227,8 +227,32 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 def personal_delete_schedule(schedule_id: str) -> str:
     """일정 ID에 해당하는 개인 일정을 삭제합니다."""
 
-    # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
-    ...
+    # ① 현재 대화 범위. 다른 대화의 같은 ID는 지우면 안 되므로 scope로도 걸러야 한다.
+    scope = current_session_scope()
+
+    # ② 삭제 전 개수를 기록 → 나중에 길이 변화로 실제 삭제 여부를 판단한다.
+    before = len(PERSONAL_SCHEDULES)
+
+    # ③ "지울 대상이 아닌 것"만 남긴 새 목록으로 내용을 교체한다.
+    #    PERSONAL_SCHEDULES = [...] (이름 재바인딩) 대신 PERSONAL_SCHEDULES[:] = [...] 를 쓰는 이유:
+    #    다른 코드가 같은 리스트 '객체'를 참조 중일 수 있어 객체 자체(identity)를 유지해야 하기 때문.
+    PERSONAL_SCHEDULES[:] = [
+        s
+        for s in PERSONAL_SCHEDULES
+        if not (s["id"] == schedule_id and _schedule_scope(s) == scope)
+    ]
+
+    # ④ 길이가 줄었으면 삭제 성공.
+    deleted = before - len(PERSONAL_SCHEDULES) > 0
+
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_delete_schedule",
+            "deleted": deleted,
+            "schedule_id": schedule_id,
+        }
+    )
 
 
 def week01_tools() -> list[Any]:
