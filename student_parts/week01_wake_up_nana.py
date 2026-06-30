@@ -207,19 +207,13 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
     
     current_schedules = _current_session_schedules()
-    selected_schedules: list[dict[str, Any]] = []
+    selected_schedules = [
+        schedule
+        for schedule in current_schedules
+        if (date_from is None or schedule["date"] >= date_from)
+        and (date_to is None or schedule["date"] <= date_to)
+    ]
 
-    for schedule in current_schedules:
-        schedule_date = schedule["date"]
-
-        if date_from is not None and schedule_date < date_from:
-            continue
-
-        if date_to is not None and schedule_date > date_to:
-            continue
-
-        selected_schedules.append(schedule)
-            
     return _json({
         "ok": True, 
         "tool_name": "personal_list_schedules",
