@@ -236,14 +236,17 @@ def personal_delete_schedule(schedule_id: str) -> str:
 
     before_len = len(PERSONAL_SCHEDULES)
 
-    for schedule in PERSONAL_SCHEDULES:
-        if(schedule["id"] == schedule_id and _schedule_scope(schedule) == current_session_scope()):
-            continue
-        deleted_schedules.append(schedule)
-
-    PERSONAL_SCHEDULES[:] = deleted_schedules
+    PERSONAL_SCHEDULES[:] = [
+        schedule
+        for schedule in PERSONAL_SCHEDULES
+        if not (
+            schedule["id"] == schedule_id
+            and _schedule_scope(schedule) == current_session_scope()
+        )
+    ]
 
     after_len = len(PERSONAL_SCHEDULES)
+    
     deleted = before_len != after_len
 
     return _json({
