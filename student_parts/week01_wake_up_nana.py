@@ -170,8 +170,32 @@ def personal_create_schedule(
 ) -> str:
     """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
 
-    # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
-    ...
+    # ① 입력 인자로 일정 dict를 만든다.
+    #    - id/created_at은 우리가 직접 채운다(모델이 주는 값이 아님).
+    #    - attendees가 None이면 빈 list로 바꿔 항상 list 타입을 보장한다.
+    #    - session_id에 현재 대화 범위를 박아둬야 조회/삭제가 이 대화 일정만 본다.
+    schedule = {
+        "id": _new_personal_id(),
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "attendees": attendees or [],
+        "session_id": current_session_scope(),
+        "created_at": _now_iso(),
+    }
+
+    # ② 임시 저장소(인메모리 리스트)에 추가한다. Week 1은 DB를 쓰지 않는다.
+    PERSONAL_SCHEDULES.append(schedule)
+
+    # ③ tool은 문자열 반환이 가장 안정적 → dict를 _json()으로 감싼다.
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_create_schedule",
+            "created_schedule": schedule,
+        }
+    )
 
 
 @tool
