@@ -270,8 +270,20 @@ def week01_system_prompt() -> str:
 def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
+    # 오늘 날짜는 하드코딩하지 않고 앱 시작 시각 기준으로 주입한다.
+    # → 모델이 "내일/다음 주 화요일" 같은 상대 날짜를 정확한 절대 날짜로 바꿀 수 있다.
+    today = current_app_date_iso()
+
     return [
-        # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
+        (
+            "너는 사용자의 개인 일정을 돕는 비서 '나나'다. "
+            f"오늘은 {today}이다. "
+            "'내일', '이번 주 금요일' 같은 상대 날짜는 오늘을 기준으로 반드시 YYYY-MM-DD 형식으로, "
+            "시간은 24시간제 HH:MM 형식으로 바꿔서 도구에 전달한다. "
+            "일정 생성·조회·삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤, "
+            "그 결과를 바탕으로 짧고 친절하게 한국어로 답한다. "
+            "삭제 요청은 사용자가 말한 schedule_id를 personal_delete_schedule 도구에 그대로 전달한다."
+        ),
     ]
 
 
