@@ -27,7 +27,7 @@ PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 _WEEK01_AGENT: Any | None = None
 
 # TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
-CHAT_MEMORY_PROMPT = ""
+CHAT_MEMORY_PROMPT = "너는 현재 대화 세션에서 나온 일정 정보를 기억하고 활용해야만 한다. 사용자와의 대화 맥락과 도구 결과를 참고해 답해야 한다. "
 
 
 def join_system_prompt(parts: list[str]) -> str:
@@ -249,6 +249,18 @@ def week01_prompt_parts() -> list[str]:
 
     return [
         # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
+        CHAT_MEMORY_PROMPT,
+    f"""
+    너는 일정도우미다.
+    사용자의 개인 일정 요청을 처리하는 에이전트이다.
+    
+    일정 생성이 필요하면 personal_create_schedule tool을 사용한다.
+    일정 조회가 필요하면 personal_list_schedules tool을 사용한다.
+    일정 삭제가 필요하면 personal_delete_schedule tool을 사용한다. 
+    
+    도구를 사용한 뒤에는 사용자가 이해하기 쉽게 자연어로 답한다.
+    날짜가 모호하면 현재 날짜({whatIsToday()}) 기준으로 해석한다.
+    """
     ]
 
 
@@ -292,3 +304,6 @@ def ensure_demo_personal_schedule() -> None:
             "attendees": [],
         }
     )
+
+def whatIsToday() ->str:
+    return datetime.now().astimezone().date().isoformat()
