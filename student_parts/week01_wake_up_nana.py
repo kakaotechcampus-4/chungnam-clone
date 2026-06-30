@@ -258,7 +258,8 @@ def week01_prompt_parts() -> list[str]:
         "일정 조회가 필요하면 personal_list_schedule 도구를 사용한다.",
         "personal_list_schedule tool을 사용할때는 date_from과 date_to를 YYYY-MM-DD 형식으로 넣는다.",
         "일정 삭제가 필요하면 personal_delete_schedule 도구를 사용한다.",
-        "일정을 수정하거나 삭제하기 전에 반드시 personal_list_schedules로 목록을 먼저 조회해서 정확한 schedule_id를 확인한다."
+        "일정을 수정하거나 삭제하기 전에 반드시 personal_list_schedules로 목록을 먼저 조회해서 정확한 schedule_id를 확인한다.",
+        "date_to는 특별히 언급이 없으면 지정하지 않는다."
     ]
 
 
