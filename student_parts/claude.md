@@ -110,6 +110,44 @@
   }
   ```
 
+# personal_delete_schedule 구현 명세
+
+- 이 `@tool`은 `schedule_id` 하나에 해당하는 개인 일정을 삭제하는 함수다.
+- 매개변수는 이미 작성된 함수 시그니처를 그대로 따른다. (`schedule_id: str`)
+  - `schedule_id`는 `_new_personal_id()`가 반환하는 형태(`"personal_"` 접두어가 붙은 문자열)를 따르는
+    값이 들어온다는 뜻이며, 별도의 런타임 포맷 검증 로직은 추가하지 않는다. (이 사실은 docstring/description에
+    형식을 문서화하는 용도로만 쓴다.)
+- 삭제 조건: `id == schedule_id`이면서 동시에 `_schedule_scope(schedule) == current_session_scope()`인
+  일정만 삭제 대상이다.
+  - 다른 대화 범위(`session_id`)에 동일한 `schedule_id`를 가진 일정이 있어도 삭제하지 않는다.
+- 구현 절차
+  1. 삭제 전 `PERSONAL_SCHEDULES`의 길이를 기록한다.
+  2. 위 삭제 조건에 해당하지 않는(즉 유지할) 일정만 남긴 새 리스트를 만든다.
+  3. `PERSONAL_SCHEDULES[:] = <새 리스트>` 형태로 슬라이스 대입해서 기존 리스트 객체(reference)를
+     유지한 채 내용만 교체한다. (`PERSONAL_SCHEDULES = <새 리스트>`처럼 새 객체를 바인딩하지 않는다.)
+  4. 삭제 후 길이와 비교해 `deleted = 삭제 전 길이 - 삭제 후 길이`를 계산한다. (일치하는 일정이 없으면 0)
+- 반환값은 `_json(...)`으로 감싸기 전 기준으로 아래 dict 형태여야 한다.
+  ```python
+  {
+      "ok": bool,
+      "tool_name": "personal_delete_schedule",
+      "deleted": int,
+  }
+  ```
+  - `ok`는 함수 호출이 에러 없이 끝났다면 항상 `True`다. (`personal_create_schedule`/`personal_list_schedules`와
+    동일한 규칙. 삭제 대상이 없어 `deleted == 0`이어도 `ok`를 `False`로 바꾸지 않는다.) 실제 삭제 여부는
+    `deleted` 값으로 판단한다.
+
+## personal_delete_schedule `@tool` docstring/description 작성 가이드
+
+- 이 프로젝트는 `description=`을 우선 사용하므로, `personal_create_schedule`처럼
+  `@tool("personal_delete_schedule", description=...)` 형태로 작성한다.
+- description에는 아래 내용이 드러나야 한다.
+  - 이 함수가 **`schedule_id`에 해당하는 개인 일정을 삭제하는** 함수임을 명시한다.
+  - `schedule_id`는 `_new_personal_id()`가 만든 값(`"personal_"` 접두어가 붙은 문자열) 형식임을 명시한다.
+  - 현재 대화 범위(session)가 다르면 같은 `schedule_id`라도 삭제되지 않는다는 점을 명시한다.
+- `[수강생 구현 가이드]` 주석을 베끼지 않고 위 요구사항만 반영해서 직접 쓴다.
+
 # `@tool` 데코레이터 작성법 (langchain_core 1.4.0 / langchain 1.3.2 기준)
 
 `langchain.tools.tool`은 데코레이터로 쓸 때 두 가지 형태를 지원한다.
