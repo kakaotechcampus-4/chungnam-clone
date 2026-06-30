@@ -227,6 +227,7 @@ def personal_delete_schedule(schedule_id: str) -> str:
     return _json({
         "ok":True,
         "tool_name":"personal_delete_schedule",
+        "schedule_id":schedule_id,
         "deleted":deleted
     })
     ...
@@ -259,7 +260,7 @@ def week01_prompt_parts() -> list[str]:
     일정 삭제가 필요하면 personal_delete_schedule tool을 사용한다. 
     
     도구를 사용한 뒤에는 사용자가 이해하기 쉽게 자연어로 답한다.
-    날짜가 모호하면 현재 날짜({whatIsToday()}) 기준으로 해석한다.
+    날짜가 모호하면 현재 날짜({current_app_date_iso()}) 기준으로 해석한다.
     """
     ]
 
@@ -304,6 +305,3 @@ def ensure_demo_personal_schedule() -> None:
             "attendees": [],
         }
     )
-
-def whatIsToday() ->str:
-    return datetime.now().astimezone().date().isoformat()
