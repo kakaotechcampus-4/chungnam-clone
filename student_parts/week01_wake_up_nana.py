@@ -215,7 +215,7 @@ def personal_delete_schedule(schedule_id: str) -> str:
 
     deleted = len(PERSONAL_SCHEDULES) < before # TF 로 판단
     
-    return _json({"ok":True, "tool_name":"personal_delete_schedule", "deleted" : deleted})
+    return _json({"ok":True, "tool_name":"personal_delete_schedule", "deleted" : deleted, "schedule_id" : schedule_id})
     
 
 
