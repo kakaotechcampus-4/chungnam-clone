@@ -231,12 +231,18 @@ def personal_delete_schedule(schedule_id: str) -> str:
 
     # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
     deleted = None
+    before_len = len(PERSONAL_SCHEDULES)
     session_id = current_session_scope()
-    for index, schedule in enumerate(PERSONAL_SCHEDULES):
-        if schedule["id"] == schedule_id and _schedule_scope(schedule) == session_id:
-            deleted = PERSONAL_SCHEDULES.pop(index)
-            break
-    return _json({"ok": deleted is not None, "deleted_schedule": deleted, "schedule_id": schedule_id})
+    PERSONAL_SCHEDULES[:] = [
+          s for s in PERSONAL_SCHEDULES
+          if not (s["id"] == schedule_id and _schedule_scope(s) == session_id)
+    ]
+    after_len = len(PERSONAL_SCHEDULES)
+    deleted = after_len < before_len
+    return _json({"ok": True, 
+                  "deleted": deleted, 
+                  "schedule_id": schedule_id,
+                  "tool_name": "personal_delete_schedule"})
 
 
 def week01_tools() -> list[Any]:
