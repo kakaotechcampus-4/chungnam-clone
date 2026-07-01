@@ -26,8 +26,11 @@ from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 _WEEK01_AGENT: Any | None = None
 
-# TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
-CHAT_MEMORY_PROMPT = ""
+CHAT_MEMORY_PROMPT = """
+사용자의 개인 일정은 현재 대화 범위의 임시 메모리에서만 관리한다.
+현재 대화에서 생성한 개인 일정만 조회하거나 삭제할 수 있다.
+"""
+
 
 
 def join_system_prompt(parts: list[str]) -> str:
@@ -259,11 +262,12 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
         }
     """
 
-    schedules = _current_session_schedules()
-    if date_from:
-        schedules = [schedule for schedule in schedules if schedule.get("date", "") >= date_from]
-    if date_to:
-        schedules = [schedule for schedule in schedules if schedule.get("date", "") <= date_to]
+    schedules = [
+        schedule
+        for schedule in _current_session_schedules()
+        if (date_from is None or schedule["date"] >= date_from)
+        and (date_to is None or schedule["date"] <= date_to)
+    ]
     return _json(
         {
             "ok": True,
@@ -340,9 +344,9 @@ def week01_prompt_parts() -> list[str]:
         개인 일정 생성 요청에는 personal_create_schedule tool을 사용한다.
         개인 일정 조회 요청에는 personal_list_schedules tool을 사용한다.
         개인 일정 삭제 요청에는 personal_delete_schedule tool을 사용한다.
-        현재 대화에서 만든 개인 일정만 조회하거나 삭제할 수 있다.
         답변은 tool 실행 결과를 바탕으로 짧고 자연스럽게 작성한다.
         """,
+        CHAT_MEMORY_PROMPT
     ]
 
 
