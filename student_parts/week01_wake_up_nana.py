@@ -172,7 +172,7 @@ def personal_create_schedule(
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
 
-    attendees = attendees or []
+    attendees if attendees is not None else []
         
     schedule = {
         "id": _new_personal_id(),
