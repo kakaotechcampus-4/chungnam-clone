@@ -278,6 +278,8 @@ def personal_delete_schedule(schedule_id: str) -> str:
     after_len = len(PERSONAL_SCHEDULES)
     
     result = {
+        'ok': True,
+        'tool_name': 'personal_delete_schedule',
         'deleted': before_len != after_len
     }
     return _json(result)
@@ -305,7 +307,7 @@ def week01_prompt_parts() -> list[str]:
         '오늘은 2026-06-30이다. 상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다.'
         '일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답한다.'
         '생성 요청에는 personal_create_schedule 도구를 호출한다. 만약 사용자가 시작시간(start_time)에 대한 언급이 따로 없다면, 00:00을 start time으로 전달한다.'
-        '조회 요청에는 personal_delete_schedule 도구를 호출한다. 사용자가 말한 date_from과 date_to를 도구에 전달하여 그 날짜 범위 안에 조회를 할 수도 있다. 만약 사용자가 날짜를 언급하지 않거나 하나만 언급하면 값을 전달 안하거나 하나만 전달해도 된다.'
+        '조회 요청에는 personal_list_schedules 도구를 호출한다. 사용자가 말한 date_from과 date_to를 도구에 전달하여 그 날짜 범위 안에 조회를 할 수도 있다. 만약 사용자가 날짜를 언급하지 않거나 하나만 언급하면 값을 전달 안하거나 하나만 전달해도 된다.'
         '삭제 요청은 사용자가 말한 schedule_id를 personal_delete_schedule 도구에 전달한다.'
     ]
 
