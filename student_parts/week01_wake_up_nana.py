@@ -166,7 +166,12 @@ def _current_session_schedules() -> list[dict[str, Any]]:
 #        PERSONAL_SCHEDULES에 append합니다.
 #      - 반환 JSON에는 ok, tool_name, created_schedule을 넣습니다.
 #      - Week 1 반환에는 structured_request나 sqlite_save를 넣지 않습니다.
-
+    #이 코드의 흐름
+    # Agent가 tool 호출
+    # 1. schedule_dict로 인자 받아서 dict 조립
+    # 2. PERSONAL_SCHEDULES에 저장
+    # 3. return을 통해 방금 만들어진 일정 JSON으로 반환
+    # return문을 통해 실행된 tool 결과를 Agent에게 돌려줌
 @tool
 def personal_create_schedule(
     title: str,
@@ -194,12 +199,7 @@ def personal_create_schedule(
         "tool_name": "personal_create_schedule",
         "created_schedule": schedule_dict
     })
-    #이 코드의 흐름
-    # Agent가 tool 호출
-    # 1. schedule_dict로 인자 받아서 dict 조립
-    # 2. PERSONAL_SCHEDULES에 저장
-    # 3. return을 통해 방금 만들어진 일정 JSON으로 반환
-    # return문을 통해 실행된 tool 결과를 Agent에게 돌려줌
+
 
 #   2. personal_list_schedules
 #      - PERSONAL_SCHEDULES를 직접 수정하지 않고 현재 대화 범위의 일정만 조회합니다.
@@ -222,7 +222,7 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     result = []
     if date_to:
         for s in schedules:
-            if s["date"] <= date_from:
+            if s["date"] <= date_to:
                 result.append(s)
         schedules = result
 
@@ -256,7 +256,9 @@ def personal_delete_schedule(schedule_id: str) -> str:
     return _json({
         "ok": True,
         "tool_name": "personal_delete_schedule",
-        "schedules": deleted
+        "deleted": deleted,
+        "schedule_id": schedule_id,
+        # schedule_id 인자까지 있어야지 어떤 스케줄이 지워졌는지 정확하게 알 수 있기 때문에 추가하는게 더 좋다고 생각했습니다. 혹시 맞을까요.. ㅎㅎㅎ
     })
 
 
