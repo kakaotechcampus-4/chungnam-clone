@@ -209,10 +209,11 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     schedules = _current_session_schedules()
-    if date_from is not None:
-        schedules = [s for s in schedules if s["date"] >= date_from]
-    if date_to is not None:
-        schedules = [s for s in schedules if s["date"] <= date_to]
+    schedules = [
+        s for s in schedules
+        if (date_from is None or s["date"] >= date_from)
+        and (date_to is None or s["date"] <= date_to)
+    ]
     return _json(
         {
             "ok": True,
@@ -239,11 +240,12 @@ def personal_delete_schedule(schedule_id: str) -> str:
         for schedule in PERSONAL_SCHEDULES
         if not (schedule.get("id") == schedule_id and _schedule_scope(schedule) == session_id)
     ]
-    deleted = before - len(PERSONAL_SCHEDULES)
+    deleted = before > len(PERSONAL_SCHEDULES)
     return _json(
         {
             "ok": True,
             "tool_name": "personal_delete_schedule",
+            "schedule_id": schedule_id,
             "deleted": deleted,
         }
     )
