@@ -1,3 +1,7 @@
+'''
+1. CHAT_MEMORY_PROMPT <= 여기다가 뭐 넣어야할지 감도 안옴
+2. personal_delete_schedule에서 delete 값을 bool로 해야할지 삭제된 요소의 개수로 해야할지 삭제된 요소로 해야할지 감도 안옴
+'''
 from __future__ import annotations
 
 import json
@@ -160,7 +164,14 @@ def _current_session_schedules() -> list[dict[str, Any]]:
     return [schedule for schedule in PERSONAL_SCHEDULES if _schedule_scope(schedule) == session_id]
 
 
-@tool
+#   1. personal_create_schedule
+#      - title/date/start_time/end_time/attendees 인자로 schedule dict를 만듭니다.
+#      - id는 "personal_" 접두어가 붙은 임시 ID, created_at은 현재 시각으로 채웁니다.
+#      - attendees가 None이면 빈 list로 바꾸고, session_id=current_session_scope()를 함께 넣어
+#        PERSONAL_SCHEDULES에 append합니다.
+#      - 반환 JSON에는 ok, tool_name, created_schedule을 넣습니다.
+#      - Week 1 반환에는 structured_request나 sqlite_save를 넣지 않습니다.
+@tool('personal_create_schedule', description='개인 일정을 생성한다. date는 YYYY-MM-DD, start_time과 end_time은 HH:MM 형식이다.')
 def personal_create_schedule(
     title: str,
     date: str,
@@ -172,22 +183,107 @@ def personal_create_schedule(
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
     ...
+    
+    schedule = {
+        'id': _new_personal_id(),
+        'title': title,
+        'date': date,
+        'start_time': start_time,
+        'end_time': end_time,
+        'created_at': _now_iso(),
+        'attendees': [] if attendees is None else attendees,
+        'session_id': current_session_scope()
+    }
+    PERSONAL_SCHEDULES.append(schedule)
+
+    result = {
+        'ok': True,
+        'tool_name': 'personal_create_schedule',
+        'created_schedule': schedule
+    }
+    return _json(result)
 
 
-@tool
+
+#   2. personal_list_schedules
+#      - PERSONAL_SCHEDULES를 직접 수정하지 않고 현재 대화 범위의 일정만 조회합니다.
+#      - date_from이 있으면 그 날짜 이상, date_to가 있으면 그 날짜 이하만 남깁니다.
+#      - 날짜 비교는 YYYY-MM-DD 문자열 기준으로 충분합니다.
+#      - 반환 JSON에는 ok, tool_name, schedules를 넣습니다.
+@tool('personal_list_schedules', description='개인 일정 목록을 조회한다. date_from이 있으면 그 날짜 이상, date_to가 있으면 그 날짜 이하에 해당하는 개인 일정들만 조회할 수 있다. date_from과 date_to는 YYYY-MM-DD 형식이다.')
 def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
     ...
+    
+    def include_date(schedule):
+        date_arr = list(map(int, schedule['date'].split('-')))
+        result = True
 
+        if date_from is not None:
+            date_from_arr = list(map(int, date_from.split('-')))
+            for i in range(3):
+                if date_from_arr[i] > date_arr[i]:
+                    result = False
+                    break
+                elif date_from_arr[i] < date_arr[i]:
+                    break
+        
+        if date_to is not None:
+            date_to_arr = list(map(int, date_to.split('-')))
+            for i in range(3):
+                if date_to_arr[i] < date_arr[i]:
+                    result = False
+                    break
+                elif date_to_arr[i] > date_arr[i]:
+                    break
+        
+        return result
+    
+    schedules = _current_session_schedules()
+    filtered_schedule = list(filter(include_date, schedules))
+    
+    result = {
+        'ok': True,
+        'tool_name': 'personal_list_schedules',
+        'schedules': filtered_schedule
+    }
+    return _json(result)
+        
+        
+        
 
-@tool
+#   3. personal_delete_schedule
+#      - schedule_id가 일치하면서 현재 대화 범위에 속한 일정만 삭제합니다.
+#      - 리스트 객체 자체는 유지해야 하므로 PERSONAL_SCHEDULES[:]에 새 목록을 대입합니다.
+#      - 삭제 전후 길이 비교로 deleted 값을 만들고 JSON으로 반환합니다.
+#      - 다른 대화 범위의 같은 ID는 삭제하면 안 됩니다.
+@tool('personal_delete_schedule', description='schedule_id와 일치하는 id를 가진 개인 일정을 삭제한다.')
 def personal_delete_schedule(schedule_id: str) -> str:
     """일정 ID에 해당하는 개인 일정을 삭제합니다."""
 
     # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
     ...
+    
+    before_len = len(PERSONAL_SCHEDULES)
+    deleted_schedule = None
+    
+    for idx in range(len(PERSONAL_SCHEDULES)):
+        schedule = PERSONAL_SCHEDULES[idx]
+        if _schedule_scope(schedule) == current_session_scope() and schedule['id'] == schedule_id:
+            deleted_schedule = PERSONAL_SCHEDULES.pop(idx)
+            break
+
+    after_len = len(PERSONAL_SCHEDULES)
+    
+    result = {
+        'ok': True,
+        'tool_name': 'personal_delete_schedule',
+        'deleted': before_len != after_len
+    }
+    return _json(result)
+            
 
 
 def week01_tools() -> list[Any]:
@@ -207,6 +303,12 @@ def week01_prompt_parts() -> list[str]:
 
     return [
         # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
+        '너는 개인 일정 메이트 \'나나\'다.'
+        '오늘은 2026-06-30이다. 상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다.'
+        '일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답한다.'
+        '생성 요청에는 personal_create_schedule 도구를 호출한다. 만약 사용자가 시작시간(start_time)에 대한 언급이 따로 없다면, 00:00을 start time으로 전달한다.'
+        '조회 요청에는 personal_list_schedules 도구를 호출한다. 사용자가 말한 date_from과 date_to를 도구에 전달하여 그 날짜 범위 안에 조회를 할 수도 있다. 만약 사용자가 날짜를 언급하지 않거나 하나만 언급하면 값을 전달 안하거나 하나만 전달해도 된다.'
+        '삭제 요청은 사용자가 말한 schedule_id를 personal_delete_schedule 도구에 전달한다.'
     ]
 
 
