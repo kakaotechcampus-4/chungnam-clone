@@ -178,7 +178,7 @@ def personal_create_schedule(
         "date": date,
         "start_time": start_time,
         "end_time": end_time,
-        "attendees": attendees if attendees is not None else [],
+        "attendees": attendees or [] # 더 간결하고 파이썬스러운 코드로 수정
         "created_at": _now_iso(),
         "session_id": current_session_scope(),
     }
@@ -197,19 +197,16 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 
     schedules = _current_session_schedules()
     
-    filtered = []
+    filtered_schedules = [] # 변수명 수정함
     for s in schedules:
         s_date = s.get("date", "")
-        if date_from and s_date < date_from:
-            continue
-        if date_to and s_date > date_to:
-            continue
-        filtered.append(s)
+        if (not date_from or date_from <= s_date) and (not date_to or s_date <= date_to): # 포함식으로 작동하도록 수정함
+            filtered_schedules.append(s)
 
     return _json({
         "ok": True,
         "tool_name": "personal_list_schedules",
-        "schedules": filtered
+        "schedules": filtered_schedules
     })
 
 @tool
@@ -219,12 +216,10 @@ def personal_delete_schedule(schedule_id: str) -> str:
     session_id = current_session_scope()
     
     original_len = len(PERSONAL_SCHEDULES)
-    new_schedules = [
+    PERSONAL_SCHEDULES[:] = [ # 변수 따로 추가한 거 수정 
         s for s in PERSONAL_SCHEDULES
         if not (s.get("id") == schedule_id and _schedule_scope(s) == session_id)
     ]
-    
-    PERSONAL_SCHEDULES[:] = new_schedules
     deleted = original_len - len(PERSONAL_SCHEDULES)
 
     return _json({
@@ -249,13 +244,14 @@ def week01_system_prompt() -> str:
 def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
-    return [
+    return [ # 프롬프트 추가 (상대적 날짜)
         CHAT_MEMORY_PROMPT,
         """
 [Week 1 일정 관리 규칙]
 - 사용자가 일정을 등록/추가해달라고 하면 `personal_create_schedule` 도구를 사용하세요.
 - 사용자가 일정을 보여달라/조회해달라고 하면 `personal_list_schedules` 도구를 사용하세요.
 - 사용자가 일정을 지워달라/삭제해달라고 하면 `personal_delete_schedule` 도구를 사용하세요.
+- 상대적인 날짜('내일', '다음 주' 등)는 현재 날짜를 기준으로 계산하여 도구를 호출하세요. 단, "나중에", "이번 주쯤"처럼 날짜 범위가 명확하지 않다면 임의로 판단하지 말고 정확한 날짜나 요일을 사용자에게 먼저 되물어보세요.
 - 도구를 호출할 때 반환되는 JSON 결과의 'ok' 여부와 데이터를 확인한 후, 자연스러운 한국어로 사용자에게 결과를 안내하세요.
 """
     ]
