@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from copy import deepcopy
 from datetime import datetime
 from typing import Any
 
@@ -28,8 +29,8 @@ _WEEK01_AGENT: Any | None = None
 
 # TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
 CHAT_MEMORY_PROMPT = (
-    "이 대화에서 만든 임시 일정만 다룬다. "
-    "다른 대화의 일정은 보이지 않고 건드리지 않는다."
+    "이전에 만든 일정을 참조할 때는 personal_list_schedules 를 호출해서 "
+    "최신 상태를 확인한 뒤 답한다."
 )
 
 
@@ -203,11 +204,11 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    items = _current_session_schedules()
+    items = deepcopy(_current_session_schedules())
     if date_from is not None:
-        items = [s for s in items if s.get("date", "") >= date_from]
+        items = [s for s in items if s["date"] >= date_from]
     if date_to is not None:
-        items = [s for s in items if s.get("date", "") <= date_to]
+        items = [s for s in items if s["date"] <= date_to]
 
     return _json(
         {
