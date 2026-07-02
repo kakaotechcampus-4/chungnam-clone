@@ -213,24 +213,41 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 @tool
 def personal_delete_schedule(schedule_id: str) -> str:
     """일정 ID에 해당하는 개인 일정을 삭제합니다."""
-
     # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
+
     session_id = current_session_scope()
     before_count = len(_current_session_schedules())
+
     PERSONAL_SCHEDULES[:] = [
         schedule
         for schedule in PERSONAL_SCHEDULES
-        if not (_schedule_scope(schedule) == session_id and schedule.get("id") == schedule_id)
+        if not (
+            _schedule_scope(schedule) == session_id
+            and schedule.get("id") == schedule_id
+        )
     ]
+
     after_count = len(_current_session_schedules())
+    deleted_count = before_count - after_count
+
+    if deleted_count == 0:
+        return _json(
+            {
+                "ok": False,
+                "tool_name": "personal_delete_schedule",
+                "deleted": 0,
+                "error": "schedule_not_found",
+                "message": "일치하는 개인 일정을 찾을 수 없습니다.",
+            }
+        )
+
     return _json(
         {
             "ok": True,
             "tool_name": "personal_delete_schedule",
-            "deleted": before_count - after_count,
+            "deleted": deleted_count,
         }
     )
-
 
 def week01_tools() -> list[Any]:
     """1주차에서 직접 구현한 개인 일정 CRUD 도구 목록입니다."""
