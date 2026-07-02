@@ -178,7 +178,7 @@ def personal_create_schedule(
         "date": date,
         "start_time": start_time,
         "end_time": end_time,
-        "attendees": attendees or [] # 더 간결하고 파이썬스러운 코드로 수정
+        "attendees": attendees or [], # 더 간결하고 파이썬스러운 코드로 수정
         "created_at": _now_iso(),
         "session_id": current_session_scope(),
     }
