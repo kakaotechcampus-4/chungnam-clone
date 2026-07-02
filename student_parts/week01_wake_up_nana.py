@@ -182,7 +182,7 @@ def personal_create_schedule(
         "session_id" : current_session_scope() 
     }
     PERSONAL_SCHEDULES.append(schedule)
-    return _json({"ok": True, "tool_name" : "personal_list_schedules", "created_schedule" : schedule,})
+    return _json({"ok": True, "tool_name" : "personal_create_schedules", "created_schedule" : schedule,})
 
 
 @tool
@@ -190,10 +190,10 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    schedules = _current_session_schedules() #session_id가 같은 것만 모인 리스트
+    current_session_schedules = _current_session_schedules() # 현재 세션의 session id의 스케줄을 모은 리스트
     result = [] #시작일과 종료일 범위에 포함되는 일정들을 모아두는 리스트
     #date_form : 시작일 / date_to : 종료일
-    for i in schedules:
+    for i in current_session_schedules:
         if date_from and i["date"] < date_from: #date_from 이 None인지 확인 and i["date"]가 date_form보다 이전인가
             continue # 버리기
         if date_to and i["date"] > date_to: #date_to 이 None인지 확인 and i["date"]가 date_to보다 이후인가
@@ -208,11 +208,11 @@ def personal_delete_schedule(schedule_id: str) -> str:
 
     # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
     before = len(PERSONAL_SCHEDULES) #삭제 전후 길이 비교를 위해서 삭제 전 길이를 before에 저장한다.
-    my_scope = current_session_scope() #session_id와 같은 것만 삭제해야하기 때문에. 대화 하는 곳의 session_id를 돌려준다.
+    current_session_id = current_session_scope() #session_id와 같은 것만 삭제해야하기 때문에. 대화 하는 곳의 session_id를 돌려준다.
     
     new_list = [] # 삭제 후 list
     for i in PERSONAL_SCHEDULES:
-        is_target = (i["id"]==schedule_id and _schedule_scope(i) == my_scope)
+        is_target = (i["id"]==schedule_id and _schedule_scope(i) == current_session_id)
         # 이 일정의 id와 내가 지우려는 id 가 같은지
         # 이 일정이 속한 session_id와 내가 지우려는 session_id가 같은지
         if not is_target:
