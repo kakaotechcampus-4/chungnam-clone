@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+import copy
 from datetime import datetime
 from typing import Any
 
@@ -171,7 +172,8 @@ def personal_create_schedule(
     """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
-    schedules = {
+    # 피드백 수정사항: 단수형으로 바꾸기(schedules -> schedule)
+    schedule = {
         "id": _new_personal_id(),
         "title": title,
         "date": date,
@@ -181,17 +183,19 @@ def personal_create_schedule(
         "attendees": [] if attendees is None else attendees, #참석자가 없으면(None) 빈 리스트
         "session_id": current_session_scope()
     }
-    PERSONAL_SCHEDULES.append(schedules)
+    PERSONAL_SCHEDULES.append(schedule)
     
-    return _json({"ok":True, "tool_name":"personal_create_schedule", "created_schedule":schedules})
+    return _json({"ok":True, "tool_name":"personal_create_schedule", "created_schedule":schedule})
 
 @tool
 def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    
-    schedules = _current_session_schedules() # 현재 대화 세션(범위)에 있는 일정들을 불러와서 schedules에 저장
+
+    # 피드백 수정사항: 외부에 의해 값 변경 가능성 우려 -> 원본이 수정되지 않도록 수정
+    # 핵심은 얕은 복사(원본 참조) -> 깊은 복사(deepcopy, 딕셔너리까지 복사)    
+    schedules = copy.deepcopy(_current_session_schedules()) # 현재 대화 세션(범위)에 있는 일정들을 불러와서 schedules에 저장
     if date_from: #date_from 값이 존재하면
         schedules = [s for s in schedules if s["date"]>=date_from] # 그 이후에 있는 일정을 결과 리스트에 저장
     if date_to: # date_to 값이 존재하면
@@ -210,6 +214,8 @@ def personal_delete_schedule(schedule_id: str) -> str:
     PERSONAL_SCHEDULES[:] = [
         # 현재 session에 있는 schedule_id가 일치하는 것만 지워라 -> 현재 세션에서 schedule_id가 일치하고(1), 세션 ID가 일치하는(2) 것들을 제외하고는 일정을 남겨라
         s for s in PERSONAL_SCHEDULES # current_seession_schedules로 받아오면 안되는 이유: 다른 session 일정이 대입될 때 사라진다.
+        # 드 모르간 법칙에 의하여 not(조건 A and 조건 B)는 (not 조건 A) OR (not 조건 B)와 동일하다는 것을 알 수 있음
+        # if s["id"]!=schedule_id or _schedule_scope(s) != session_id -> 하지만 가독성은 전체를 not으로 묶는 것이 좋아보임
         if not (s["id"]== schedule_id and _schedule_scope(s) == session_id)
     ]
     deleted = length - len(PERSONAL_SCHEDULES)
@@ -236,11 +242,13 @@ def week01_prompt_parts() -> list[str]:
 
     return [
         # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
-    """
-    너는 사용자의 개인 일정을 관리하는 AI Nana야.
-    사용자가 일정 생성, 조회, 삭제 등을 요청하면 적절한 tool을 선택해서 실행해.
-    항상 정확한 근거에 기반해서 답변하고, 일정 처리 결과를 요약해서 알려줘.
-    """
+        # 피드백 수정사항: 미처 생각하지 못한 부분 -> 날짜를 반환할 때 일관성 유지를 위해 현재 날짜에 대한 기준점을 세운다.
+        f"""
+        너는 사용자의 개인 일정을 관리하는 AI Nana야.
+        오늘 날짜는 {current_app_date_iso()} 야.
+        사용자가 일정 생성, 조회, 삭제 등을 요청하면 적절한 tool을 선택해서 실행해.
+        항상 정확한 근거에 기반해서 답변하고, 일정 처리 결과를 요약해서 알려줘.
+        """
     ]
 
 
