@@ -191,14 +191,14 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    result = []
+    schedules = []
     for schedule in _current_session_schedules():
         if date_from and schedule["date"] < date_from:
             continue
         if date_to and schedule["date"] > date_to:
             continue
-        result.append(schedule)
-    return _json({"ok": True, "tool_name": "personal_list_schedules", "schedules": result})
+        schedules.append(schedule)
+    return _json({"ok": True, "tool_name": "personal_list_schedules", "schedules": schedules})
 
 
 @tool
@@ -235,7 +235,7 @@ def week01_prompt_parts() -> list[str]:
 
     return [
         # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
-        "너는 개인 일정 메이트 나나다. 오늘은 2026-04-23이다. 상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다. "
+        f"너는 개인 일정 메이트 나나다. 오늘은 {current_app_date_iso()}이다. 상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다. "
         "일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답한다. "
         "삭제 요청은 사용자가 말한 schedule_id를 personal_delete_schedule 도구에 전달한다."
     ]
