@@ -171,7 +171,29 @@ def personal_create_schedule(
     """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
-    ...
+
+    # title/date/start_time/end_time/attendees 인자로 schedule dict
+    schedule = {
+        "id": _new_personal_id(),
+        "title": title, 
+        "date": date, 
+        "start_time": start_time, 
+        "end_time": end_time, 
+        "attendees": attendees or [],
+        "session_id": current_session_scope(),
+        "created_at": _now_iso()
+        }
+    
+    PERSONAL_SCHEDULES.append(schedule)
+
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_create_schedule",
+            "created_schedule": schedule,
+        }
+    )
+    
 
 
 @tool
@@ -179,7 +201,32 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
-    ...
+
+    schedules = []
+
+    for schedule in _current_session_schedules():
+        schedule_date = schedule.get("date")
+
+        # 타입 체크
+        if not isinstance(schedule_date, str):
+            continue
+        
+        # 날짜 비교
+        if date_from is not None and schedule_date < date_from :
+            continue
+
+        if date_to is not None and schedule_date > date_to:
+            continue
+
+        schedules.append(schedule)
+
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_list_schedules",
+            "schedules": schedules
+        }
+    )
 
 
 @tool
@@ -187,7 +234,26 @@ def personal_delete_schedule(schedule_id: str) -> str:
     """일정 ID에 해당하는 개인 일정을 삭제합니다."""
 
     # TODO: 현재 대화 범위에서 schedule_id가 일치하는 개인 일정을 삭제하세요.
-    ...
+
+    before_len = len(PERSONAL_SCHEDULES)
+
+    # PERSONAL_SCHEDULES 원본 덮어쓰기
+    PERSONAL_SCHEDULES[:] = [
+        schedule for schedule in PERSONAL_SCHEDULES if not (
+            schedule.get("id") == schedule_id and _schedule_scope(schedule) == current_session_scope()
+        )
+    ]
+    # 삭제 확인
+    is_deleted  = len(PERSONAL_SCHEDULES) < before_len
+        
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_delete_schedule",
+            "deleted": is_deleted ,
+        }
+    )
+
 
 
 def week01_tools() -> list[Any]:
