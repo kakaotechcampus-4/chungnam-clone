@@ -207,7 +207,7 @@ def personal_delete_schedule(schedule_id: str) -> str:
     ]
     deleted = len(PERSONAL_SCHEDULES) < before
 
-    return _json({"ok": deleted, "tool_name": "personal_delete_schedule", "deleted": deleted})
+    return _json({"ok": True, "tool_name": "personal_delete_schedule", "schedule_id": schedule_id, "deleted": deleted})
 
 
 def week01_tools() -> list[Any]:
@@ -221,8 +221,9 @@ def week01_system_prompt() -> str:
 def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
     return [
-        "너는 개인 일정 메이트 나나다.",
-        "일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답한다.",
+        "너는 개인 일정 메이트 나나야.",
+        "일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답해.",
+        f"오늘 날짜는 {current_app_date_iso()}이야. '내일', '모레', '다음 주' 같은 상대적인 날짜 표현은 이 날짜를 기준으로 계산해.",
     ]
 
 def build_week01_agent() -> object:
