@@ -188,9 +188,7 @@ def personal_create_schedule(
         }
     )
 
-    # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
-    ...
-
+    
 
 @tool
 def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
@@ -231,7 +229,7 @@ def personal_delete_schedule(schedule_id: str) -> str:
         {
             "ok": True,
             "tool_name": "personal_delete_schedule",
-            "deleted": before - after > 0,
+            "deleted": before != after,
         }
     )
 
