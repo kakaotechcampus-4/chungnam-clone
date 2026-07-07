@@ -279,8 +279,8 @@ def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
     return [
-        # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
-        CHAT_MEMORY_PROMPT
+        CHAT_MEMORY_PROMPT,
+        f"현재 날짜는 앱 시작 시 OS에서 읽은 {current_app_date_iso()}이다."
     ]
 
 
