@@ -155,28 +155,47 @@ def extract_schedule_request(query: str) -> str:
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
 
-    # TODO: Week 1에서 구현한 tool 목록을 그대로 반환하세요.
-    ...
+    # Week 1에서 만든 개인 일정 CRUD tool을 그대로 재사용한다.
+    # 일정 생성 요청이면 tool이 먼저 실행되고, 그 결과 JSON이 구조화의 근거가 된다.
+    return week01_tools()
 
 
 def week02_system_prompt() -> str:
     """2주차 agent가 따르는 시스템 프롬프트입니다."""
 
-    # TODO: join_system_prompt(...)로 week02_prompt_parts()와 Week 2 structured_response 최종 답변 규칙을 합치세요.
-    # TODO: StructuredRequestBatch에는 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담도록 지시하세요.
-    # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
-    ...
+    # 주차별 prompt 조각 위에 "최종 답변은 구조화 출력" 규칙을 마지막에 얹는다.
+    # join_system_prompt의 헤더 규칙에 따라 뒤에 오는 지시가 우선한다.
+    return join_system_prompt(
+        [
+            *week02_prompt_parts(),
+            (
+                "최종 답변은 반드시 StructuredRequestBatch 형식의 structured output으로 낸다. "
+                "요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담는다. "
+                "personal_create_schedule tool을 호출했다면 결과 JSON의 created_schedule 값을 읽어 "
+                "title/date/start_time/end_time/members 필드를 그대로 채운다."
+            ),
+        ]
+    )
 
 
 def week02_prompt_parts() -> list[str]:
     """2주차 structured output agent가 따르는 system prompt 조각입니다."""
 
+    # 기준일은 하드코딩하지 않고 앱 시작 시각 기준으로 주입한다(1주차와 같은 방식).
+    today = current_app_date_iso()
+
     return [
         *week01_prompt_parts(),
-        # TODO: Week 2 요청 구조화 agent 역할과 현재 날짜(current_app_date_iso()) 기준을 추가하세요.
-        # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
-        # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
-        # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
+        (
+            f"너는 2주차 요청 구조화 담당이기도 하다. 오늘은 {today}이다. "
+            "사용자의 자연어 요청을 StructuredRequest 필드"
+            "(kind/title/date/start_time/end_time/members/priority/reason/original_text)로 구조화한다. "
+            "상대 날짜는 오늘 기준 YYYY-MM-DD로, 시간은 24시간제 HH:MM으로 바꾸고, "
+            "확실하지 않은 값은 억지로 만들지 말고 비워 둔다. "
+            "Week 1 tool 결과 JSON을 이미 받았다면 같은 tool을 다시 호출하지 말고 "
+            "그 payload를 읽어 구조화 결과를 만든다. "
+            "이번 주에는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다."
+        ),
     ]
 
 
