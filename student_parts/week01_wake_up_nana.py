@@ -191,7 +191,7 @@ def personal_create_schedule(
 
     return _json({
         "ok" : True,
-        "tool_name" : "personal_create_schedule",
+        "tool_name" : personal_create_schedule.name,
         "created_schedule" : schedule,
     })
     
@@ -211,7 +211,7 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 
     return _json({
         "ok" : True,
-        "tool_name" : "personal_list_schedules",
+        "tool_name" : personal_list_schedules.name,
         "schedules" : schedules,
     })
 
@@ -228,7 +228,7 @@ def personal_delete_schedule(schedule_id: str) -> str:
 
     return _json({
         "ok" : True,
-        "tool_name" : "personal_delete_schedule",
+        "tool_name" : personal_delete_schedule.name,
         "deleted" : after_len != original_len
     })
 
@@ -254,12 +254,9 @@ def week01_prompt_parts() -> list[str]:
         f"오늘 날짜는 {current_app_date_iso()}이다.",
         "날짜는 항상 YYYY-MM-DD 형식을 사용한다.",
         "상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다.",
-        "일정 생성이 필요하면 반드시 personal_create_schedule 도구를 호출한 뒤 짧게 답한다."
-        "일정 조회가 필요하면 personal_list_schedule 도구를 사용한다.",
-        "personal_list_schedule tool을 사용할때는 date_from과 date_to를 YYYY-MM-DD 형식으로 넣는다.",
-        "일정 삭제가 필요하면 personal_delete_schedule 도구를 사용한다.",
+        "personal_list_schedules tool을 사용할때는 date_from과 date_to를 YYYY-MM-DD 형식으로 넣는다.",
         "일정을 수정하거나 삭제하기 전에 반드시 personal_list_schedules로 목록을 먼저 조회해서 정확한 schedule_id를 확인한다.",
-        "date_to는 특별히 언급이 없으면 지정하지 않는다."
+        "date_to는 특별히 언급이 없으면 지정하지 않는다.",
     ]
 
 
