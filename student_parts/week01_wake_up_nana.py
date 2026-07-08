@@ -191,16 +191,16 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
     current_session_schedules = _current_session_schedules() # 현재 세션의 session id의 스케줄을 모은 리스트
-    result = [] #시작일과 종료일 범위에 포함되는 일정들을 모아두는 리스트
+    edit_schedule = [] #시작일과 종료일 범위에 포함되는 일정들을 모아두는 리스트
     #date_form : 시작일 / date_to : 종료일
     for i in current_session_schedules:
         if date_from and i["date"] < date_from: #date_from 이 None인지 확인 and i["date"]가 date_form보다 이전인가
             continue # 버리기
         if date_to and i["date"] > date_to: #date_to 이 None인지 확인 and i["date"]가 date_to보다 이후인가
             continue # 버리기
-        result.append(i) #두 조건을 넘겼다면 result에 넣기
+        edit_schedule.append(i) #두 조건을 넘겼다면 edit_schedule에 넣기
 
-    return _json({"ok" : True, "tool_name": "personal_list_schedules", "schedules":result,})
+    return _json({"ok" : True, "tool_name": "personal_list_schedules", "schedules":edit_schedule,})
 
 @tool
 def personal_delete_schedule(schedule_id: str) -> str:
