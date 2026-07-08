@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal
 
 from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
@@ -212,7 +213,10 @@ def build_week02_agent() -> object:
             tools=week02_tools(),
             # Week 1과의 유일한 차이: 최종 답변을 StructuredRequestBatch 스키마로 검증해
             # 결과 dict의 structured_response 키로 받는다.
-            response_format=StructuredRequestBatch,
+            # ToolStrategy로 감싸는 이유: 프록시 경유 시 provider 네이티브 JSON 모드가
+            # 강제되지 않아 모델이 JSON 뒤에 추가 텍스트를 붙이는 파싱 오류가 났다.
+            # tool 호출 방식은 프록시에서 안정적으로 동작하며, 파싱 실패 시 재시도도 지원한다.
+            response_format=ToolStrategy(StructuredRequestBatch),
             system_prompt=week02_system_prompt(),
         )
     return _WEEK02_AGENT
