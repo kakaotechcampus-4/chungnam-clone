@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+import logging
 """현재 활성 주차에 맞는 student_parts agent를 찾아 실행하는 registry입니다.
 
 main 브랜치는 Week 1-2 학생 문제를 공개하므로 이 registry도 Week 1-2 agent를
@@ -20,6 +20,15 @@ from fixed.langchain_trace import (
     stream_chunk_messages,
 )
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
+def _debug_dump_message(message: Any) -> None:
+    print("\n========== MESSAGE ==========")
+    print("type:", type(message))
+    print("content:", repr(getattr(message, "content", None)))
+    print("tool_calls:", getattr(message, "tool_calls", None))
+    print("additional_kwargs:", getattr(message, "additional_kwargs", None))
+    print("=============================\n")
 
 WEEK_AGENT_MODULES = {
     1: "student_parts.week01_wake_up_nana",
@@ -145,11 +154,18 @@ def stream_active_week_agent(
         builder = getattr(module, "build_week_agent")
         agent = builder()
         for chunk in agent.stream({"messages": messages}, stream_mode="updates"):
+            print("\n========== RAW STREAM CHUNK ==========")
+            print(repr(chunk))
+            print("======================================\n")
+
             chunk_structured_response = _structured_response_from_stream_chunk(chunk)
             if chunk_structured_response is not None:
                 structured_response = chunk_structured_response
+
             for message in stream_chunk_messages(chunk):
                 collected_messages.append(message)
+                _debug_dump_message(message)
+
                 for tool_name in message_tool_call_names(message):
                     yield ActiveWeekAgentStreamEvent(status_text=f"현재 {tool_name} 실행 중")
 
@@ -161,6 +177,14 @@ def stream_active_week_agent(
         trace["active_week"] = week
         yield ActiveWeekAgentStreamEvent(result=ActiveWeekAgentResult(answer=extract_final_text(result), trace=trace))
     except Exception as exc:
+        print("\n========== AGENT ERROR ==========")
+        print(repr(exc))
+
+        print("\n========== COLLECTED MESSAGES ==========")
+        for message in collected_messages:
+            _debug_dump_message(message)
+        print("========================================\n")        
+        
         yield ActiveWeekAgentStreamEvent(
             result=ActiveWeekAgentResult(
                 answer=f"Week {week} agent 실행 중 오류가 발생했습니다: {type(exc).__name__}: {exc}",
