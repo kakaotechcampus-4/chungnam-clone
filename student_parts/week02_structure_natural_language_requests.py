@@ -150,7 +150,7 @@ _WEEK02_AGENT: Any | None = None
 #     extract_structured_request(...) 결과에 ok/tool_name/base_date를 붙여 JSON 문자열로 반환하므로,
 #     이후 저장 tool이 structured_request 필드를 그대로 받을 수 있습니다.
 
-
+#gwanho: 왜 json 에서 이렇게 바꾼걸까 -> 정보도 많고 타입이 엄격하게 정해짐
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
@@ -160,7 +160,42 @@ class StructuredRequest(BaseModel):
     # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
     # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
     # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    ...
+    
+    kind: RequestKind = Field( #gwanho: line 16dp requestkind 있음 
+        description="요청 종류: personal_schedule(개인 일정), group_schedule(그룹 일정), todo(할 일), reminder(알림), unknown(불명확) 중 하나"
+    )
+    title: str | None = Field(  #gwanho: str |None 인 이유는 문자열이랑 아예 안들어 와도 상관이 없다는 뜻 -> 아 예외 처리하려고하는 거 같음 
+        default=None,
+        description="일정 또는 할 일의 제목. 자연어에서 추출할 수 없으면 None"
+    )
+    date: str | None = Field(
+        default=None,
+        description="날짜 (YYYY-MM-DD 형식). 확실할 때만 채우고 불명확하면 None"
+    )
+    start_time: str | None = Field(
+        default=None,
+        description="시작 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
+    )
+    end_time: str | None = Field(
+        default=None,
+        description="종료 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
+    )
+    members: list[str] = Field( #gwanho: 예만 리스트인 이유는 진짜 여러개가 들어오기 때문임 참석자들이 
+        default_factory=list,
+        description="참석자 또는 관련 멤버 목록. 모르면 빈 리스트로 둠"
+    )
+    priority: str | None = Field(
+        default=None,
+        description="할 일 우선순위 (예: high, medium, low). 해당 없으면 None"
+    )
+    reason: str | None = Field(
+        default=None,
+        description="kind 또는 priority 판단 근거. 해당 없으면 None"
+    )
+    original_text: str = Field(
+        default="",
+        description="사용자가 입력한 원문 텍스트 그대로 보존"
+    )
 
 
 class StructuredRequestBatch(BaseModel):
