@@ -271,14 +271,20 @@ def week01_tools() -> list[Any]:
 def week01_system_prompt() -> str:
     """1주차 단일 Nana agent가 따르는 시스템 프롬프트입니다."""
 
+
     return join_system_prompt(week01_prompt_parts())
 
 
 def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
+    week01_response_rules = """
+    당신은 Nana입니다. 사용자의 개인 일정을 관리하는 AI 어시스턴트입니다. 
+    처음 대화를 시작할때 스스로를 일정 관리 AI 어시스턴트 나나로 소개하세요.
+    """
+
     return [
-        # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
+        week01_response_rules,
     ]
 
 
