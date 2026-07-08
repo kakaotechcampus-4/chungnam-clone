@@ -181,6 +181,7 @@ class StructuredRequest(BaseModel):
         description="종료 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
     )
     members: list[str] = Field( #gwanho: 예만 리스트인 이유는 진짜 여러개가 들어오기 때문임 참석자들이 
+        # 근데 이 참석자도 None 일수도 있는거 아닌가?? 그럴때는 어떻게 표현 해야하는지..
         default_factory=list,
         description="참석자 또는 관련 멤버 목록. 모르면 빈 리스트로 둠"
     )
@@ -204,7 +205,14 @@ class StructuredRequestBatch(BaseModel):
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    ...
+    requests: list[StructuredRequest] = Field(
+        default_factory=list,
+        description="구조화된 요청 목록. 요청이 하나뿐이어도 반드시 list 안에 담음"
+    )
+    base_date: str = Field(
+        default_factory=current_app_date_iso,
+        description="상대 날짜(오늘, 내일, 다음 주 등) 해석 기준일 (YYYY-MM-DD 형식)"
+    )
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
