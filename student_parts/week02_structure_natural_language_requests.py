@@ -182,18 +182,15 @@ def extract_schedule_request(query: str) -> str:
 
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
-
-    # TODO: Week 1에서 구현한 tool 목록을 그대로 반환하세요.
-    ...
+    # Week1에서 만든 개인 일정 CRUD 도구들을 그대로 노출합니다.
+    # (LLM이 Week1 tool 결과 JSON을 참고할 수 있도록 하기 위함)
+    return week01_tools()
 
 
 def week02_system_prompt() -> str:
     """2주차 agent가 따르는 시스템 프롬프트입니다."""
-
-    # TODO: join_system_prompt(...)로 week02_prompt_parts()와 Week 2 structured_response 최종 답변 규칙을 합치세요.
-    # TODO: StructuredRequestBatch에는 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담도록 지시하세요.
-    # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
-    ...
+    # week02_prompt_parts()로 만든 조각들을 합쳐서 최종 시스템 프롬프트를 만듭니다.
+    return join_system_prompt(week02_prompt_parts())
 
 
 def week02_prompt_parts() -> list[str]:
@@ -201,10 +198,26 @@ def week02_prompt_parts() -> list[str]:
 
     return [
         *week01_prompt_parts(),
-        # TODO: Week 2 요청 구조화 agent 역할과 현재 날짜(current_app_date_iso()) 기준을 추가하세요.
-        # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
-        # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
-        # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
+        (
+            "당신은 Week 2 구조화 에이전트입니다. "
+            f"현재 앱 기준일은 {current_app_date_iso()} 입니다. "
+            "사용자 자연어 문장 또는 Week 1 도구(personal_create_schedule 등)의 JSON 결과를 읽고, "
+            "이를 StructuredRequestBatch 형태로 정확히 변환하세요."
+        ),
+        (
+            "출력 형식은 반드시 StructuredRequestBatch 입니다. "
+            "요청이 하나뿐이어도 반드시 'requests' 필드에 StructuredRequest 하나를 담으세요. "
+            "StructuredRequest는 다음 필드를 가집니다: kind, title, date, start_time, end_time, members, priority, reason, original_text."
+        ),
+        (
+            "만약 Week 1 tool의 JSON payload(예: personal_create_schedule의 created_schedule)를 받으면, "
+            "다시 tool을 호출하지 말고 그 payload를 파싱하여 StructuredRequest의 각 필드를 채우세요. "
+            "모르는 값은 빈값(None 또는 [])으로 두고, 날짜/시간은 확실할 때만 YYYY-MM-DD / HH:MM 형식으로 기입하세요."
+        ),
+        (
+            "이번 주차 에이전트는 오직 구조화만 수행합니다. SQLite 저장, RAG 검색, 외부 멤버 일정 조율은 하지 마세요. "
+            "구조화 판단 근거는 'reason' 필드에 간단히 남기고, 원문은 'original_text'에 보존하세요."
+        ),
     ]
 
 
