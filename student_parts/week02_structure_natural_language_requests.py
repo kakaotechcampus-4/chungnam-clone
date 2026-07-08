@@ -99,13 +99,22 @@ _WEEK02_AGENT: Any | None = None
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
-    # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
-    # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    ...
+    # kind는 RequestKind(Literal 5종)만 허용 → LLM이 다른 종류를 지어내지 못한다.
+    kind: RequestKind = Field(
+        description="요청 종류. personal_schedule(개인 일정), group_schedule(여럿이 함께하는 일정), "
+        "todo(할 일), reminder(알림), unknown(판단 불가) 중 하나."
+    )
+    # 아래 4개는 문장에 없을 수 있으므로 str | None. 확실하지 않으면 억지로 만들지 말고 None으로 둔다.
+    title: str | None = Field(default=None, description="요청의 제목이나 핵심 내용 요약.")
+    date: str | None = Field(default=None, description="날짜. 확실할 때만 YYYY-MM-DD 형식으로 채운다.")
+    start_time: str | None = Field(default=None, description="시작 시간. 확실할 때만 24시간제 HH:MM 형식으로 채운다.")
+    end_time: str | None = Field(default=None, description="종료 시간. 확실할 때만 24시간제 HH:MM 형식으로 채운다.")
+    # 참석자/관련 멤버. 언급이 없으면 빈 list — default_factory로 인스턴스마다 새 list를 만든다.
+    members: list[str] = Field(default_factory=list, description="참석자나 관련 멤버 이름 목록. 언급이 없으면 빈 목록.")
+    priority: str | None = Field(default=None, description="할 일(todo)의 우선순위. 예: low, medium, high. 언급이 없으면 None.")
+    reason: str | None = Field(default=None, description="이 kind로 분류한 판단 근거를 짧은 한국어 문장으로.")
+    # 원문은 항상 보존한다(디버깅/이후 주차 저장용). 없을 수 없으므로 str이고 기본은 빈 문자열.
+    original_text: str = Field(default="", description="사용자가 입력한 원문 그대로.")
 
 
 class StructuredRequestBatch(BaseModel):
