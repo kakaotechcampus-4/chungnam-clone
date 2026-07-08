@@ -100,10 +100,19 @@ class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
     # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
+    kind: RequestKind = Field(description="요청 종류 (personal_schedule/group_schedule/todo/reminder/unknown 중 하나를 판단해서 선정)")
     # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
+    title: str | None = Field(default=None, description="일정 / 할 일의 제목")
+    date: str | None = Field(default=None, description="YYYY-MM-DD 형식(확실할 때만 채움)")
+    start_time: str | None = Field(default=None, description="HH:MM(확실할 때만 채움)")
+    end_time: str | None = Field(default=None, description="HH:MM(확실할 때만 채움)")
     # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
+    members: list[str] = Field(default_factory=list, description="참석자/괸련 멤버, 모르면 빈 list")
     # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
+    priority: str | None = Field(default=None, description="할 일 우선순위")
+    reason: str | None = Field(default=None, description="이 구조화를 한 판단 근거를 설명한다.")
     # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
+    original_text: str = Field(default="", description="원문 보존")
     # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
     ...
 
@@ -112,7 +121,9 @@ class StructuredRequestBatch(BaseModel):
     """여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""
 
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
+    request: list[StructuredRequest] = Field(default_factory=list, description="구조화된 요청 목록")
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
+    base_date: str = Field(default_factory=current_app_date_iso, description="상대 날짜 해석 기준일을 설정")
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
     ...
 
@@ -138,17 +149,22 @@ def extract_schedule_request(query: str) -> str:
 
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
-
+    return week01_tools()
     # TODO: Week 1에서 구현한 tool 목록을 그대로 반환하세요.
     ...
 
 
 def week02_system_prompt() -> str:
     """2주차 agent가 따르는 시스템 프롬프트입니다."""
-
     # TODO: join_system_prompt(...)로 week02_prompt_parts()와 Week 2 structured_response 최종 답변 규칙을 합치세요.
     # TODO: StructuredRequestBatch에는 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담도록 지시하세요.
     # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
+    return join_system_prompt([
+        *week02_prompt_parts(),
+        "최종 답변은 반드시 StructuredRequestBatch 형식으로 낸다.",
+        "요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담는다.",
+        "personal_create_schedule tool 결과 JSON의 created_schedule 값을 읽어서 필드를 채운다. "
+                               ])
     ...
 
 
@@ -161,6 +177,10 @@ def week02_prompt_parts() -> list[str]:
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
+        f"오늘 날짜는 {current_app_date_iso()}이고, 상대 날짜는 이 날을 기준으로 해석.",
+        "kind/title/date/start_time/end_time/members 필드 채우기.",
+        "Week1 tool JSON(created_schedule)을 이미 받았다면 tool을 다시 부르지 말고 그 payload를 읽어 채운다.",
+        "Week2에서는 SQLite 저장/RAG/외부 멤버 일정 조율을 하지 않는다.",
     ]
 
 
@@ -172,6 +192,17 @@ def build_week02_agent() -> object:
     # TODO: create_agent에는 model=chat_model(), tools=week02_tools(), response_format=StructuredRequestBatch,
     #       system_prompt=week02_system_prompt()를 연결하세요.
     # TODO: 생성 또는 재사용한 _WEEK02_AGENT를 반환하세요.
+    global _WEEK02_AGENT
+    if not CONFIG.has_openai_key:
+        raise RuntimeError("PROXY_TOKEN이 .env에 필요합니다.")
+    if _WEEK02_AGENT is None:
+        _WEEK02_AGENT = create_agent(
+            model=chat_model(), 
+            tools=week02_tools(),
+            response_format=StructuredRequestBatch,
+            system_prompt=week02_system_prompt()
+        )
+    return _WEEK02_AGENT
     ...
 
 
