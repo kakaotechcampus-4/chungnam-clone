@@ -98,42 +98,86 @@ _WEEK02_AGENT: Any | None = None
 
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
-
-    # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
-    # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    ...
+    kind: RequestKind = Field(
+        default="unknown",
+        description="요청 종류: personal_schedule, group_schedule, todo, reminder, unknown 중 하나",
+    )
+    title: str | None = Field(default=None, description="일정 또는 할 일의 제목. 확실하지 않으면 None")
+    date: str | None = Field(
+        default=None, description="YYYY-MM-DD 형식의 날짜. 확실할 때만 채웁니다.")
+    start_time: str | None = Field(
+        default=None, description="HH:MM 형식의 시작 시간. 확실할 때만 채웁니다.")
+    end_time: str | None = Field(
+        default=None, description="HH:MM 형식의 종료 시간. 확실할 때만 채웁니다.")
+    members: list[str] = Field(default_factory=list, description="참석자 또는 관련 멤버 목록. 모르면 빈 리스트")
+    priority: str | None = Field(default=None, description="할 일 우선순위. 모르면 None")
+    reason: str | None = Field(default=None, description="구조화 판단 근거나 메모. 모르면 None")
+    original_text: str = Field(default="", description="원문 보존용 필드입니다.")
 
 
 class StructuredRequestBatch(BaseModel):
     """여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""
-
-    # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
-    # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    ...
+    requests: list[StructuredRequest] = Field(
+        default_factory=list,
+        description="구조화된 요청 목록. 요청이 하나뿐이어도 리스트 형태로 유지합니다.",
+    )
+    base_date: str = Field(
+        default_factory=current_app_date_iso,
+        description="상대 날짜 해석을 위한 기준일(YYYY-MM-DD). 기본값은 현재 앱 날짜입니다.",
+    )
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
-
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        try:
+            return StructuredRequest.model_validate(value)
+        except Exception:
+            try:
+                return StructuredRequest.parse_obj(value)
+            except Exception:
+                return StructuredRequest(original_text=json.dumps(value, ensure_ascii=False))
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except Exception:
+            return StructuredRequest(original_text=value)
+        return _coerce_structured_request(parsed)
+    return StructuredRequest(original_text=str(value))
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
+    if not text or not text.strip():
+        return StructuredRequest(original_text=text or "")
 
-    ...
+    # 현재는 간단한 규칙 기반 파싱을 제공합니다. 이후 LLM 호출로 확장할 수 있습니다.
+    lowered = text.lower()
+    kind: RequestKind = "unknown"
+    if any(k in lowered for k in ["할 일", "todo", "해야", "해야 해", "해야해"]):
+        kind = "todo"
+    elif any(k in lowered for k in ["회의", "미팅", "모임", "약속", "스터디"]):
+        kind = "group_schedule"
+    elif any(k in lowered for k in ["알림", "리마인더"]):
+        kind = "reminder"
+    else:
+        kind = "personal_schedule"
+
+    return StructuredRequest(kind=kind, title=text.strip(), original_text=text)
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
     """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
-
-    ...
+    structured = extract_structured_request(query)
+    payload = {
+        "ok": True,
+        "tool_name": "extract_schedule_request",
+        "structured_request": structured.model_dump(),
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def week02_tools() -> list[Any]:
