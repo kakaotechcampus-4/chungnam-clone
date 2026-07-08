@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -97,24 +97,74 @@ _WEEK02_AGENT: Any | None = None
 
 
 class StructuredRequest(BaseModel):
-    """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
+    """자연어 한 문장(또는 Week 1 tool이 반환한 JSON)에서 뽑아낸 개별 요청 하나를 표현합니다.
+    kind로 요청 종류를 먼저 판단하고 그 근거를 reason에 남긴 뒤 나머지 세부 필드를 채웁니다.
+    확실하지 않은 값은 억지로 추론하지 않고 None 또는 빈 list로 남겨도 됩니다."""
 
-    # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
-    # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    ...
+    original_text: str = Field(
+        default="",
+        description="사용자가 입력한 요청 원문(또는 Week 1 tool 결과 JSON)을 그대로 보존한 값입니다.",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="kind 및 다른 필드 값을 그렇게 판단한 근거입니다. 확실하지 않으면 None으로 둡니다.",
+    )
+    kind: RequestKind = Field(
+        default="unknown",
+        description="요청의 종류입니다. personal_schedule/group_schedule/todo/reminder/unknown 중 하나입니다.",
+    )
+    title: str | None = Field(
+        default=None,
+        description="요청의 제목입니다. 알 수 없으면 None으로 둡니다.",
+    )
+    date: str | None = Field(
+        default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
+        description="요청과 관련된 날짜입니다. YYYY-MM-DD 형식이며, 알 수 없으면 None으로 둡니다.",
+        examples=["2026-07-14"],
+    )
+    start_time: str | None = Field(
+        default=None,
+        pattern=r"^\d{2}:\d{2}$",
+        description="요청 시작 시각입니다. HH:MM 형식이며, 알 수 없으면 None으로 둡니다.",
+        examples=["15:00"],
+    )
+    end_time: str | None = Field(
+        default=None,
+        pattern=r"^\d{2}:\d{2}$",
+        description="요청 종료 시각입니다. HH:MM 형식이며, 알 수 없으면 None으로 둡니다.",
+        examples=["16:00"],
+    )
+    members: list[str] = Field(
+        default_factory=list,
+        description="요청에 관련된 참석자/멤버 목록입니다. 알 수 없으면 빈 list로 둡니다.",
+    )
+    priority: Literal["high", "medium", "low"] | None = Field(
+        default=None,
+        description="요청의 우선순위입니다. 알 수 없으면 None으로 둡니다.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_time_order(self) -> "StructuredRequest":
+        if self.start_time is not None and self.end_time is not None:
+            if self.end_time < self.start_time:
+                raise ValueError("end_time은 start_time보다 빠를 수 없습니다.")
+        return self
 
 
 class StructuredRequestBatch(BaseModel):
-    """여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""
+    """Week 2 agent의 최종 structured_response(response_format) 스키마입니다.
+    requests는 StructuredRequest의 list이며, 요청이 하나뿐이어도 list 형태를 유지합니다.
+    base_date는 requests 안 각 StructuredRequest.date의 상대 날짜 표현(예: "내일") 해석 기준일입니다."""
 
-    # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
-    # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    ...
+    base_date: str = Field(
+        default_factory=current_app_date_iso,
+        description="상대 날짜 해석 기준일입니다. requests 안 각 StructuredRequest.date 해석에 사용됩니다.",
+    )
+    requests: list[StructuredRequest] = Field(
+        default_factory=list,
+        description="구조화된 요청 목록입니다. 요청이 하나뿐이어도 StructuredRequest 하나가 든 list로 채웁니다.",
+    )
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:

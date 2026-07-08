@@ -1,173 +1,184 @@
 # 작업 목표
 
-일정(Schedule)의 CRUD가 가능한 LLM Agent를 만든다.
-(Week 1: `personal_create_schedule` / `personal_list_schedules` / `personal_delete_schedule` 3개 tool로 개인 일정 생성·조회·삭제를 구현)
+Week 1 tool이 만든 JSON payload나 사용자의 한국어 자연어 요청을, LLM structured output(`response_format`)으로
+뽑아낼 수 있는 두 개의 Pydantic 스키마를 완성한다.
+
+- `StructuredRequest`: 자연어 요청 한 건을 종류/제목/날짜/시간/멤버/우선순위/근거/원문 필드로 구조화한 결과.
+- `StructuredRequestBatch`: `StructuredRequest` 여러 개(요청이 하나뿐이어도 항상 list)와, 상대 날짜 해석
+  기준일(`base_date`)을 함께 담는 최종 `structured_response` 스키마.
 
 # 수정 범위
 
-- 수정 대상 파일은 `./week01_wake_up_nana.py` 하나뿐이다. 그 외의 코드/파일(`fixed/` 등)은 건드리지 않는다.
-- `week01_wake_up_nana.py` 안에서도 아래 3개 `@tool` 함수의 본문(`# TODO` 부분)만 구현한다.
-  - `personal_create_schedule`
-  - `personal_list_schedules`
-  - `personal_delete_schedule`
-- 그 외 함수(`join_system_prompt`, `_json`, `_now_iso`, `_new_personal_id`, `_schedule_scope`,
-  `_current_session_schedules`, `week01_tools`, `week01_system_prompt`, `week01_prompt_parts`,
-  `build_week01_agent`, `build_week_agent`, `list_personal_schedule_dicts`,
-  `ensure_demo_personal_schedule`)는 구현 대상이 아니므로 수정하지 않는다.
+- 수정 대상 파일은 `./week02_structure_natural_language_requests.py` 하나뿐이다. 그 외의 코드/파일
+  (`fixed/` 등)은 건드리지 않는다.
+- 이번 문서가 다루는 구현 대상은 `StructuredRequest`, `StructuredRequestBatch` 두 클래스(필드 선언 +
+  클래스 docstring)뿐이다.
+- `week02_tools`, `week02_system_prompt`, `week02_prompt_parts`, `build_week02_agent`,
+  `extract_structured_request`, `_coerce_structured_request`, `extract_schedule_request` 등 나머지
+  `# TODO`는 이번 작업 범위가 아니다. 이번 문서의 지시로 건드리지 않는다.
 
 # 하지 말아야 할 것
 
-- 파일 최하단의 `[수강생 구현 가이드]` 주석은 프롬프트(과제 출제 의도) 확인용으로, **컨닝하지 않는다**.
-  즉 그 주석 내용을 읽고 그대로 베끼거나, 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
-- 이미 동일한 기능을 하는 함수가 파일 안에 존재하면, 그 로직을 직접 인라인으로 재구현하지 않고
-  기존 함수를 그대로 호출해서 사용한다. (예: JSON 직렬화는 `_json`, ID 생성은 `_new_personal_id`,
-  타임스탬프는 `_now_iso`, 현재 대화 범위 일정 조회는 `_current_session_schedules`/`current_session_scope`
-  같은 기존 헬퍼를 재사용)
-- 새로운 저장소(DB, 파일 등)를 추가하지 않는다. Week 1 일정은 `PERSONAL_SCHEDULES`(현재 프로세스 메모리)에만 존재한다.
+- 파일 상단의 `[2주차 1회차 수강생 구현 가이드]` 주석은 출제 의도 확인용으로, **컨닝하지 않는다**. 그
+  주석 내용을 그대로 베끼거나 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
+- `RequestKind`, `current_app_date_iso` 등 파일에 이미 정의/import된 타입과 헬퍼를 재정의하지 않고 그대로
+  사용한다.
+- 이 문서에 없는 필드나 검증 로직(예: `requests`의 최소 길이 제한, `date`와 `base_date` 간 교차 검증 등)을
+  임의로 추가하지 않는다. 스펙에 없는 제약은 나중에 실제로 필요해질 때 추가한다.
+- `student_parts/week01_claude.md`는 Week 1용 문서다. 형식이 이번 문서와 다르며, 스타일이 필요할 때만
+  참고자료로 확인하고 내용을 그대로 따를 필요는 없다.
 
-# 구현 시 참고
+# StructuredRequest ↔ StructuredRequestBatch 관계
 
-- 반환값은 LangChain tool 관례상 JSON 문자열이며, `_json(payload)`로 감싼다.
-- 현재 대화 범위 분리는 `fixed/session_scope.py`의 `current_session_scope()` 값을
-  `session_id`로 저장/비교해서 처리한다.
+- `StructuredRequestBatch`는 `StructuredRequest`를 필드로 가진다. 여러 개의 구조화된 pydantic 출력을 더
+  높은 정확도로 얻기 위한 구조다.
+- 요청이 하나뿐이어도 항상 `StructuredRequestBatch` 형태(즉 `requests` 안에 `StructuredRequest` 하나가 든
+  list)로 반환되어야 한다. `StructuredRequest`를 단독으로 최상위 `response_format`으로 쓰지 않는다.
 
-# 공통사항 (3개 tool 구현 시 모두 적용)
+# 공통 규칙 (두 클래스 모두 해당)
 
-- 이 agent 파이프라인(LangChain `create_agent`, tool calling 구조 등)은 2025.10부터 확립된 구성이다.
-  학습된 기존 지식과 상충되는 부분이 있다면 추측하지 말고 검색해서 확인한다.
-- JSON 문자열 반환은 반드시 이 파일의 `_json(payload)` helper를 사용한다. (LangChain tool은 문자열
-  반환이 가장 안정적이므로, dict를 직접 만든 뒤 `_json(...)`으로 감싸서 반환한다.)
-- 임시 저장소는 파일 상단에 정의된 `PERSONAL_SCHEDULES` 리스트를 사용한다. (새 저장소를 추가하지 않는다.)
-- 새 일정 ID 생성은 미리 정의된 `_new_personal_id()`를 사용한다. (직접 ID를 만들지 않는다.)
-- 생성 시각 파악은 `_now_iso()`를 사용한다.
-- 채팅 범위 분리는 `fixed/session_scope.py`에 이미 구현된 함수를 활용한다.
-  - `current_session_scope()` 값을 schedule dict의 `session_id` 필드에 넣어서 생성한다.
-  - 조회(`personal_list_schedules`)와 삭제(`personal_delete_schedule`) 시에는 같은 `session_id`를
-    가진 일정만 대상으로 처리한다. 다른 대화 범위의 일정은 조회/삭제 대상에서 제외한다.
+- 클래스 docstring은 `response_format`으로 LLM에 노출되는 JSON schema의 description으로 그대로 쓰인다.
+  현재 두 클래스의 docstring은 각각 한 문장짜리로 빈약하다. 아래 "클래스 docstring 보강" 항목의 내용이
+  드러나도록 다시 쓴다.
+- 각 필드의 `description`에는 반드시 한국어로 된 간결한 필드 설명을 넣는다.
+- 출력 형태나 fewshot 예시가 실제로 스펙에 주어진 필드에 한해서만 `Field(examples=[...])`를 함께 단다.
+  예시가 없는 필드(`title`, `reason`, `original_text`, `members` 등)는 억지로 예시를 만들지 않는다.
+  - `date`, `start_time`, `end_time`은 아래 pattern으로 출력 형식이 명시되어 있으므로, 그 형식에 맞는
+    예시 하나씩을 `examples=[...]`로 넣는다.
+  - `kind`, `priority`는 이미 `Literal`로 후보값이 제한되어 값 자체가 스키마에 드러나므로, `examples`를
+    추가로 붙이지 않아도 된다.
+- 필드는 아래쪽 필드를 채울 때 근거로 참고될 수 있는 필드일수록 클래스 위쪽에 배치한다. (원문/판단근거처럼
+  맥락을 주는 필드를 먼저 두어, 뒤쪽 필드가 모호하거나 요청에 없는 값을 추론해 채울 때 참고할 수 있게 한다.)
+  구체적 순서는 아래 각 클래스 항목에서 필드 이름으로 명시한다.
+- 후보값이 명백히 정해진 필드는 `Literal`로 종류를 제한한다. 값이 없을 수도 있으면서 후보값이 정해진
+  경우는 `Literal[...] | None` 형태로 선언한다. (`kind`, `priority`)
+- 값 범위 제약은 `Field(pattern=...)`로 정규식을 걸어 "타입은 맞지만 값이 터무니없는" 경우를 막는다.
+  - `date`: `Field(pattern=r"^\d{4}-\d{2}-\d{2}$")`
+  - `start_time`, `end_time`: `Field(pattern=r"^\d{2}:\d{2}$")`
+  - 값이 `None`이면 pattern 검증은 적용되지 않는다. (Optional 필드에 값이 있을 때만 형식을 검사한다.)
+- 필드 간 교차 검증은 `model_validator`로 처리한다. `start_time`과 `end_time`이 **둘 다 값이 있을 때만**
+  `end_time`이 `start_time`보다 빠르지 않은지 검증한다. 둘 중 하나라도 `None`이면 비교 없이 그대로
+  통과시킨다. (`"HH:MM"` 형식 문자열은 그대로 사전식 비교해도 시간 순서와 일치한다.)
 
-# personal_create_schedule 구현 명세
+# StructuredRequest 스키마 명세
 
-- 매개변수는 이미 작성된 함수 시그니처를 그대로 따른다.
-  (`title: str`, `date: str`, `start_time: str`, `end_time: str = "미정"`, `attendees: list[str] | None = None`)
-- 반환값은 `_json(...)`으로 감싸기 전 기준으로 아래 dict 형태여야 한다.
-  ```python
-  {
-      "ok": bool,
-      "tool_name": "personal_create_schedule",
-      "created_schedule": dict,
-  }
-  ```
-- `created_schedule`은 아래 필드를 가진다.
-  ```python
-  {
-      "id": str,
-      "created_at": str,
-      "title": str,
-      "date": str,
-      "start_time": str,
-      "end_time": str,        # 기본값 "미정"
-      "attendees": list[str],
-      "session_id": str,
-  }
-  ```
-- 필드별 값 채우는 규칙
-  1. `id`는 `"personal_"` 접두어가 붙은 임시 ID이며 직접 만들지 않고 `_new_personal_id()`를 호출해서 사용한다.
-  2. `created_at`은 현재 시각이며 직접 만들지 않고 `_now_iso()`를 호출해서 채운다.
-  3. `attendees`가 `None`이면 빈 리스트(`[]`)로 바꿔서 넣는다.
-  4. `session_id`는 대화 범위를 구분하는 키로, 직접 만들지 않고 `current_session_scope()`를 호출해서 채운다.
-- 위 규칙으로 만든 `created_schedule` dict를 `PERSONAL_SCHEDULES`에 append해서 저장한 뒤,
-  같은 dict를 반환 JSON의 `created_schedule` 값으로 사용한다.
+## 필드 선언 순서
 
-## personal_create_schedule `@tool` docstring 작성 가이드
-
-- LangChain `@tool`의 docstring은 LLM이 tool 선택·인자 작성 시 참고하는 설명이므로, 아래 내용이
-  드러나도록 작성한다. (기존 한 줄 docstring을 대체/보강하는 용도이며, 로직 구현이 아니다.)
-  - 이 함수가 **새 개인 일정을 만드는** 함수임을 명시한다.
-  - `date` 인자는 `YYYY-MM-DD` 형식임을 명시한다.
-  - `start_time`, `end_time` 인자는 `HH:MM` 형식임을 명시한다.
-- docstring 작성도 `[수강생 구현 가이드]` 주석을 베끼지 않고 위 3가지 요구사항만 반영해서 직접 쓴다.
-
-# personal_list_schedules 구현 명세
-
-- 이 `@tool`은 **조회 전용** 함수다. `PERSONAL_SCHEDULES`를 추가/삭제/수정하지 않는다.
-- 매개변수는 이미 작성된 함수 시그니처를 그대로 따른다.
-  (`date_from: str | None = None`, `date_to: str | None = None`)
-  - `date_from`, `date_to` 모두 주어질 경우 `YYYY-MM-DD` 형식을 따른다.
-- 조회 절차
-  1. 먼저 `_current_session_schedules()`를 호출해서 현재 대화 범위(`session_id`)에 속한 일정만 가져온다.
-  2. 그 결과에 대해서만 `date_from`/`date_to` 기간 조회를 수행한다.
-     - `date_from`이 주어지면 그 날짜 이상인 일정만 남긴다.
-     - `date_to`가 주어지면 그 날짜 이하인 일정만 남긴다.
-     - 날짜 비교는 `YYYY-MM-DD` 문자열 비교로 충분하다.
-  - 특정 기간 조회는 별도 함수로 분리하지 않고 `personal_list_schedules` 안에서 직접 구현한다.
-- 반환값은 `_json(...)`으로 감싸기 전 기준으로, `personal_create_schedule`의 반환 형태(`ok`, `tool_name`,
-  `<결과 데이터 필드>` 3개 키로 구성되는 dict 형태)와 동일한 패턴을 따른다.
-  ```python
-  {
-      "ok": bool,
-      "tool_name": "personal_list_schedules",
-      "schedules": list[dict],
-  }
-  ```
-
-# personal_delete_schedule 구현 명세
-
-- 이 `@tool`은 `schedule_id` 하나에 해당하는 개인 일정을 삭제하는 함수다.
-- 매개변수는 이미 작성된 함수 시그니처를 그대로 따른다. (`schedule_id: str`)
-  - `schedule_id`는 `_new_personal_id()`가 반환하는 형태(`"personal_"` 접두어가 붙은 문자열)를 따르는
-    값이 들어온다는 뜻이며, 별도의 런타임 포맷 검증 로직은 추가하지 않는다. (이 사실은 docstring/description에
-    형식을 문서화하는 용도로만 쓴다.)
-- 삭제 조건: `id == schedule_id`이면서 동시에 `_schedule_scope(schedule) == current_session_scope()`인
-  일정만 삭제 대상이다.
-  - 다른 대화 범위(`session_id`)에 동일한 `schedule_id`를 가진 일정이 있어도 삭제하지 않는다.
-- 구현 절차
-  1. 삭제 전 `PERSONAL_SCHEDULES`의 길이를 기록한다.
-  2. 위 삭제 조건에 해당하지 않는(즉 유지할) 일정만 남긴 새 리스트를 만든다.
-  3. `PERSONAL_SCHEDULES[:] = <새 리스트>` 형태로 슬라이스 대입해서 기존 리스트 객체(reference)를
-     유지한 채 내용만 교체한다. (`PERSONAL_SCHEDULES = <새 리스트>`처럼 새 객체를 바인딩하지 않는다.)
-  4. 삭제 후 길이와 비교해 `deleted = 삭제 전 길이 - 삭제 후 길이`를 계산한다. (일치하는 일정이 없으면 0)
-- 반환값은 `_json(...)`으로 감싸기 전 기준으로 아래 dict 형태여야 한다.
-  ```python
-  {
-      "ok": bool,
-      "tool_name": "personal_delete_schedule",
-      "deleted": int,
-  }
-  ```
-  - `ok`는 함수 호출이 에러 없이 끝났다면 항상 `True`다. (`personal_create_schedule`/`personal_list_schedules`와
-    동일한 규칙. 삭제 대상이 없어 `deleted == 0`이어도 `ok`를 `False`로 바꾸지 않는다.) 실제 삭제 여부는
-    `deleted` 값으로 판단한다.
-
-## personal_delete_schedule `@tool` docstring/description 작성 가이드
-
-- 이 프로젝트는 `description=`을 우선 사용하므로, `personal_create_schedule`처럼
-  `@tool("personal_delete_schedule", description=...)` 형태로 작성한다.
-- description에는 아래 내용이 드러나야 한다.
-  - 이 함수가 **`schedule_id`에 해당하는 개인 일정을 삭제하는** 함수임을 명시한다.
-  - `schedule_id`는 `_new_personal_id()`가 만든 값(`"personal_"` 접두어가 붙은 문자열) 형식임을 명시한다.
-  - 현재 대화 범위(session)가 다르면 같은 `schedule_id`라도 삭제되지 않는다는 점을 명시한다.
-- `[수강생 구현 가이드]` 주석을 베끼지 않고 위 요구사항만 반영해서 직접 쓴다.
-
-# `@tool` 데코레이터 작성법 (langchain_core 1.4.0 / langchain 1.3.2 기준)
-
-`langchain.tools.tool`은 데코레이터로 쓸 때 두 가지 형태를 지원한다.
-
-```python
-# 1) 인자 없이: 함수 이름 그대로 tool 이름이 되고, docstring이 description이 된다.
-@tool
-def search_api(query: str) -> str:
-    """Searches the API for the query."""
-    ...
-
-# 2) 이름/옵션을 명시: 첫 위치 인자가 tool 이름, description 키워드 인자로 설명을 직접 지정.
-@tool("personal_delete_schedule", description="schedule_id와 일치하는 개인 일정을 삭제한다. 예: schedule-1")
-def personal_delete_schedule(schedule_id: str) -> str:
-    ...
+```
+original_text → reason → kind → title → date → start_time → end_time → members → priority
 ```
 
-- `name_or_callable`(첫 위치 인자)은 tool 이름을 덮어쓴다. 함수 이름과 다른 이름을 노출하고 싶을 때만 쓴다.
-- `description` 키워드 인자를 주면 docstring보다 **우선**해서 LLM에게 노출되는 설명으로 쓰인다.
-  description을 따로 안 주면 docstring이, 그것도 없으면 `args_schema`의 description이 쓰인다.
-- 인자 포맷(예: `date`는 `YYYY-MM-DD`, `start_time`/`end_time`은 `HH:MM`)처럼 LLM이 tool 선택·인자
-  작성 시 알아야 할 내용은 docstring이 아니라 `description=` 인자 안에 자연어로 풀어 쓴다.
-  (이 프로젝트는 `description=`을 우선 사용하는 방식을 따른다.)
+원문을 가장 먼저 두어 이후 모든 판단의 근거로 삼고, 판단 근거(`reason`) → 요청 종류(`kind`)를 먼저 정한
+뒤 나머지 세부 항목을 채우는 순서다.
+
+## 필드별 타입/기본값
+
+| 필드            | 타입                                    | 기본값                        |
+|-----------------|-----------------------------------------|--------------------------------|
+| `original_text` | `str`                                   | `""`                            |
+| `reason`        | `str \| None`                           | `None`                          |
+| `kind`          | `RequestKind`                           | `Field(default="unknown", ...)` |
+| `title`         | `str \| None`                           | `None`                          |
+| `date`          | `str \| None` (+ pattern)               | `None`                          |
+| `start_time`    | `str \| None` (+ pattern)               | `None`                          |
+| `end_time`      | `str \| None` (+ pattern)               | `None`                          |
+| `members`       | `list[str]`                             | `Field(default_factory=list)`   |
+| `priority`      | `Literal["high", "medium", "low"] \| None` | `None`                       |
+
+## 필드별 세부 요구사항
+
+- `kind`: 이미 정의된 `RequestKind` Literal(`personal_schedule`, `group_schedule`, `todo`, `reminder`,
+  `unknown`)만 허용한다. `Field(default="unknown", description=...)`로 선언한다.
+- `title`/`date`/`start_time`/`end_time`: `str | None`, 기본값 `None`. `date`/`start_time`/`end_time`에는
+  위 공통 규칙의 `pattern`을 건다.
+- `members`: `list[str]`, `default_factory=list`. 모르면 빈 list로 둔다.
+- `priority`: `Literal["high", "medium", "low"] | None`, 기본값 `None`.
+- `reason`: `str | None`, 기본값 `None`. `kind`/필드 값을 그렇게 판단한 근거.
+- `original_text`: `str`, 기본값 `""`. 사용자가 입력한 원문 보존용.
+- 모르는 값을 억지로 만들지 않는다. 확실하지 않으면 `None` 또는 빈 list가 안전하다는 점을 각 필드
+  description에도 드러낸다.
+
+## model_validator
+
+- `mode="after"`인 model validator를 하나 추가해 `start_time`/`end_time`이 둘 다 있을 때만 시간 순서를
+  검증한다. (조합이 모순인 경우만 잡아내고, 개별 필드가 `None`이면 통과시킨다.)
+
+## 클래스 docstring 보강
+
+- 현재 `"""LLM structured output으로 추출되는 2주차 요청 스키마입니다."""`는 이 클래스가 무엇을 추출해야
+  하는지, `StructuredRequestBatch`와 어떤 관계인지 드러나지 않아 빈약하다. 아래 내용이 드러나도록 다시
+  쓴다.
+  - 자연어 한 문장(또는 Week 1 tool 결과 JSON)에서 뽑아내는 개별 요청 하나를 표현한다는 것.
+  - `kind`로 요청 종류를 먼저 판단하고, 그 판단 근거를 `reason`에 남긴다는 것.
+  - 확실하지 않은 값은 `None`/빈 list로 남겨도 된다는 것(억지 추론 금지).
+- `[2주차 1회차 수강생 구현 가이드]` 주석을 베끼지 않고 위 내용만 반영해 직접 쓴다.
+
+# StructuredRequestBatch 스키마 명세
+
+## 필드 선언 순서
+
+```
+base_date → requests
+```
+
+상대 날짜 해석 기준일을 먼저 정의해, 이후 `requests` 안 각 `StructuredRequest.date` 해석의 근거로 삼는다.
+
+## 필드별 타입/기본값
+
+| 필드       | 타입                          | 기본값                                          |
+|------------|-------------------------------|--------------------------------------------------|
+| `base_date`| `str`                          | `Field(default_factory=current_app_date_iso, ...)`|
+| `requests` | `list[StructuredRequest]`      | `Field(default_factory=list, ...)`                |
+
+## 필드별 세부 요구사항
+
+- `base_date`: `current_app_date_iso`를 그대로 재사용해 오늘 날짜로 채운다. description에는 이 값이
+  `requests` 안 각 `StructuredRequest.date` 필드의 상대 날짜(예: "내일", "다음 주 화요일") 해석 기준일로
+  쓰인다는 점을 명시한다.
+- `requests`: 요청이 하나뿐이어도 `StructuredRequest` 하나가 든 list로 채운다. description에 이 규칙을
+  명시한다.
+
+## 클래스 docstring 보강
+
+- 현재 `"""여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""`도 
+  `StructuredRequest`와의 관계, "요청이 하나여도 list" 규칙이 드러나지 않아 빈약하다. 아래 내용이
+  드러나도록 다시 쓴다.
+  - 이 스키마가 Week 2 agent의 최종 `structured_response`(response_format)라는 것.
+  - `requests`가 `StructuredRequest`의 list이며, 요청이 하나뿐이어도 list 형태를 유지한다는 것.
+  - `base_date`가 `requests` 안 상대 날짜 표현 해석의 기준일이라는 것.
+
+# 참고자료
+
+- `student_parts/week01_claude.md`: Week 1(`personal_create_schedule` 등 3개 tool 구현)용 문서. 형식이
+  다르므로 그대로 따르지 않고, 문서 스타일이 필요할 때만 참고한다.
+- `week01_prompt_parts()`, `week01_tools()`: 이번 두 클래스 구현과는 직접 관련 없다. (다음 문서에서
+  `week02_tools`/`week02_prompt_parts` 등을 다룰 때 참고한다.)
+
+# 검증 방법
+
+두 클래스만으로는 아직 `./run.sh --week2`가 완전히 동작하지 않는다(`week02_tools` 등 나머지 `# TODO`가
+남아 있으므로). 이번 단계에서는 아래로 스키마 자체를 검증한다.
+
+```python
+from student_parts.week02_structure_natural_language_requests import (
+    StructuredRequest,
+    StructuredRequestBatch,
+)
+
+batch = StructuredRequestBatch(
+    requests=[
+        StructuredRequest(
+            original_text="다음 주 화요일 오후 3시에 철수랑 회의 잡아줘",
+            kind="group_schedule",
+            start_time="15:00",
+            end_time="14:00",  # end_time < start_time -> model_validator에서 에러가 나야 함
+        )
+    ]
+)
+```
+
+- `StructuredRequestBatch.model_json_schema()`를 찍어 각 필드 description/examples/pattern이 의도대로
+  노출되는지 확인한다.
+- `date`/`start_time`/`end_time`에 형식에 맞지 않는 값(`"2026-13-99"`, `"9:5"` 등)을 넣었을 때
+  `ValidationError`가 나는지 확인한다.
+- `end_time`이 `start_time`보다 빠른 값을 넣었을 때 model_validator가 에러를 내는지 확인한다.

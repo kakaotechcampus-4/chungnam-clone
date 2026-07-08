@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"from langchain.tools import tool; import inspect; print\\(inspect.signature\\(tool\\)\\)\")",
+      "Bash(python3 -c \"from langchain.tools import tool; help\\(tool\\)\")",
+      "Bash(python3 -c \"import langchain_core; print\\(langchain_core.__version__\\)\")",
+      "Bash(python3 -c \"import langchain; print\\(langchain.__version__\\)\")",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('student_parts/week01_wake_up_nana.py'\\).read\\(\\)\\)\")"
+    ]
+  }
+}
