@@ -244,7 +244,7 @@ def week01_system_prompt() -> str:
 def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
-    return [ # 프롬프트 추가 (상대적 날짜)
+    return [ # 프롬프트 추가 (상대적 날짜) + '오늘'을 불러오는 함수를 사용해서 문자열 안에 넣을 수 있습니다. 검색이 제한된 LLM을 가정하면 현재 날짜를 모를 수도 있어요. 프롬프트에 넣어줄 수 있다면 좋겠죠?😊
         CHAT_MEMORY_PROMPT,
         """
 [Week 1 일정 관리 규칙]
