@@ -29,18 +29,18 @@ LLM이 자연어에서 추출한 개별 요청을 정의하는 중심 스키마�
 
 필드명 | 타입 | 설명 / 제약 조건
 kind | Literal | "personal_schedule, group_schedule, todo, reminder, unknown 중 하나만 허용 (RequestKind)"
-title| str | 일정/할 일의 제목
+title| Optional[str] | None | 일정/할 일의 제목
 date | Optional[str] | "확실할 때만 YYYY-MM-DD 형식, 불확실하면 None"
 start_time | Optional[str] | "확실할 때만 HH:MM 형식, 불확실하면 None"
 end_time | Optional[str] | "확실할 때만 HH:MM 형식, 불확실하면 None"
 members | list[str] | 참석자/관련 멤버 목록. 모르면 빈 리스트([])
 priority | Optional[str] | 할 일 등의 우선순위
-reason | str | 이 종류와 필드로 판단한 LLM의 근거
+reason | Optional[str] | 이 종류와 필드로 판단한 LLM의 근거
 original_text | str | 구조화 대상이 된 원문 텍스트 보존
 
 2. StructuredRequestBatch
 최종 structured_response로 반환될 스키마 규격이다.
-- requests: ;ist[StructuredRequest] (요청이 단 하나여도 List 형태를 유지한다.)
+- requests: list[StructuredRequest] (요청이 단 하나여도 List 형태를 유지한다.)
 - base_date: str(상대 날짜 해석의 기준일인 current_app_date_iso 값을 담는다.)
 
 ## 절대 금지 / 반드시 지킬 것 (Known gotchas)
