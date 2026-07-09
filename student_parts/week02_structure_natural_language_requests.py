@@ -11,11 +11,13 @@ from pydantic import BaseModel, Field
 from fixed.config import CONFIG
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
-from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
+from student_parts.prompting import join_system_prompt
+from student_parts.week01_wake_up_nana import week01_prompt_parts, week01_tools
 
 
 RequestKind = Literal["personal_schedule", "group_schedule", "todo", "reminder", "unknown"]
 _WEEK02_AGENT: Any | None = None
+_STRUCTURED_LLM: Any | None = None
 
 
 # [2주차 수강생 구현 가이드]
@@ -226,10 +228,12 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
 def extract_structured_request(text: str) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
-    structured_llm = chat_model().with_structured_output(
-        StructuredRequest, method="function_calling"
-    )
-    result = structured_llm.invoke(
+    global _STRUCTURED_LLM
+    if _STRUCTURED_LLM is None:
+        _STRUCTURED_LLM = chat_model().with_structured_output(
+            StructuredRequest, method="function_calling"
+        )
+    result = _STRUCTURED_LLM.invoke(
         [
             ("system", join_system_prompt(week02_prompt_parts())),
             ("user", text),
@@ -278,12 +282,13 @@ def week02_prompt_parts() -> list[str]:
     return [
         *week01_prompt_parts(),
         "너는 사용자의 자연어 요청을 일정 앱이 읽을 수 있는 데이터로 구조화하는 agent 다. "
-        f"상대 날짜 표현은 오늘 날짜 {current_app_date_iso()} 를 기준으로 환산한다.",
+        "상대 날짜는 위에 적힌 오늘 날짜를 그대로 기준으로 쓴다.",
         "요청마다 kind, title, date, start_time, end_time, members, priority, reason, "
         "original_text 필드를 채운다. 확실하지 않은 값은 억지로 만들지 않고 "
         "None 이나 빈 list 로 둔다.",
-        "Week 1 도구 결과 JSON 을 이미 받은 경우 같은 도구를 다시 호출하지 않고 "
-        "그 payload 를 읽어 구조화 결과를 만든다.",
+        "personal_create_schedule 같은 도구가 반환한 JSON(created_schedule 키가 든 payload)을 "
+        "이미 받은 경우 같은 도구를 다시 호출하지 않고 그 payload 의 title, date, "
+        "start_time 값으로 필드를 채운다.",
         "Week 2 에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다.",
     ]
 
