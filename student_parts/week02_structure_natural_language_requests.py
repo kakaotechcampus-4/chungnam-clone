@@ -112,12 +112,12 @@ class StructuredRequest(BaseModel):
     # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
     # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
     # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    ...
+    
     kind: RequestKind = Field(description="요청된 일정 유형")
     title: str | None = Field(default=None, description="일정 제목")
-    date: str | None = Field(default=None, description="YYYY-MM-DD")
-    start_time: str | None = Field(default=None, description="HH:MM")
-    end_time: str | None = Field(default=None, description="HH:MM")
+    date: str | None = Field(default=None, description="확실할 때만 YYYY-MM-DD, 모르면 None")
+    start_time: str | None = Field(default=None, description="확실할 때만 HH:MM, 모르면 None")
+    end_time: str | None = Field(default=None, description="확실할 때만 HH:MM, 모르면 None")
     members: list[str] = Field(default_factory=list, description="참여자 목록")
     priority: str | None = Field(default=None, description="우선 순위")
     reason: str | None = Field(default=None, description="근거")
@@ -133,7 +133,7 @@ class StructuredRequestBatch(BaseModel):
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    ...
+    
     requests: list[StructuredRequest] = Field(default_factory=list, description="StructuredRequest 여러개를 담는 필드")
     base_date: str = Field(default_factory=current_app_date_iso, description="기준 날짜")
 
@@ -177,7 +177,7 @@ def week02_system_prompt() -> str:
     # TODO: join_system_prompt(...)로 week02_prompt_parts()와 Week 2 structured_response 최종 답변 규칙을 합치세요.
     # TODO: StructuredRequestBatch에는 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담도록 지시하세요.
     # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
-    ...
+    
     return join_system_prompt([
           *week02_prompt_parts(),
           """
@@ -197,8 +197,8 @@ def week02_prompt_parts() -> list[str]:
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
-        f"오늘은 {current_app_date_iso()}이다. 사용자 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화한다."
-        "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만든다."
+        f"오늘은 {current_app_date_iso()}이다. 사용자 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화한다.",
+        "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만든다.",
         "SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다"
     ]
 
