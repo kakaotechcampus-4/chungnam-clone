@@ -100,14 +100,14 @@ class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
     kind: RequestKind = Field(description="요청의 종류. personal_schedule/group_schedule/todo/reminder/unknown 중 하나")
-    title: str | None = Field(default = None, description="일정 또는 할 일의 제목")
-    date: str | None = Field(default = None, description="일정의 날짜. YYYY-MM-DD 형식. 확실하지 않으면 None")
-    start_time: str | None = Field(default = None, description="일정의 시작 시각. HH:MM 형식. 확실하지 않으면 None")
-    end_time: str | None = Field(default = None, description="일정의 종료 시각. HH:MM 형식. 확실하지 않으면 None")
+    title: str | None = Field(default=None, description="일정 또는 할 일의 제목")
+    date: str | None = Field(default=None, description="일정의 날짜. YYYY-MM-DD 형식. 확실하지 않으면 None")
+    start_time: str | None = Field(default=None, description="일정의 시작 시각. HH:MM 형식. 확실하지 않으면 None")
+    end_time: str | None = Field(default=None, description="일정의 종료 시각. HH:MM 형식. 확실하지 않으면 None")
     members: list[str] = Field(default_factory=list, description="일정의 참석자/관련 멤버. 확실하지 않으면 빈 리스트")
-    priority: str | None = Field(default = None, description="일정의 우선순위")
-    reason: str | None = Field(default = None, description="판단 근거")
-    original_text: str = Field(default = "", description="원문 보존용 필드")
+    priority: str | None = Field(default=None, description="일정의 우선순위")
+    reason: str | None = Field(default=None, description="판단 근거")
+    original_text: str = Field(default="", description="원문 보존용 필드")
 
 
 
