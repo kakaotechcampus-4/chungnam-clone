@@ -150,8 +150,10 @@ def week02_system_prompt() -> str:
 
     return join_system_prompt([
         *week02_prompt_parts(),
-        "최종 답변은 반드시 StructuredRequestBatch 형식의 structured_response로 반환한다. "
-        "요청이 하나뿐이어도 requests 목록에는 StructuredRequest를 하나만 담는다. "
+        "requests 목록은 항상 리스트 형태로 반환한다. "
+        "요청이 여러 건이면 각 요청마다 StructuredRequest를 담고, "
+        "요청이 1건뿐이어도 리스트를 비우거나 단일 객체로 반환하지 않고 "
+        "StructuredRequest 하나를 담은 리스트(원소 1개)로 반환한다. "
         "personal_create_schedule tool을 호출했다면, 그 결과 JSON의 created_schedule 필드를 읽고 "
         "StructuredRequest 필드를 채운다.",
     ])
