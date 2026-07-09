@@ -106,22 +106,22 @@ class StructuredRequest(BaseModel):
         )
     )
     title: str | None = Field(
-        default=None, description="일정 또는 할 일의 제목. 확실하지 않으면 None으로 둔다."
+        default=None, description="일정 또는 할 일의 제목."
     )
     date: str | None = Field(
-        default=None, description="일정 날짜. 확실할 때만 YYYY-MM-DD 형식으로 채우고, 모르면 None으로 둔다."
+        default=None, description="일정 날짜. YYYY-MM-DD 형식."
     )
     start_time: str | None = Field(
-        default=None, description="일정 시작 시간. 확실할 때만 HH:MM 형식으로 채우고, 모르면 None으로 둔다."
+        default=None, description="일정 시작 시간. HH:MM 형식."
     )
     end_time: str | None = Field(
-        default=None, description="일정 종료 시간. 확실할 때만 HH:MM 형식으로 채우고, 모르면 None으로 둔다."
+        default=None, description="일정 종료 시간. HH:MM 형식."
     )
     members: list[str] = Field(
-        default_factory=list, description="참석자 또는 관련 멤버 이름 목록. 모르면 빈 목록으로 둔다."
+        default_factory=list, description="참석자 또는 관련 멤버 이름 목록."
     )
     priority: str | None = Field(
-        default=None, description="할 일의 우선순위. 요청에 명시되지 않으면 None으로 둔다."
+        default=None, description="할 일의 우선순위."
     )
     reason: str | None = Field(
         default=None, description="요청을 이렇게 구조화한 판단 근거."
@@ -188,13 +188,12 @@ def week02_system_prompt() -> str:
 def week02_prompt_parts() -> list[str]:
     """2주차 structured output agent가 따르는 system prompt 조각입니다."""
 
-    current_date = current_app_date_iso()
     return [
         *week01_prompt_parts(),
         f"""
         WEEK 2:
         너는 요청 구조화 agent다. 사용자의 자연어 요청을 일정 앱이 읽을 수 있는 구조화된 형식으로 바꾼다.
-        오늘 날짜는 {current_date}이다. "내일", "다음 주 화요일" 같은 상대 날짜는 오늘 날짜를 기준으로 해석한다.
+        오늘 날짜는 {current_app_date_iso()}이다. "내일", "다음 주 화요일" 같은 상대 날짜는 오늘 날짜를 기준으로 해석한다.
         자연어 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members/priority/reason/original_text)로 구조화한다.
         확실하지 않은 값은 억지로 만들지 않는다. 모르는 값은 None 또는 빈 목록으로 두고,
         date는 YYYY-MM-DD, start_time/end_time은 HH:MM 형식이 확실할 때만 채운다.
