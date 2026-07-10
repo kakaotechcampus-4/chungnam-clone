@@ -9,15 +9,6 @@ from langchain.agents import create_agent
 from langchain.tools import tool
 
 from fixed.config import CONFIG
-from fixed.langchain_trace import (
-    extract_agent_events,
-    extract_final_text,
-    extract_langchain_trace,
-    message_content_to_text,
-    message_tool_call_names,
-    normalize_messages_value,
-    stream_chunk_messages,
-)
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso, next_weekday_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
@@ -28,6 +19,7 @@ _WEEK01_AGENT: Any | None = None
 
 # TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
 CHAT_MEMORY_PROMPT = "사용자가 일정 관리 요청을 하였을 때 사용할 수 있는 tool 함수만을 이용하여 적절히 사용자 요청을 처리하라."
+
 
 # 함수별 동작 설명
 # 여러 주차에서 만든 system prompt 조각을 하나의 문자열로 합칩니다. 뒤 주차 지시가 앞 주차 지시보다
@@ -106,17 +98,23 @@ def _json(payload: dict[str, Any]) -> str:
 # 일정 생성 시각을 timezone이 포함된 ISO 문자열로 만듭니다. 학생 코드에서는 created_at 기록용으로만 사용합니다.
 def _now_iso() -> str:
     return datetime.now().astimezone().isoformat(timespec="microseconds")
-# ISO 문자열이란 날짜와 시간을 정해진 국제 표준 형식으로 적은 문자열을 의미한다. 
+
+
+# ISO 문자열이란 날짜와 시간을 정해진 국제 표준 형식으로 적은 문자열을 의미한다.
 # 예를들어 2026-06-30T11:25:32.299995+09:00 이런 형식으로 시간을 표기하는 것을 말한다.
+
 
 # 함수별 동작 설명
 # Week 1 임시 일정에 붙일 짧은 고유 ID를 만듭니다. DB ID가 아니라 현재 Python 프로세스 안에서 쓰는 임시 ID입니다.
 def _new_personal_id() -> str:
     return f"personal_{uuid.uuid4().hex[:10]}"
-# UUID는 Universally Unique Identifier의 약자이다. 뜻은 전 세계적으로 거의 겹치지 않게 만들 수 있는 고유 식별자다. 
-# 보통 DB row, 파일, 세션, 임시 객체 등에 고유한 ID를 붙일 때 쓴다. 
+
+
+# UUID는 Universally Unique Identifier의 약자이다. 뜻은 전 세계적으로 거의 겹치지 않게 만들 수 있는 고유 식별자다.
+# 보통 DB row, 파일, 세션, 임시 객체 등에 고유한 ID를 붙일 때 쓴다.
 # uuid.uuid4()는 랜덤으로 UUID 객체를 하나 만든다. ex) 550e8400-e29b-41d4-a716-446655440000
-# UUID 객체에는 .hex라는 속성이 있다. 이건 UUID를 하이픈이 없는 32자리 16진수 문자열로 바꾼 버전이다. 
+# UUID 객체에는 .hex라는 속성이 있다. 이건 UUID를 하이픈이 없는 32자리 16진수 문자열로 바꾼 버전이다.
+
 
 # 함수별 동작 설명
 # 일정 dict가 어느 대화 범위에 속하는지 읽습니다. 예전 테스트처럼 session_id가 없는 row는 기본 scope로 취급합니다.
@@ -125,12 +123,13 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
-# DEFAULT_SESSION_SCOPE는 왜 필요할까? 
-# 대화 세션 row(== json 한 덩어리)에 session_id가 없는 경우를 처리하기 위해서이다. 
-# 언제 session_id가 안 붙는가? 
-# 일단 앱의 대화창을 통해 agent/tool이 실행될 때는 session_id가 붙도록 만들 예정인 것 같다. 
-# gpt 말로는 직접 테스트하거나 예전 방식으로 만든 schedule dict에는 session_id가 없을 수 있으니 필요하다고 한다. 
-# Q: _schedule_scope 내부에서 기본 scope를 처리하기보다, 호출하는 쪽에서 항상 session_id가 있는 schedule dict만 
+
+# DEFAULT_SESSION_SCOPE는 왜 필요할까?
+# 대화 세션 row(== json 한 덩어리)에 session_id가 없는 경우를 처리하기 위해서이다.
+# 언제 session_id가 안 붙는가?
+# 일단 앱의 대화창을 통해 agent/tool이 실행될 때는 session_id가 붙도록 만들 예정인 것 같다.
+# gpt 말로는 직접 테스트하거나 예전 방식으로 만든 schedule dict에는 session_id가 없을 수 있으니 필요하다고 한다.
+# Q: _schedule_scope 내부에서 기본 scope를 처리하기보다, 호출하는 쪽에서 항상 session_id가 있는 schedule dict만
 # 넘기도록 보장하는 편이 더 나은 구조일까요?
 
 
@@ -138,15 +137,22 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 # PERSONAL_SCHEDULES 전체 중 현재 conversation/session 범위에 속한 일정만 골라 반환합니다.
 def _current_session_schedules() -> list[dict[str, Any]]:
     session_id = current_session_scope()
-    return [schedule for schedule in PERSONAL_SCHEDULES if _schedule_scope(schedule) == session_id]
+    return [
+        schedule
+        for schedule in PERSONAL_SCHEDULES
+        if _schedule_scope(schedule) == session_id
+    ]
+
+
 # 만약, 이 앱이 실제로 사용자의 일정을 관리하기 위해 만든다고 생각하면 대화 세션 별로 일정 관리 정보를 나누어 저장하기 보단
 # 전체 대화 세션에 추가된 일정들을 어떤 대화 세션에서도 관리할 수 있어야 할 것 같다.
-# 현재 이 구현으로는 A 세션에서 추가한 일정을 B 세션에서 관리할 수 없다. 
+# 현재 이 구현으로는 A 세션에서 추가한 일정을 B 세션에서 관리할 수 없다.
 
 
 # 함수별 동작 설명
 # LLM이 일정 생성이 필요하다고 판단했을 때 호출하는 tool입니다. 입력 인자로 schedule dict를 만들고
 # PERSONAL_SCHEDULES에 append한 뒤, 생성된 schedule을 JSON 문자열로 반환합니다.
+
 
 #   1. personal_create_schedule
 #      - title/date/start_time/end_time/attendees 인자로 schedule dict를 만듭니다.
@@ -167,14 +173,14 @@ def personal_create_schedule(
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
     new_schedule = {
-        "id": _new_personal_id(), # 랜덤하게 고유한 UUID를 준다.
+        "id": _new_personal_id(),  # 랜덤하게 고유한 UUID를 준다.
         "title": title,
         "date": date,
         "start_time": start_time,
         "end_time": end_time,
         "attendees": attendees if attendees else [],
         "created_at": _now_iso(),
-        "session_id": current_session_scope()
+        "session_id": current_session_scope(),
     }
     PERSONAL_SCHEDULES.append(new_schedule)
     return _json(
@@ -186,9 +192,9 @@ def personal_create_schedule(
     )
 
 
-
 # 함수별 동작 설명
 # 현재 대화 범위의 임시 일정만 읽고 날짜 범위 필터를 적용합니다. 리스트를 수정하지 않고 조회 결과만 반환합니다.
+
 
 #   2. personal_list_schedules
 #      - PERSONAL_SCHEDULES를 직접 수정하지 않고 현재 대화 범위의 일정만 조회합니다.
@@ -196,19 +202,22 @@ def personal_create_schedule(
 #      - 날짜 비교는 YYYY-MM-DD 문자열 기준으로 충분합니다.
 #      - 반환 JSON에는 ok, tool_name, schedules를 넣습니다.
 @tool
-def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
+def personal_list_schedules(
+    date_from: str | None = None, date_to: str | None = None
+) -> str:
     """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
 
     # TODO: 현재 대화 범위의 PERSONAL_SCHEDULES를 날짜 조건으로 조회하세요.
     schedules = _current_session_schedules()
 
-    schedules = [ 
-                    s for s in schedules 
-                    if (date_from is None or s["date"] >= date_from) 
-                    # date_from이 없으면 시작일 필터는 통과, 있으면 s["date"]가 date_from 이상이어야 한다. 
-                    and (date_to is None or s["date"] <= date_to) 
-                    # date_to가 없으면 종료일 필터는 통과, 있으면 s["date"]가 date_to 이하여야 한다. 
-            ]
+    schedules = [
+        s
+        for s in schedules
+        if (date_from is None or s["date"] >= date_from)
+        # date_from이 없으면 시작일 필터는 통과, 있으면 s["date"]가 date_from 이상이어야 한다.
+        and (date_to is None or s["date"] <= date_to)
+        # date_to가 없으면 종료일 필터는 통과, 있으면 s["date"]가 date_to 이하여야 한다.
+    ]
 
     return _json(
         {
@@ -221,6 +230,7 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 
 # 함수별 동작 설명
 # 현재 대화 범위에서 schedule_id가 같은 일정만 제거합니다. 다른 대화 범위의 일정은 같은 ID처럼 보여도 지우지 않습니다.
+
 
 #   3. personal_delete_schedule
 #      - schedule_id가 일치하면서 현재 대화 범위에 속한 일정만 삭제합니다.
@@ -236,20 +246,22 @@ def personal_delete_schedule(schedule_id: str) -> str:
     before_count = len(PERSONAL_SCHEDULES)
 
     PERSONAL_SCHEDULES[:] = [
-        schedule for schedule in PERSONAL_SCHEDULES 
+        schedule
+        for schedule in PERSONAL_SCHEDULES
         if not (
-            schedule["id"] == schedule_id
-            and _schedule_scope(schedule) == session_id
+            schedule["id"] == schedule_id and _schedule_scope(schedule) == session_id
         )
     ]
     deleted = len(PERSONAL_SCHEDULES) != before_count
-    return _json({
-        "ok": True,
-        "tool_name": "personal_delete_schedule",
-        "schedule_id": schedule_id,
-        "deleted": deleted,
-    })
-    # 여기서 list[:] =  new list 형태가 중요한 부분이다. 
+    return _json(
+        {
+            "ok": True,
+            "tool_name": "personal_delete_schedule",
+            "schedule_id": schedule_id,
+            "deleted": deleted,
+        }
+    )
+    # 여기서 list[:] =  new list 형태가 중요한 부분이다.
     # a = [1, 2, 3]
     # b = a
     # a = [4, 5]
@@ -280,7 +292,7 @@ def week01_prompt_parts() -> list[str]:
 
     return [
         CHAT_MEMORY_PROMPT,
-        f"현재 날짜는 앱 시작 시 OS에서 읽은 {current_app_date_iso()}이다."
+        f"현재 날짜는 앱 시작 시 OS에서 읽은 {current_app_date_iso()}이다.",
     ]
 
 
@@ -311,10 +323,14 @@ def build_week_agent() -> object:
 
 # 함수별 동작 설명
 # tool이 아닌 내부 helper입니다. 다른 주차 코드가 Week 1 임시 일정을 dict list로 바로 읽어야 할 때 사용합니다.
-def list_personal_schedule_dicts(date_from: str | None = None, date_to: str | None = None) -> list[dict[str, Any]]:
+def list_personal_schedule_dicts(
+    date_from: str | None = None, date_to: str | None = None
+) -> list[dict[str, Any]]:
     """개인 일정 dict 목록이 필요한 내부 코드에서 사용하는 비-도구 헬퍼입니다."""
 
-    schedules = json.loads(personal_list_schedules.invoke({"date_from": date_from, "date_to": date_to}))
+    schedules = json.loads(
+        personal_list_schedules.invoke({"date_from": date_from, "date_to": date_to})
+    )
     return schedules["schedules"]
 
 

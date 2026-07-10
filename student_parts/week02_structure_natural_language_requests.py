@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from typing import Any, Literal
 
 from langchain.agents import create_agent
@@ -10,9 +9,11 @@ from pydantic import BaseModel, Field
 from fixed.config import CONFIG
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
-from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
-
-
+from student_parts.week01_wake_up_nana import (
+    join_system_prompt,
+    week01_prompt_parts,
+    week01_tools,
+)
 
 
 # [2주차 1회차 수강생 구현 가이드]
@@ -94,45 +95,52 @@ from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_
 #     build_week_agent()는 실행기가 찾는 표준 entry point입니다.
 
 
-RequestKind = Literal["personal_schedule", "group_schedule", "todo", "reminder", "unknown"]
+RequestKind = Literal[
+    "personal_schedule", "group_schedule", "todo", "reminder", "unknown"
+]
 _WEEK02_AGENT: Any | None = None
+
 
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
+
     # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    kind : RequestKind = Field(description="사용자 요청의 종류로, personal_schedule, group_schedule, todo, reminder, unknown 중 하나이다.")
+    kind: RequestKind = Field(
+        description="사용자 요청의 종류로, personal_schedule, group_schedule, todo, reminder, unknown 중 하나이다."
+    )
     # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    title : str | None = Field(
-        default=None,
-        description="일정의 제목이다. 알 수 없는 경우 None이 기본 값이다."
+    title: str | None = Field(
+        default=None, description="일정의 제목이다. 알 수 없는 경우 None이 기본 값이다."
     )
-    date : str | None = Field(
+    date: str | None = Field(
         default=None,
-        description="일정의 날짜이다. 확실히 알 때만 YYYY-MM-DD 형식으로 작성하고 알 수 없다면 None을 기본 값으로 한다."
+        description="일정의 날짜이다. 확실히 알 때만 YYYY-MM-DD 형식으로 작성하고 알 수 없다면 None을 기본 값으로 한다.",
     )
-    start_time : str | None = Field(
+    start_time: str | None = Field(
         default=None,
-        description="일정의 시작 시간이다. 확실할 때만 HH:MM 24시간 형식으로 작성하고 알 수 없거나 요청이 일정 등록이 아닌 경우 None을 기본 값으로 한다. 절대 기본 값을 임의로 추론하여 넣지 않는다."
+        description="일정의 시작 시간이다. 확실할 때만 HH:MM 24시간 형식으로 작성하고 알 수 없거나 요청이 일정 등록이 아닌 경우 None을 기본 값으로 한다. 절대 기본 값을 임의로 추론하여 넣지 않는다.",
     )
-    end_time : str | None = Field(
+    end_time: str | None = Field(
         default=None,
-        description="일정의 끝 시간이다. 확실할 때만 HH:MM 24시간 형식으로 작성하고 알 수 없거나 요청이 일정 등록이 아닌 경우 None을 기본 값으로 한다. 절대 기본 값을 임의로 추론하여 넣지 않는다."
+        description="일정의 끝 시간이다. 확실할 때만 HH:MM 24시간 형식으로 작성하고 알 수 없거나 요청이 일정 등록이 아닌 경우 None을 기본 값으로 한다. 절대 기본 값을 임의로 추론하여 넣지 않는다.",
     )
     # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    members : list[str] = Field(default_factory=list, description="참석자나 일정 멤버 목록이다. 사용자 질의로부터 알 수 없다면 빈 목록으로 둔다.")
-    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    priority : str | None = Field(
-        default=None,
-        description="일정의 우선 순위이다. 알 수 없다면 None을 기본 값으로 한다."
+    members: list[str] = Field(
+        default_factory=list,
+        description="참석자나 일정 멤버 목록이다. 사용자 질의로부터 알 수 없다면 빈 목록으로 둔다.",
     )
-    reason : str | None = Field(
+    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
+    priority: str | None = Field(
         default=None,
-        description="이러한 구조화 결과를 낸 이유를 적는다. 알 수 없다면 None을 기본 값으로 한다."
+        description="일정의 우선 순위이다. 알 수 없다면 None을 기본 값으로 한다.",
+    )
+    reason: str | None = Field(
+        default=None,
+        description="이러한 구조화 결과를 낸 이유를 적는다. 알 수 없다면 None을 기본 값으로 한다.",
     )
     # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
-    original_text : str=Field(
-        default="",
-        description="구조화의 근거가 된 사용자의 원문을 넣는다."
+    original_text: str = Field(
+        default="", description="구조화의 근거가 된 사용자의 원문을 넣는다."
     )
     # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
 
@@ -141,16 +149,17 @@ class StructuredRequestBatch(BaseModel):
     """여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""
 
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
-    requests : list[StructuredRequest] = Field(
+    requests: list[StructuredRequest] = Field(
         default_factory=list,
-        description="사용자 요청을 하나 이상의 StrucuturedRequest로 나눈 목록이다."
-    ) 
+        description="사용자 요청을 하나 이상의 StructuredRequest로 나눈 목록이다.",
+    )
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
-    base_date : str = Field(
+    base_date: str = Field(
         default_factory=current_app_date_iso,
-        description="사용자의 상대 날짜 표현을 해석할 때 기준이 되는 현재 앱 날짜이다."
+        description="사용자의 상대 날짜 표현을 해석할 때 기준이 되는 현재 앱 날짜이다.",
     )
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
+
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
@@ -201,7 +210,7 @@ def week02_system_prompt() -> str:
             Week 2의 최종 응답은 사용자에게 보여줄 확인 문장이 아니다.
             최종 응답에는 "등록했습니다", "완료했습니다", "현재 일정은..." 같은 자연어 문장을 절대 포함하지 않는다.
             tool을 호출한 뒤에도 반드시 StructuredRequestBatch 하나만 반환한다.
-            """
+            """,
         ]
     )
 
@@ -231,7 +240,7 @@ def week02_prompt_parts() -> list[str]:
 
         Week 2에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율은 하지 않는다.
         이 단계의 목표는 저장이 아니라 구조화다.
-        """
+        """,
     ]
 
 
@@ -247,7 +256,7 @@ def build_week02_agent() -> object:
     # TODO: 생성 또는 재사용한 _WEEK02_AGENT를 반환하세요.
     global _WEEK02_AGENT
 
-    if _WEEK02_AGENT is None :
+    if _WEEK02_AGENT is None:
         _WEEK02_AGENT = create_agent(
             model=chat_model(),
             tools=week02_tools(),
@@ -255,7 +264,6 @@ def build_week02_agent() -> object:
             system_prompt=week02_system_prompt(),
         )
     return _WEEK02_AGENT
-    
 
 
 def build_week_agent() -> object:
