@@ -100,7 +100,7 @@ _WEEK02_AGENT: Any | None = None
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
-    kind: RequestKind = Field(description='personal_schedule | group_schedule | todo | reminder | unknown')
+    kind: RequestKind = Field(description="personal_schedule | group_schedule | todo | reminder | unknown")
     title: str | None = Field(default=None, description="사용자가 요청한 일정 또는 작업의 제목")
     date: str | None = Field(default=None, description="일정 날짜 (YYYY-MM-DD 형식)")
     start_time: str | None = Field(default=None, description="시작 시간 (HH:MM 형식)")
@@ -192,7 +192,7 @@ def build_week02_agent() -> object:
             model=chat_model(),
             tools=week02_tools(),
             response_format=StructuredRequestBatch,
-            system_prompt=week02_system_prompt()
+            system_prompt=week02_system_prompt(),
         )
 
     return _WEEK02_AGENT
