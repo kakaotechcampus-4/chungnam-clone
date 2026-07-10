@@ -6,6 +6,7 @@ from typing import Any, Literal
 from langchain.agents import create_agent
 from langchain.tools import tool
 from pydantic import BaseModel, Field
+from textwrap import dedent
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -99,21 +100,23 @@ _WEEK02_AGENT: Any | None = None
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
-    kind: RequestKind =  Field(description='요청 종류: "personal_schedule"(개인 일정), "group_schedule"(그룹 일정), "todo"(할 일), "reminder"(알림), "unknown"(판단 불가) 중 하나')
-    title: str | None =  Field(default=None, description="사용자가 요청한 일정 또는 작업의 제목")
-    date: str | None  =  Field(default=None, description="일정 날짜 (YYYY-MM-DD 형식)")
-    start_time: str | None  =  Field(default=None, description="시작 시간 (HH:MM 형식)")
-    end_time: str | None  =  Field(default=None, description="종료 시간 (HH:MM 형식)")
+    kind: RequestKind = Field(description='personal_schedule | group_schedule | todo | reminder | unknown')
+    title: str | None = Field(default=None, description="사용자가 요청한 일정 또는 작업의 제목")
+    date: str | None = Field(default=None, description="일정 날짜 (YYYY-MM-DD 형식)")
+    start_time: str | None = Field(default=None, description="시작 시간 (HH:MM 형식)")
+    end_time: str | None = Field(default=None, description="종료 시간 (HH:MM 형식)")
     members: list[str] = Field(default_factory=list, description="관련 참여자 또는 참석자 목록")
-    priority: str | None  =  Field(default=None, description="우선순위 또는 중요도")
-    reason: str | None  =  Field(default=None, description="해당 값들을 추론한 근거")
-    original_text: str  =  Field(default="", description="사용자가 입력한 원본 자연어 문장") 
+    priority: str | None = Field(default=None, description="우선순위 또는 중요도")
+    reason: str | None = Field(default=None, description="해당 값들을 추론한 근거")
+    original_text: str = Field(default="", description="사용자가 입력한 원본 자연어 문장") 
+
 
 class StructuredRequestBatch(BaseModel):
     """여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""
 
     requests: list[StructuredRequest] = Field(default_factory=list, description="구조화된 요청 목록")
     base_date: str = Field(default_factory=current_app_date_iso, description="내일/다음 주 같은 상대 날짜를 해석할 기준 날짜")
+
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
@@ -137,7 +140,6 @@ def extract_schedule_request(query: str) -> str:
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
 
-    # TODO: Week 1에서 구현한 tool 목록을 그대로 반환하세요.
     return week01_tools()
 
 
@@ -146,12 +148,14 @@ def week02_system_prompt() -> str:
 
     return join_system_prompt(week02_prompt_parts())
 
+
 def week02_prompt_parts() -> list[str]:
     """2주차 structured output agent가 따르는 system prompt 조각입니다."""
 
     return [
         *week01_prompt_parts(),
-        f"""
+        dedent(
+            f"""
             너는 사용자의 한국어 자연어 요청을 StructuredRequestBatch로 구조화하는 Week 2 agent이다.
             현재 날짜는 {current_app_date_iso()}이며, "오늘", "내일", "다음 주" 같은 상대 날짜는 이 날짜를 기준으로 해석한다.
 
@@ -173,6 +177,7 @@ def week02_prompt_parts() -> list[str]:
             personal_create_schedule tool 결과 JSON을 받은 경우에는 tool을 다시 호출하지 말고 created_schedule payload를 읽어 StructuredRequest 필드를 채운다.
             Week 2에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 수행하지 않는다.
         """
+        ).strip(),
     ]
 
 
