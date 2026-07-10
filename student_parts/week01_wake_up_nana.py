@@ -18,7 +18,7 @@ PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 _WEEK01_AGENT: Any | None = None
 
 # TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
-CHAT_MEMORY_PROMPT = "사용자가 일정 관리 요청을 하였을 때 사용할 수 있는 tool 함수만을 이용하여 적절히 사용자 요청을 처리하라."
+CHAT_MEMORY_PROMPT = "사용자가 일정 관리 요청을 하였을 때 사용할 수 있는 tool 함수를 이용하여 적절히 사용자 요청을 처리하라. 각 tool의 docstring에 적힌 지시사항을 지켜라. "
 
 
 # 함수별 동작 설명
@@ -165,11 +165,16 @@ def _current_session_schedules() -> list[dict[str, Any]]:
 def personal_create_schedule(
     title: str,
     date: str,
-    start_time: str,
+    start_time: str = "미정",
     end_time: str = "미정",
     attendees: list[str] | None = None,
 ) -> str:
-    """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
+    """
+    Nana의 개인 일정을 현재 대화의 임시 메모리에 생성하는 함수다.
+    사용자가 일정을 추가해 달라 요청할 때 호출한다.
+    start_time과 end_time을 사용자의 요청으로부터 알 수 없을 경우에는 start_time과 end_time에 인자를 넣지 않고
+    기본 값인 "미정"을 쓴다.
+    """
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
     new_schedule = {
