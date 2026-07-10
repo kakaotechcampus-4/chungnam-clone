@@ -48,7 +48,21 @@ planner/builder/verifier subagent를 갖춘 뒤, 워크플로우를 더 견고�
 | Skill | 유형 | frontmatter 요지 | 역할 |
 | --- | --- | --- | --- |
 | [kanana-conventions](../.claude/skills/kanana-conventions/SKILL.md) | 참조 지식 | `user-invocable: false` (·`disable-model-invocation` 미설정 → preload 허용) | 과제 공통 규칙(가이드/TODO 우선, fixed/ 읽기전용, 임의값 금지, 필드 기본값 관례, helper 재사용). planner·builder·verifier에 preload |
-| [verify-week2](../.claude/skills/verify-week2/SKILL.md) | 작업 | `allowed-tools: Bash(uv *)` | Week2 정적 검증 3종(py_compile·import·Pydantic 인스턴스화) 실행. `/verify-week2`로 호출 |
+| [verify-week2](../.claude/skills/verify-week2/SKILL.md) | 작업 | `allowed-tools: Bash(uv *)` (`disable-model-invocation` 미설정 → preload 허용) | Week2 검증 정본. 메인과제(스키마·`week02_tools`)와 추가 과제(bridge 3함수) 검증 명령을 모두 담는다. `/verify-week2`로 호출하거나 **verifier에 preload** |
+
+> **검증 명령의 단일 출처** — 검증 절차는 `verify-week2` skill에만 둔다. verifier는 `skills:` frontmatter로
+> 이 skill을 preload받아(전체 내용이 시작 시 주입됨) 그대로 실행하고, `verifier.md`는 역할·판정 기준·출력 계약만 규정한다.
+> 이전에는 같은 명령이 양쪽에 중복돼 드리프트 위험이 있었다(skill만 `week02_tools()` 길이 3을 알고,
+> verifier.md만 `response_format` 확인을 알던 상태).
+>
+> 근거: [subagents 문서](https://code.claude.com/docs/en/sub-agents#preload-skills-into-subagents) — `skills:`는
+> skill **전체 내용**을 subagent 컨텍스트에 주입하며 `Skill` 도구가 `tools:`에 없어도 동작한다.
+> `disable-model-invocation: true`인 skill만 preload가 막히고, `user-invocable: false`는 무관하다.
+> [skills 문서](https://code.claude.com/docs/en/skills#frontmatter-reference) — `allowed-tools`는 **제약이 아니라
+> 권한 부여**(해당 도구를 묻지 않고 사용). 따라서 preload해도 verifier의 도구가 좁아지지 않는다.
+>
+> skill 명령이 `uv run python -X utf8`로 시작하는 것도 이 때문이다. `PYTHONIOENCODING=utf-8 uv run ...`은
+> `Bash(uv *)` 패턴에 걸리지 않아 불필요한 권한 프롬프트를 유발한다.
 
 ### Hooks (근거: hooks 공식 문서 "보호된 파일 편집 차단" / "편집 후 자동 실행")
 
@@ -89,6 +103,41 @@ planner/builder/verifier subagent를 갖춘 뒤, 워크플로우를 더 견고�
 | H2 차단 | 구문 오류 `.py` | exit **2**, `py_compile` 오류 반환 ✅ |
 | skill 로드 | 세션 등록 | `kanana-conventions`·`verify-week2` 인식 ✅ |
 | agent frontmatter | `name/description/tools/model/color/skills` | 3개 모두 유효(`ALL_OK`) ✅ |
+
+---
+
+## 4-1. verifier 출력 계약 조사 (구조 필터)
+
+### 증상
+verifier에게 프롬프트로 "보고 맨 앞에 두 줄을 답하라"(preload 여부 + 실행할 단계 번호)고 요구했으나
+**네 번 연속 누락**했다. 검증 판정 표는 정상이었고 범위 지시("6단계 건너뛰어라")는 매번 이행됐다.
+
+### 기각된 가설 (같은 진단을 반복하지 않기 위해 남긴다)
+- ~~스킬의 `## 보고` 섹션이 `verifier.md`의 출력 계약과 충돌한다~~ → 스킬 수정 후 재현
+- ~~`# 반환 형식 (Output — 이 구조로만)`의 배타 문구가 원인~~ → "최소 요건"으로 완화해도 재현
+- ~~분량 밀어내기(H1)~~ → 명령 1개짜리 최소 과제에서도 재현
+- ~~메타 질문 회피(H3)~~ → 검증 과제 없이 물으면 완전히 답함
+- ~~최종 메시지 누락(H4)~~ → 구조 안에 넣으면 같은 내용이 그대로 반환됨
+
+### 통제 실험과 결론
+| 실험 | 검증 과제 | 두 질문의 위치 | 결과 |
+| --- | --- | --- | --- |
+| E0 | 1~5단계 | 보고 맨 앞(자유 형식) | 누락 |
+| E1 | 없음 | 유일한 요구 | **답함** |
+| E2 | 1단계뿐 | 보고 맨 앞(자유 형식) | 누락 |
+| E4 | 1단계뿐 | **판정 표의 행** | **답함** |
+
+E2와 E4는 과제 크기가 같다(`py_compile` 하나). 유일한 차이는 요구가 `반환 형식`이 열거한 섹션
+**안에 들어갔는지**이고, 결과가 갈렸다. → **원인은 구조 필터(H2)**다. verifier는 `반환 형식`이 열거한
+섹션만 출력하고, 거기 속하지 않는 요구는 프롬프트에서 강조해도 버린다.
+
+### 조치
+`verifier.md`의 `# 반환 형식` 첫 항목으로 **`호출자가 요구한 항목`** 섹션을 추가했다.
+동일한 E0 프롬프트로 재실행하니 verifier가 해당 섹션을 만들어 두 질문에 모두 답했다.
+
+> **교훈** — subagent의 출력 계약이 열거형이면, 프롬프트로 항목을 추가해도 계약이 이긴다.
+> 강조("이것도 검증 대상이다")로는 뚫리지 않는다. **계약 안에 자리를 만들어야 한다.**
+> 반대로 *행동* 지시(범위 축소, 도구 사용 금지)는 계약과 무관하므로 프롬프트만으로 이행된다.
 
 ---
 
