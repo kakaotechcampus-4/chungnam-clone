@@ -156,16 +156,27 @@ class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
     # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    kind: RequestKind = Field(..., description="요청의 종류를 의미. personal_schedule, group_schedule, todo, reminder 중에서 판단한다. 확실하지 않다면 unknown으로 한다.")
+    kind: RequestKind = Field(
+        ..., 
+        description="""요청의 종류를 의미. 아래 기준으로 판단한다.
+        - personal_schedule: 사용자 혼자 진행하는 일정(약속, 이벤트). 예: "내일 3시에 치과 예약".
+        - group_schedule: 사용자 외에 다른 사람 이름이 참석자로 하나라도 언급된 일정.
+        예: "철수와 영희의 회의", "내일 철수랑 점심". members가 빈 리스트이면 안 된다.
+        - todo: 행동 자체를 등록하는 뉘앙스("~해야 해", "~하기", "~까지 ~하기").
+        마감일이 언급되면 date 필드에 담고, 없으면 비워둔다.
+        - reminder: "알려줘 / 리마인드해줘 / 까먹지 않게 해줘"처럼 알림 동작을 요청하는 표현이 있는 경우.
+        알림이 울릴 시점인 date와 start_time이 중요하다.
+        이 중에서만 판단하고, 확실하지 않다면 unknown으로 한다."""
+        )
 
     # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
     title: str | None = Field(default=None, description="일정의 제목을 의미한다. 확실하지 않다면 None")
-    date: str | None = Field(default=None, description="YYYY-MM-DD 형식. 확실하지 않다면 None")
-    start_time: str | None = Field(default=None, description="HH:MM 형식. 확실하지 않다면 None")
-    end_time: str | None = Field(default=None, description="HH:MM 형식. 확실하지 않다면 None")
+    date: str | None = Field(default=None, description="YYYY-MM-DD 형식.kind가 todo일 때 마감일, reminder일 때 알림일로도 사용한다. 확실하지 않다면 None")
+    start_time: str | None = Field(default=None, description="HH:MM 형식. kind가 reminder일 때 알림이 울릴 시점으로도 사용한다. 확실하지 않다면 None.")
+    end_time: str | None = Field(default=None, description="HH:MM 형식. kind가 todo일 때 마감 시간으로도 사용한다. 확실하지 않다면  None")
 
     # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    members: list[str] = Field(default_factory=list, description="일정의 참석자. 특별한 언급이 없었다면 빈 리스트")
+    members: list[str] = Field(default_factory=list, description="일정의 참석자. 특별한 언급이 없었다면 빈 리스트 kind가 group_schedule이라면 비어있으면 안 된다.")
 
     # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
     priority: str | None = Field(default=None, description="일정의 우선순위를 의미한다. low, medium, high로 정한다. 확실하지 않으면 None으로 한다. 우선순위가 정해진다면 판단 근거 또한 있어야한다.")
@@ -225,7 +236,14 @@ def week02_system_prompt() -> str:
     # TODO: join_system_prompt(...)로 week02_prompt_parts()와 Week 2 structured_response 최종 답변 규칙을 합치세요.
     # TODO: StructuredRequestBatch에는 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담도록 지시하세요.
     # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
-    return join_system_prompt(week02_prompt_parts())
+    final_answer_rule = """
+    [Week 2 최종 답변 규칙]
+    - 최종 답변은 반드시 StructuredRequestBatch 형식으로 반환한다.
+    - 요청이 하나뿐이어도 requests 리스트 안에 StructuredRequest를 하나 담아 반환한다.
+    - personal_create_schedule 같은 Week 1 tool 결과 JSON을 받았다면,
+      그 안의 created_schedule 필드를 읽어 StructuredRequest 필드를 채운다.
+    """
+    return join_system_prompt([*week02_prompt_parts(), final_answer_rule])
 
 
 def week02_prompt_parts() -> list[str]:
@@ -239,13 +257,12 @@ def week02_prompt_parts() -> list[str]:
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
         f"""
         [Week 2 요청 구조화 규칙]
-        - 너는 사용자의 자연어 요청이나 Week 1 tool 결과를 StructuredRequestBatch로 구조화하는 담당이다.
+        - 너는 사용자의 자연어 요청이나 Week 1 tool 결과를 구조화된 요청(StructuredRequest)으로 바꾸는 담당이다.
         - 오늘 날짜는 {current_app_date_iso()}이다. '내일', '다음 주' 같은 상대 날짜는 이 날짜를 기준으로 계산한다.
         - 자연어 요청을 kind/title/date/start_time/end_time/members/priority/reason/original_text 필드로 구조화한다.
         확실하지 않은 값은 억지로 만들지 말고 None(또는 빈 리스트)으로 둔다.
         - 이미 Week 1 tool(personal_create_schedule 등)의 결과 JSON을 받은 경우에는, tool을 다시 호출하지 말고
         그 payload(created_schedule)를 읽어서 필드를 채운다.
-        - 요청이 하나뿐이어도 반드시 requests 리스트 안에 StructuredRequest 하나를 담는다.
         - Week 2에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다.
         """
     ]
