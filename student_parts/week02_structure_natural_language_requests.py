@@ -102,13 +102,13 @@ class StructuredRequest(BaseModel):
     kind: RequestKind = Field(
         description="요청 종류 (personal_schedule, group_schedule, todo, reminder, unknown 중 하나)"
     )
-    title: str | None = Field(default=None, description="일정, 할 일 또는 알림의 제목. 확실하지 않으면 None으로 둡니다.")
+    title: str | None = Field(default=None, description="일정, 할 일 또는 알림의 제목")
     date: str | None = Field(default=None, description="yyyy-mm-dd 형식의 날짜. 확실하지 않으면 None으로 둡니다.")
-    start_time: str | None = Field(default=None, description="hh:mm 형식의 시작 시간. 확실하지 않으면 None으로 둡니다.")
-    end_time: str | None = Field(default=None, description="hh:mm 형식의 종료 시간. 확실하지 않으면 None으로 둡니다.")
-    members: list[str] = Field(default_factory=list, description="참석자 또는 관련 멤버 이름 목록. 확실하지 않으면 빈 리스트로 둡니다.")
+    start_time: str | None = Field(default=None, description="hh:mm 형식의 시작 시간")
+    end_time: str | None = Field(default=None, description="hh:mm 형식의 종료 시간")
+    members: list[str] = Field(default_factory=list, description="참석자 또는 관련 멤버 이름 목록")
     priority: str | None = Field(default=None, description="할 일 우선순위 (low, medium, high 등. 확실하지 않으면 None으로 둡니다.")
-    reason: str | None = Field(default=None, description="분류 또는 중요도 판단 근거. 확실하지 않으면 None으로 둡니다.")
+    reason: str | None = Field(default=None, description="분류 또는 중요도 판단 근거")
     original_text: str = Field(default="", description="사용자 입력 자연어 요청 원문 보존")
 
 
