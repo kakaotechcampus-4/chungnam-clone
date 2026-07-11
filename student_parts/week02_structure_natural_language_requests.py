@@ -101,17 +101,18 @@ class StructuredRequest(BaseModel):
 
     kind: RequestKind = Field(description="요청 종류: 'personal_schedule', 'group_schedule', 'todo', 'reminder', 'unknown' 중 하나")
     
-    title: str | None = Field(default=None, description="일정 제목")
-    date: str | None = Field(default=None, description="YYYY-MM-DD")
-    start_time: str | None = Field(default=None, description="HH:MM")
-    end_time: str | None = Field(default=None, description="HH:MM")
-
-    members: list[str] = Field(default_factory=list, description="참석자 또는 관련 멤버 목록")
-
-    priority: str | None = Field(default=None, description="할 일 우선순위")
-    reason: str | None = Field(default=None, description="판단 근거")
+    title: str | None = Field(default=None, description="일정/할 일 제목. 요청 내용에서 파악되면 채우고, 없거나 불확실하면 None")
     
-    original_text: str = Field(default="", description="원문 보존용 필드")
+    date: str | None = Field(default=None, description="일정 날짜. 'YYYY-MM-DD' 형식. 사용자가 날짜를 직접 언급한 경우에만 채우고, 없거나 불확실하면 None")
+    start_time: str | None = Field(default=None, description="시작 시각. 'HH:MM' 형식. 사용자가 시작 시간을 직접 말한 경우에만 채우고, 없거나 불확실하면 None (임의로 지어내지 말 것)")
+    end_time: str | None = Field(default=None, description="종료 시각. 'HH:MM' 형식. 사용자가 종료 시간을 직접 말한 경우에만 채우고, 없거나 불확실하면 None (회의 길이 등을 추측해서 채우지 말 것)")
+    
+    members: list[str] = Field(default_factory=list, description="참석자 또는 관련 멤버 목록. 사용자가 언급한 사람만 넣고, 없거나 불확실하면 빈 리스트")
+
+    priority: str | None = Field(default=None, description="할 일 우선순위. 사용자가 우선순위를 언급한 경우에만 채우고, 없거나 불확실하면 None")
+    reason: str | None = Field(default=None, description="판단 근거, 판단 근거가 있으면 채우고, 없거나 불확실하면 None")
+    
+    original_text: str = Field(default="", description="사용자가 입력한 원문 문장을 그대로 보존. 요약하거나 수정하지 말고 입력받은 그대로 넣는다")
     
 
 
@@ -166,7 +167,11 @@ def week02_prompt_parts() -> list[str]:
         f"오늘은 {current_app_date_iso()}이다",
         "자연어를 kind/title/date/start_time/end_time/members같은 필드로 구조화해라",
         "이미 tool 결과 JSON이 있으면 다시 tool 호출하지 말고 그걸 읽어서 structured_response 만들어라",
-        "SQLite 저장, RAG,외부 멤버 일정 조율은 아직 안 한다"
+        "SQLite 저장, RAG,외부 멤버 일정 조율은 아직 안 한다",
+        "시간이 명시되지 않으면 start_time과 end_time을 반드시 None으로 둔다. 임의의 시간을 절대 지어내지 마라.",
+        "날짜가 명시되지 않으면 date도 None으로 둔다.",
+        "시간이나 날짜가 명시되지 않으면 빈 문자열('')이나 '미정' 같은 값을 넣지 말고 반드시 None으로 둔다.",
+        "확실하지 않은 값은 억지로 만들지 말고 None 또는 빈 리스트로 둬라. 날짜/시간은 사용자가 명확히 말했을 때만 채운다"
     ]
 
 
