@@ -1,0 +1,334 @@
+======================================================================
+CASE : edge-01-relative-minutes
+INPUT : 20분 뒤에 깨워줘
+======================================================================
+
+base_date : 2026-07-11
+
+kind : reminder
+title : 알람
+date : 2026-07-11
+start_time : 14:09
+end_time : None
+members : []
+priority : high
+reason : 사용자가 20분 뒤에 깨워달라고 요청함
+original_text : 20분 뒤에 깨워줘
+
+======================================================================
+CASE : edge-02-vague-reminder-time
+INPUT : 오늘 저녁에 약 먹으라고 알려줘
+======================================================================
+
+base_date : 2026-07-11
+
+kind : reminder
+title : 약 복용 알림
+date : 2026-07-11
+start_time : 18:00
+end_time : 18:05
+members : []
+priority : high
+reason : None
+original_text : 오늘 저녁에 약 먹으라고 알려줘
+
+======================================================================
+CASE : edge-03-today-deadline-boundary
+INPUT : 금요일까지 보고서 제출해야 해
+======================================================================
+
+base_date : 2026-07-11
+
+kind : personal_schedule
+title : 보고서 제출
+date : 2026-07-17
+start_time : None
+end_time : None
+members : []
+priority : high
+reason : 금요일까지 제출해야 하는 중요한 일정임
+original_text : 금요일까지 보고서 제출해야 해
+
+======================================================================
+CASE : edge-04-vague-relative-date
+INPUT : 다음 주 초에 병원 예약해야겠다
+======================================================================
+
+base_date : 2026-07-11
+
+kind : personal_schedule
+title : 병원 예약
+date : 2026-07-13
+start_time : None
+end_time : None
+members : []
+priority : None
+reason : 사용자가 다음 주 초에 병원 예약을 원함
+original_text : 다음 주 초에 병원 예약해야겠다
+
+======================================================================
+CASE : edge-05-todo-vs-schedule
+INPUT : 내일 오후에 운동하기
+======================================================================
+
+base_date : 2026-07-11
+
+kind : personal_schedule
+title : 운동
+date : 2026-07-12
+start_time : 13:00
+end_time : None
+members : []
+priority : high
+reason : None
+original_text : 내일 오후에 운동하기
+
+======================================================================
+CASE : edge-06-group-no-date
+INPUT : 철수랑 점심 먹기
+======================================================================
+
+base_date : 2026-07-11
+
+kind : group_schedule
+title : 철수랑 점심 먹기
+date : 2026-07-11
+start_time : 12:00
+end_time : 13:00
+members : 철수
+priority : high
+reason : 사용자가 철수와 점심 약속을 잡음
+original_text : 철수랑 점심 먹기
+
+======================================================================
+CASE : edge-07-multiple-schedules
+INPUT : 다음 주 화요일 오후 3시에 철수랑 회의하고 5시에 치과 가기
+======================================================================
+
+base_date : 2026-07-11
+
+[REQUEST 1]
+
+kind : group_schedule
+title : 철수와 회의
+date : 2026-07-14
+start_time : 15:00
+end_time : None
+members : 철수
+priority : None
+reason : 사용자가 다음 주 화요일 오후 3시에 철수와 회의를 요청함
+original_text : 다음 주 화요일 오후 3시에 철수랑 회의하고 5시에 치과 가기
+
+[REQUEST 2]
+
+kind : personal_schedule
+title : 치과 가기
+date : 2026-07-14
+start_time : 17:00
+end_time : None
+members : []
+priority : None
+reason : 사용자가 다음 주 화요일 오후 5시에 치과 가기를 요청함
+original_text : 다음 주 화요일 오후 3시에 철수랑 회의하고 5시에 치과 가기
+
+======================================================================
+CASE : edge-08-start-end-time
+INPUT : 내일 오전 10시부터 11시까지 민수랑 팀 회의
+======================================================================
+
+base_date : 2026-07-11
+
+kind : group_schedule
+title : 팀 회의
+date : 2026-07-12
+start_time : 10:00
+end_time : 11:00
+members : 민수
+priority : high
+reason : 팀 회의는 중요한 일정으로 우선순위 높음
+original_text : 내일 오전 10시부터 11시까지 민수랑 팀 회의
+
+======================================================================
+CASE : edge-09-weekend-vague-date
+INPUT : 이번 주말에 부모님께 전화해야 해
+======================================================================
+
+base_date : 2026-07-11
+
+kind : todo
+title : 부모님께 전화하기
+date : 2026-07-11
+start_time : None
+end_time : None
+members : []
+priority : high
+reason : None
+original_text : 이번 주말에 부모님께 전화해야 해
+
+======================================================================
+CASE : edge-10-reminder-without-anchor
+INPUT : 회의 10분 전에 알려줘
+======================================================================
+
+base_date : 2026-07-11
+
+kind : reminder
+title : 회의 10분 전 알림
+date : 2026-07-11
+start_time : 13:39
+end_time : 13:49
+members : []
+priority : high
+reason : 사용자가 회의 10분 전에 알려달라고 요청함
+original_text : 회의 10분 전에 알려줘
+
+======================================================================
+CASE : edge-11-too-vague
+INPUT : 언젠가 제주도 가고 싶다
+======================================================================
+
+base_date : 2026-07-11
+
+kind : todo
+title : 제주도 여행 계획 세우기
+date : None
+start_time : None
+end_time : None
+members : []
+priority : None
+reason : None
+original_text : 언젠가 제주도 가고 싶다
+
+======================================================================
+CASE : edge-13-mixed-multiple-request
+INPUT : 내일까지 과제 제출하고 모레 오후 2시에 철수랑 발표 준비 회의 잡아줘
+======================================================================
+
+base_date : 2026-07-11
+
+[REQUEST 1]
+
+kind : personal_schedule
+title : 과제 제출
+date : 2026-07-12
+start_time : None
+end_time : None
+members : []
+priority : high
+reason : 마감일이 내일까지여서 우선순위가 높음
+original_text : 내일까지 과제 제출
+
+[REQUEST 2]
+
+kind : group_schedule
+title : 발표 준비 회의
+date : 2026-07-13
+start_time : 14:00
+end_time : None
+members : 철수
+priority : mid
+reason : 모레 오후 2시에 철수와의 회의 요청
+original_text : 모레 오후 2시에 철수랑 발표 준비 회의 잡아줘
+
+======================================================================
+CASE : edge-14-month-range
+INPUT : 이번 달 안에 책 한 권 읽기
+======================================================================
+
+base_date : 2026-07-11
+
+kind : todo
+title : 책 한 권 읽기
+date : 2026-07-31
+start_time : None
+end_time : None
+members : []
+priority : None
+reason : 사용자가 이번 달 안에 책 한 권 읽기를 완료하고자 함
+original_text : 이번 달 안에 책 한 권 읽기
+
+======================================================================
+CASE : edge-15-high-priority-loss
+INPUT : 오늘 안으로 엄마한테 돈 보내야 해
+======================================================================
+
+base_date : 2026-07-11
+
+kind : todo
+title : 엄마한테 돈 보내기
+date : 2026-07-11
+start_time : None
+end_time : None
+members : []
+priority : high
+reason : None
+original_text : 오늘 안으로 엄마한테 돈 보내야 해
+
+======================================================================
+CASE : edge-16-past-relative-day
+INPUT : 이번 주 수요일에 민수랑 보기
+======================================================================
+
+base_date : 2026-07-11
+
+kind : group_schedule
+title : 민수와 만남
+date : 2026-07-15
+start_time : None
+end_time : None
+members : 민수
+priority : mid
+reason : 사용자가 이번 주 수요일에 민수와 만남 일정을 요청함
+original_text : 이번 주 수요일에 민수랑 보기
+
+======================================================================
+CASE : edge-17-distant-exact-time
+INPUT : 다다음 주 월요일 아침 9시 반에 면접
+======================================================================
+
+base_date : 2026-07-11
+
+kind : personal_schedule
+title : 면접
+date : 2026-07-27
+start_time : 09:30
+end_time : None
+members : []
+priority : None
+reason : None
+original_text : 다다음 주 월요일 아침 9시 반에 면접
+
+======================================================================
+CASE : edge-18-contextual-time
+INPUT : 퇴근하고 장보기
+======================================================================
+
+base_date : 2026-07-11
+
+kind : todo
+title : 장보기
+date : 2026-07-11
+start_time : None
+end_time : None
+members : []
+priority : high
+reason : None
+original_text : 퇴근하고 장보기
+
+======================================================================
+CASE : edge-19-ambiguous-am-pm
+INPUT : 내일 3시에 회의
+======================================================================
+
+base_date : 2026-07-11
+
+kind : personal_schedule
+title : 회의
+date : 2026-07-12
+start_time : 15:00
+end_time : None
+members : []
+priority : high
+reason : 사용자가 내일 3시에 회의 일정을 요청함
+original_text : 내일 3시에 회의
+
