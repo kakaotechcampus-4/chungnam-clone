@@ -105,16 +105,17 @@ class StructuredRequest(BaseModel):
     # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
     # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
     # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
-    kind : RequestKind = Field(description = "사용자 요청 종류") #personal_schedule, group_schedule, todo, reminder, unknown
+    kind : RequestKind = Field(description = "사용자 요청 종류를 의미합니다. 요청 종류에는 personal_schedule=혼자 또는 개인 일정, group_schedule=본인 외에 한 명 이상의 다른 사람들과 함께하는 모임/약속/활동, todo=완료 여부가 있는 할 일 , reminder=기억해야 할 알림성 메시지, unknown=위 네 가지로 분류하기 애매한 요청")
     title : str | None = Field(default=None,description = "일정 또는 할 일 제목")
     date : str | None = Field(default=None,description = "일정 또는 할 일의 날짜 YYYY-MM-DD")
     start_time : str | None = Field(default=None,description = "시작 시간 HH:MM")
     end_time : str | None = Field(default=None,description = "종료 시간 HH:MM")
 
+
     members : list[str] = Field(default_factory=list, description = "참석자 목록")
 
     priority : str | None = Field(default= None, description = "일정이나 할 일의 우선순위")
-    reason : str | None = Field(default= None, description = "판단 근거") # 어떤것의 판단 근거인지 모르겠어요 ..
+    reason : str | None = Field(default= None, description = "LLM이 이 요청을 해당 kind와 필드값으로 판단한 근거") 
 
     original_text : str = Field(default = "", description = "사용자가 입력한 원문 텍스트")
 
@@ -188,10 +189,27 @@ def week02_prompt_parts() -> list[str]:
         "요청이 하나여도 StructuredRequestBatch의 requests 리스트 안에 하나로 담는다.",  
         "Week 1 tool의 결과 JSON(personal_create_schedule의 created_schedule)을 이미 받았다면 같은 tool을 다시 호출하지 않고, 그 payload 값을 읽어 구조화된 결과를 만든다.", 
         "이번 주차에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율은 하지 않는다.",
-        "이번 주 구조화 대상은 개인 일정 생성 요청뿐이다. 조회나 삭제 요청이 오면 해당 tool은 호출하되, structured_response의 requests는 빈 리스트로 둔다.",
+        
+        "조회나 삭제 요청이 오면 해당 tool은 호출하되, structured_response의 requests는 빈 리스트로 둔다.",
         "사용자가 현재 메시지에서 명시적으로 요청한 작업 외에는 어떤 tool도 호출하지 않는다. 과거에 이미 완료된 요청을 임의로 수정, 삭제, 재생성하지 않는다.",
         "structured_response는 오직 현재 턴에서 새로 호출한 tool 결과와 현재 사용자 메시지만을 근거로 만든다. 이전 턴에서 이미 답변을 완료한 tool 결과를 재사용하지 않는다.",  
         "original_text에는 항상 현재 턴의 사용자 원문 메시지를 그대로 넣는다.",
+        "personal_schedule, group_schedule, todo, reminder, unknown로 판단되는 요청은 tool 호출 없이도 반드시 kind에 StructuredRequest를 채워서 반환해야 한다. tool을 호출하지 않았다는 이유로 requests를 비워두지 않는다.",
+        
+        # kind
+        "kind 분류 기준: 본인 혼자 하는 일이나 연인/가족처럼 밀접한 관계와의 1:1 약속은 personal_schedule, 여러 명이 함께 모이는 사교 활동이나 모임은 group_schedule로 분류한다.",
+        "마감 기한이 있거나 '~해야 한다', '~까지 제출/완료' 처럼 완료 여부를 확인해야 하는 요청은 todo로 분류한다.",
+        "특정 시점에 알려줘야하는 요청(예: '약 먹을 시간 알려줘', '생일 잊지 않게 해줘')은 reminder로 분류한다.",
+        "위 기준으로도 분류가 애매하면 unknown으로 분류한다.",
+
+        # reason
+        "reason 필드는 항상 채운다. 어떤 표현을 근거로 각 필드값을 뽑았는지 한 문장으로 간단히 적는다.",
+        
+        # priority
+        "priority 필드는 항상 low/medium/high 중 하나로 채운다. 마감이 임박하거나(당일, 긴급 표현) 중요하다는 표현이 있으면 high, 특별한 긴급함이 없으면 medium, 여유 있거나 사소한 내용이면 low로 판단한다.",
+    
+        "최종 답변은 StructuredRequestBatch 형식의 JSON 객체 하나만 반환한다. JSON 앞뒤에 어떤 설명, 인사말, 부연 문장도 추가하지 않는다.",
+
     ]
 
 
