@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, ValidationInfo, field_validator
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -17,6 +18,7 @@ from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_
 
 RequestKind = Literal["personal_schedule", "group_schedule", "todo", "reminder", "unknown"]
 _WEEK02_AGENT: Any | None = None
+_logger = logging.getLogger(__name__)
 
 
 # [2주차 1회차 수강생 구현 가이드]
@@ -127,24 +129,34 @@ class StructuredRequest(BaseModel):
 
     @field_validator("date")
     @classmethod
-    def _validate_date(cls, v: str | None) -> str | None:
+    def _validate_date(cls, v: str | None, info: ValidationInfo) -> str | None:
         if v is None:
             return v
         try:
             datetime.strptime(v, "%Y-%m-%d")
             return v
         except ValueError:
+            _logger.warning(
+                "StructuredRequest.%s 파싱 실패로 None 처리: %r (기대 형식: YYYY-MM-DD)",
+                info.field_name,
+                v,
+            )
             return None
 
     @field_validator("start_time", "end_time")
     @classmethod
-    def _validate_time(cls, v: str | None) -> str | None:
+    def _validate_time(cls, v: str | None, info: ValidationInfo) -> str | None:
         if v is None:
             return v
         try:
             datetime.strptime(v, "%H:%M")
             return v
         except ValueError:
+            _logger.warning(
+                "StructuredRequest.%s 파싱 실패로 None 처리: %r (기대 형식: HH:MM)",
+                info.field_name,
+                v,
+            )
             return None
 
 
