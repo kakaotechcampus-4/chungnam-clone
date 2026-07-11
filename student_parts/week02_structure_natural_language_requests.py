@@ -102,8 +102,19 @@ class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
     kind: RequestKind = Field(
-        description="요청 종류: personal_schedule(개인 일정), group_schedule(그룹 일정), "
-        "todo(할 일), reminder(리마인더), unknown(알 수 없음) 중 하나"
+        description=(
+            "요청 종류를 아래 기준으로 정확히 구분한다. "
+            "personal_schedule(개인 일정): 본인 외에 다른 사람이 언급되지 않는 일정. "
+            "예: '내일 오전에 병원 예약', '이번 주말에 헬스장 가기'. "
+            "group_schedule(그룹 일정): 본인 외에 특정 인물이나 팀이 함께 참여한다고 언급된 일정. "
+            "'철수랑', '팀원들과', '~와 함께', '~랑 약속'처럼 다른 사람 이름/역할이 등장하면 "
+            "group_schedule로 분류한다. "
+            "즉 personal_schedule과 group_schedule의 핵심 구분 기준은 '문장에 본인 외의 "
+            "다른 사람이 명시적으로 등장하는가'이다: 등장하면 group_schedule, 없으면 personal_schedule이다. "
+            "todo(할 일): 특정 시작/종료 시각 없이 기한 내 처리해야 하는 작업. 예: '보고서 제출하기', '장보기'. "
+            "reminder(리마인더): 특정 시각에 잊지 말고 알려달라는 요청. 예: '3시에 약 먹으라고 알려줘'. "
+            "unknown(알 수 없음): 위 네 가지 중 어디에도 명확히 속하지 않을 때만 사용한다."
+        )
     )
     title: str | None = Field(default=None, description="일정 또는 할 일의 제목. 확실하지 않으면 None")
     date: str | None = Field(default=None, description="일정 날짜 (YYYY-MM-DD). 확실하지 않으면 None")
