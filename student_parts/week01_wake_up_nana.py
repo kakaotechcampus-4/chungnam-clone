@@ -26,10 +26,6 @@ from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 _WEEK01_AGENT: Any | None = None
 
-# TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
-CHAT_MEMORY_PROMPT = "당신은 Nana입니다. 사용자의 개인 일정을 관리하는 AI 어시스턴트입니다. 처음 대화를 시작할때 스스로를 일정 관리 AI 어시스턴트 나나로 소개하세요."
-
-
 def join_system_prompt(parts: list[str]) -> str:
     """주차별 prompt 조각을 읽기 쉬운 누적 system prompt로 합칩니다."""
 
@@ -159,7 +155,6 @@ def _current_session_schedules() -> list[dict[str, Any]]:
     session_id = current_session_scope()
     return [schedule for schedule in PERSONAL_SCHEDULES if _schedule_scope(schedule) == session_id]
 
-
 @tool
 def personal_create_schedule(
     title: str,
@@ -168,7 +163,7 @@ def personal_create_schedule(
     end_time: str = "미정",
     attendees: list[str] | None = None,
 ) -> str:
-    """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
+    """ 사용자의 일정을 현재 대화의 임시 메모리에 생성합니다."""
 
     schedule = {
         "id": _new_personal_id(),
@@ -180,7 +175,7 @@ def personal_create_schedule(
         "created_at": _now_iso(),
         "session_id": current_session_scope(),
     } 
-    # 개인 일정을 schedule 변수에 저장.
+    # 사용자 일정을 schedule 변수에 저장.
 
     PERSONAL_SCHEDULES.append(schedule)
     # PERSONAL_SCHEDULES 리스트에 schedule 추가, 실제 저장 완료.
@@ -193,13 +188,11 @@ def personal_create_schedule(
     #LLM이 무엇을 저장했는지 알 수 있도록 payload를 json형태로 반환.
     return _json(payload)
 
-    # LLM이 전달한 매개변수 값이 올바른지 검증하는 로직을 추가해줘야할 것 같다. 즉, "ok": False가 되는 경우를 찾아내는 로직이 필요할 것 같음.
-
-    
+    # LLM이 전달한 매개변수 값이 올바른지 검증하는 로직을 추가해줘야할 것 같다. 즉, "ok": False가 되는 경우를 찾아내는 로직이 필요할 것 같음.    
 
 @tool
 def personal_list_schedules(date_from: str | None = None, date_to: str | None = None) -> str:
-    """선택한 시작일과 종료일 범위에 포함되는 Nana의 개인 일정을 조회합니다."""
+    """선택한 시작일과 종료일 범위에 포함되는 사용자의 일정을 조회합니다."""
 
     schedules = _current_session_schedules()
 
@@ -226,14 +219,9 @@ def personal_list_schedules(date_from: str | None = None, date_to: str | None = 
 
     return _json(payload)
 
-
-
-
-
-
 @tool
 def personal_delete_schedule(schedule_id: str) -> str:
-    """일정 ID에 해당하는 개인 일정을 삭제합니다."""
+    """일정 ID에 해당하는 일정을 삭제합니다."""
 
     # deleted = False
 
@@ -279,8 +267,12 @@ def week01_prompt_parts() -> list[str]:
     """1주차부터 누적되는 system prompt 조각입니다."""
 
     week01_response_rules = """
-    당신은 Nana입니다. 사용자의 개인 일정을 관리하는 AI 어시스턴트입니다. 
+    당신은 Nana입니다. 사용자의 일정을 관리하는 AI 어시스턴트입니다. 
     처음 대화를 시작할때 스스로를 일정 관리 AI 어시스턴트 나나로 소개하세요.
+    personal_create_schedule: 사용자가 새로운 일정을 생성할 때 사용합니다. 
+    personal_delete_schedule: 사용자가 일정을 삭제할 때 사용합니다.
+    personal_list_schedules: 사용자가 일정을 조회할 때 사용합니다.
+    이 세가지 tool을 적절히 사용하여 사용자의 일정을 관리하세요.
     """
 
     return [
