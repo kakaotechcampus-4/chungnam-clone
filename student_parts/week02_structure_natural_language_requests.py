@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field,model_validator
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -170,8 +170,20 @@ class StructuredRequest(BaseModel):
     )
     date: str | None = Field(
         default=None,
+        pattern=r"^\d{4}-\d{2}-\d{2}$",
         description="날짜 (YYYY-MM-DD 형식). 확실할 때만 채우고 불명확하면 None"
     )
+    start_time: str | None = Field(
+        default=None,
+        pattern=r"^\d{2}:\d{2}$",
+        description="시작 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
+    )
+    end_time: str | None = Field(
+        default=None,
+        pattern=r"^\d{2}:\d{2}$",
+        description="종료 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
+    )
+    '''
     start_time: str | None = Field(
         default=None,
         description="시작 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
@@ -180,12 +192,13 @@ class StructuredRequest(BaseModel):
         default=None,
         description="종료 시간 (HH:MM 형식). 확실할 때만 채우고 불명확하면 None"
     )
+    '''
     members: list[str] = Field( #gwanho: 예만 리스트인 이유는 진짜 여러개가 들어오기 때문임 참석자들이 
         # 근데 이 참석자도 None 일수도 있는거 아닌가?? 그럴때는 어떻게 표현 해야하는지..
         default_factory=list,
         description="참석자 또는 관련 멤버 목록. 모르면 빈 리스트로 둠"
     )
-    priority: str | None = Field(
+    priority: Literal["high", "medium", "low"] | None = Field( #2차 PR 
         default=None,
         description="할 일 우선순위 (예: high, medium, low). 해당 없으면 None"
     )
@@ -197,6 +210,14 @@ class StructuredRequest(BaseModel):
         default="",
         description="사용자가 입력한 원문 텍스트 그대로 보존"
     )
+    @model_validator(mode="after")
+    def check_time_order(self) -> "StructuredRequest":
+        if self.start_time and self.end_time:
+            if self.end_time <= self.start_time:
+                raise ValueError(
+                    f"end_time({self.end_time})이 start_time({self.start_time})보다 빠르거나 같습니다."
+                )
+        return self
 
 
 class StructuredRequestBatch(BaseModel):
