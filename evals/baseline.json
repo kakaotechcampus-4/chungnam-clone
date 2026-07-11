@@ -1,0 +1,78 @@
+{
+  "today": "2026-03-04",
+  "n": 3,
+  "results": {
+    "personal_full": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "personal_boundary": {
+      "passed": 2,
+      "n": 3,
+      "critical": false,
+      "ambiguous": true,
+      "notes": [
+        "kind=group_schedule"
+      ]
+    },
+    "group_vague": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "todo_deadline": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "reminder_notime": {
+      "passed": 3,
+      "n": 3,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "multi_request": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "date_leak": {
+      "passed": 3,
+      "n": 3,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "delete_vague": {
+      "passed": 3,
+      "n": 3,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "delete_specific": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "list_query": {
+      "passed": 3,
+      "n": 3,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    }
+  }
+}
