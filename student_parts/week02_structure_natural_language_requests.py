@@ -6,7 +6,7 @@ from typing import Any, Literal
 from langchain.agents import create_agent
 from langchain.tools import tool
 from langchain.agents.structured_output import ToolStrategy
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -158,7 +158,13 @@ class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
     kind: RequestKind = Field(
-        description="요청 종류를 나타내며, personal_schedule, group_schedule, todo, reminder, unknown 중 하나입니다."
+        description=(
+            "요청 종류. personal_schedule=날짜/시간이 명시된 개인 일정, "
+            "group_schedule=다른 사람과 조율이 필요한 일정(참석자 언급), "
+            "todo=시간 없이 해야 할 일(알림 요청 없음), "
+            "reminder=명시적으로 알림/리마인드를 요청한 경우, "
+            "unknown=위 어디에도 명확히 속하지 않는 경우."
+        )
     )
     title: str | None = Field(
         default=None, 
@@ -189,9 +195,25 @@ class StructuredRequest(BaseModel):
         description="일정이나 할 일의 판단 근거를 나타내며, 사용자가 요청한 일정의 배경이나 목적을 설명합니다."
     )
     original_text: str = Field(
-        default="", 
+        default="",
         description="사용자가 입력한 원문을 그대로 보존하는 필드로, 구조화 과정에서 손실되지 않도록 합니다."
     )
+
+    @model_validator(mode="after")
+    def _sync_kind_with_members(self) -> "StructuredRequest":
+        """kind와 members가 서로 모순되지 않도록 members 유무를 기준으로 kind를 교정합니다.
+
+        LLM이 두 필드를 독립적으로 추론하다 보면 personal_schedule인데 members가
+        차 있거나, group_schedule인데 members가 비는 모순이 생길 수 있습니다.
+        members는 "비었다/아니다"라는 확실한 신호이므로 이를 기준으로 최종 kind를
+        결정론적으로 맞춰, LLM이 kind를 잘못 골라도 결과가 일관되게 나오도록 합니다.
+        """
+
+        if self.kind == "personal_schedule" and self.members:
+            self.kind = "group_schedule"
+        elif self.kind == "group_schedule" and not self.members:
+            self.kind = "personal_schedule"
+        return self
 
 
 class StructuredRequestBatch(BaseModel):
@@ -210,29 +232,42 @@ class StructuredRequestBatch(BaseModel):
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """LangChain structured output 결과를 StructuredRequest로 정규화합니다."""
 
-    # TODO: value가 이미 StructuredRequest이면 그대로 반환하세요.
-    # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
-    # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    raise RuntimeError(
+        f"structured output 결과를 StructuredRequest로 변환할 수 없습니다: {type(value)!r}"
+    )
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
-    # TODO: chat_model().with_structured_output(StructuredRequest, method="function_calling")로 structured LLM을 만드세요.
-    # TODO: system 메시지에는 join_system_prompt(week02_prompt_parts())를 넣고, user 메시지에는 text를 넣어 invoke하세요.
-    # TODO: LLM 결과를 _coerce_structured_request(...)로 정규화해 StructuredRequest 하나로 반환하세요.
-    ...
+    structured_llm = chat_model().with_structured_output(
+        StructuredRequest, method="function_calling"
+    )
+    result = structured_llm.invoke(
+        [
+            ("system", join_system_prompt(week02_prompt_parts())),
+            ("user", text),
+        ]
+    )
+    return _coerce_structured_request(result)
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
     """Week 3 이상 agent가 저장/조율 전에 호출하는 구조화 bridge tool입니다."""
 
-    # TODO: extract_structured_request(query)를 호출해 자연어 또는 Week 1 JSON payload를 구조화하세요.
-    # TODO: ok/tool_name/base_date/structured_request 키를 가진 dict를 만들고 structured_request에는 model_dump() 결과를 넣으세요.
-    # TODO: json.dumps(..., ensure_ascii=False)로 JSON 문자열을 반환하세요.
-    ...
+    structured_request = extract_structured_request(query)
+    payload = {
+        "ok": True,
+        "tool_name": "extract_schedule_request",
+        "base_date": current_app_date_iso(),
+        "structured_request": structured_request.model_dump(),
+    }
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def week02_tools() -> list[Any]:
@@ -258,12 +293,21 @@ def week02_prompt_parts() -> list[str]:
     return [
         *week01_prompt_parts(),
 
-        f"""
-        이 agent는 Week 2 요청 구조화 agent 역할을 수행하며, 
-        현재 날짜({current_app_date_iso()})를 기준으로 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화합니다. 
-        Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만듭니다. 
-        Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않습니다.
-        """
+        (
+            "이 agent는 Week 2 요청 구조화 agent 역할을 수행하며, "
+            f"현재 날짜({current_app_date_iso()})를 기준으로 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화합니다. "
+            "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만듭니다. "
+            "Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않습니다."
+        ),
+
+        (
+            "kind 분류 예시: "
+            '"오늘 장 봐야해" → todo (알림 요청 없이 할 일만 언급). '
+            '"오늘 저녁에 장 보라고 알려줘" → reminder (명시적 알림 요청). '
+            '"내일 오후 3시에 병원 예약" → personal_schedule (구체적 날짜/시간 있음). '
+            '"철수랑 내일 회의 잡아줘" → group_schedule (참석자 언급). '
+            "todo와 reminder가 헷갈리면, 사용자가 알림을 명시적으로 요청했는지를 기준으로 판단합니다."
+        ),
     ]
 
 
