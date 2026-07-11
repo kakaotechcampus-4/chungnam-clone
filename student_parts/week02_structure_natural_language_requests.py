@@ -100,12 +100,6 @@ _WEEK02_AGENT: Any | None = None
 class StructuredRequest(BaseModel):
     """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
 
-    # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
-    # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: members 필드를 list[str] 타입으로 선언하고 default_factory=list를 사용하세요.
-    # TODO: priority/reason 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
-    # TODO: original_text 필드를 str 타입으로 선언하고 기본값은 ""로 두세요.
-    # TODO: 각 필드에는 LLM structured output이 이해할 수 있도록 한국어 description을 달아주세요.
     kind: RequestKind = Field(
         description="요청의 종류입니다. personal_schedule, group_schedule, todo, reminder, unknown 중 하나입니다."
     )
@@ -215,6 +209,12 @@ def week02_prompt_parts() -> list[str]:
             "사용자의 한국어 자연어 요청을 kind/title/date/start_time/end_time/members/priority/reason/"
             "original_text 필드로 구조화해. kind는 personal_schedule, group_schedule, todo, reminder, "
             "unknown 중 하나만 사용하고, 확실하지 않은 값은 억지로 만들지 말고 None 또는 빈 list로 남겨."
+        ),
+        (
+            "personal_schedule과 group_schedule은 다음 기준으로 구분해: '팀원', '~랑', '~와 함께'처럼 "
+            "본인 외의 다른 사람이 일정에 참여하면 group_schedule로 분류하고 members 필드에 그 사람들을 채워. "
+            "본인 혼자만의 일정이면 personal_schedule로 분류해. "
+            "일정/할 일과 무관한 감정 표현이나 잡담이면 unknown으로 분류해."
         ),
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         (
