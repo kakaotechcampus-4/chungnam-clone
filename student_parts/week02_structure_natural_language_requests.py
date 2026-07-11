@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal
 
 from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
@@ -152,7 +153,7 @@ _WEEK02_AGENT: Any | None = None
 
 
 class StructuredRequest(BaseModel):
-    """LLM structured output으로 추출되는 2주차 요청 스키마입니다."""
+    """사용자가 요청한 일정에서 필요한 데이터들을 추출합니다."""
 
     # TODO: kind 필드를 RequestKind 타입으로 선언하고 Field(description=...)를 붙이세요.
     # TODO: title/date/start_time/end_time 필드를 str | None 타입으로 선언하고 기본값은 None으로 두세요.
@@ -163,7 +164,7 @@ class StructuredRequest(BaseModel):
     kind: RequestKind = Field(
         description = "요청 종류. personal_schedule(개인 일정 생성/변경), group_schedule(그룹 일정 조율), "
     "todo(할 일), reminder(리마인더), unknown(위 네 가지로 분류할 수 없는 경우) 중 하나.")
-    title: str | None = Field(default = None, description = "일정 제목")
+    title: str | None = Field(default = None, description = "일정, 할 일이나 알림의 제목을 입력하세요.")
     date: str | None = Field(default = None, description = "일정 날짜")
     start_time: str | None = Field(default = None, description = "시작 시간")
     end_time: str | None = Field(default = None, description = "종료 시간")
@@ -179,7 +180,7 @@ class StructuredRequestBatch(BaseModel):
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    requests: list[StructuredRequest] = Field(default_factory = list, description = "StructuredRequest 목록")
+    requests: list[StructuredRequest] = Field(default_factory = list, description = "사용자가 정한 일정의 StructuredRequest 리스트를 저장해주세요.")
     base_date: str = Field(default_factory=current_app_date_iso, description = "상대 날짜 해석 기준일")
 
 
@@ -189,7 +190,11 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     # TODO: value가 이미 StructuredRequest이면 그대로 반환하세요.
     # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
     # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    raise RuntimeError(f"예상하지 못한 structured output 형태입ㄹ니다: {type(value)!r}")
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
@@ -198,7 +203,12 @@ def extract_structured_request(text: str) -> StructuredRequest:
     # TODO: chat_model().with_structured_output(StructuredRequest, method="function_calling")로 structured LLM을 만드세요.
     # TODO: system 메시지에는 join_system_prompt(week02_prompt_parts())를 넣고, user 메시지에는 text를 넣어 invoke하세요.
     # TODO: LLM 결과를 _coerce_structured_request(...)로 정규화해 StructuredRequest 하나로 반환하세요.
-    ...
+    structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
+    result = structured_llm.invoke([
+        ("system", join_system_prompt(week02_prompt_parts())),
+        ("user", text),
+    ])
+    return _coerce_structured_request(result)
 
 
 @tool
@@ -208,7 +218,16 @@ def extract_schedule_request(query: str) -> str:
     # TODO: extract_structured_request(query)를 호출해 자연어 또는 Week 1 JSON payload를 구조화하세요.
     # TODO: ok/tool_name/base_date/structured_request 키를 가진 dict를 만들고 structured_request에는 model_dump() 결과를 넣으세요.
     # TODO: json.dumps(..., ensure_ascii=False)로 JSON 문자열을 반환하세요.
-    ...
+    structured_request = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "base_date": current_app_date_iso(),
+            "structured_request": structured_request.model_dump(),
+        },
+        ensure_ascii=False,
+    )
 
 
 def week02_tools() -> list[Any]:
@@ -216,11 +235,6 @@ def week02_tools() -> list[Any]:
 
     # TODO: Week 1에서 구현한 tool 목록을 그대로 반환하세요.
     return week01_tools()
-
-#def week01_system_prompt() -> str:
-#    """1주차 단일 Nana agent가 따르는 시스템 프롬프트입니다."""
-
-#    return join_system_prompt(week01_prompt_parts())
 
 def week02_system_prompt() -> str:
     """2주차 agent가 따르는 시스템 프롬프트입니다."""
@@ -236,14 +250,6 @@ def week02_system_prompt() -> str:
         "StructuredRequest의 title/date/start_time/end_time/members 등을 채운다.",
     ])
 
-#def week01_prompt_parts() -> list[str]:
-#    """1주차부터 누적되는 system prompt 조각입니다."""
-
-#    return [
-#        "너는 Nana라는 이름의 일정 관리 비서야. 친절하고 간결하게 답변해.",
-#        f"오늘 날짜는 {current_app_date_iso()}이야.",
-#        "일정 관련 요청에는 반드시 tool을 사용해.",
-#]
 
 def week02_prompt_parts() -> list[str]:
     """2주차 structured output agent가 따르는 system prompt 조각입니다."""
@@ -276,7 +282,12 @@ def build_week02_agent() -> object:
         _WEEK02_AGENT = create_agent(
             model=chat_model(),
             tools=week02_tools(),
-            response_format=StructuredRequestBatch,
+            response_format=ToolStrategy(StructuredRequestBatch), # tool calling 전략으로 구조화 강제 (반복 JSON 파싱 에러 방지)
+            # claude에게 질문하며 공부하였습니다.
+            # 스키마 클래스를 그냥 넘기면 일반 텍스트를 생성하는 것과 똑같은 방식이라서, 가끔 같은 문장/JSON을 실수로 두 번 반복해서 써버리는 사고가 날 수 있다고 알았습니다.
+            # 사고가 날 수 있는 것까진 알겠는데.. 왜 나는건지는 계속 물어보아도 이해가 잘 안 가네요... 왜 두 번이 일어나는 걸까요...?
+            # 혹시 텍스트를 생성하고, 피라미터 빈칸에도 값이 채워넣어지기 때문인가요?? 왜 그런 오류가 나는지 잘 모르겠습니다 ㅜㅜ
+            # 그리고 왜 프록시를 사용할 때 더 에러가 나는 걸까요?? 중간에 잘못 전달할 수도 있기 때문인가요?
             system_prompt=week02_system_prompt()
         )
     return _WEEK02_AGENT
