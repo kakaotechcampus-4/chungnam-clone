@@ -23,8 +23,11 @@ Week 1 tool이 만든 JSON payload나 사용자의 한국어 자연어 요청을
   주석 내용을 그대로 베끼거나 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
 - `RequestKind`, `current_app_date_iso` 등 파일에 이미 정의/import된 타입과 헬퍼를 재정의하지 않고 그대로
   사용한다.
-- 이 문서에 없는 필드나 검증 로직(예: `requests`의 최소 길이 제한, `date`와 `base_date` 간 교차 검증 등)을
-  임의로 추가하지 않는다. 스펙에 없는 제약은 나중에 실제로 필요해질 때 추가한다.
+- 이 문서에 없는 필드나 검증 로직(예: `requests`의 최소 길이 제한 등)을 임의로 추가하지 않는다. 스펙에
+  없는 제약은 나중에 실제로 필요해질 때 추가한다.
+  - (개정) `date`와 `base_date` 간 교차 검증은 과거에는 이 목록에 있었으나, 리뷰 결과 `date`가
+    `start_time`/`end_time`과 독립적인 필드가 아니라는 점이 확인되어 아래 "StructuredRequestBatch
+    model_validator" 항목의 정식 스펙으로 승격되었다.
 - `student_parts/week01_claude.md`는 Week 1용 문서다. 형식이 이번 문서와 다르며, 스타일이 필요할 때만
   참고자료로 확인하고 내용을 그대로 따를 필요는 없다.
 
@@ -59,6 +62,11 @@ Week 1 tool이 만든 JSON payload나 사용자의 한국어 자연어 요청을
 - 필드 간 교차 검증은 `model_validator`로 처리한다. `start_time`과 `end_time`이 **둘 다 값이 있을 때만**
   `end_time`이 `start_time`보다 빠르지 않은지 검증한다. 둘 중 하나라도 `None`이면 비교 없이 그대로
   통과시킨다. (`"HH:MM"` 형식 문자열은 그대로 사전식 비교해도 시간 순서와 일치한다.)
+  `start_time == end_time`은 허용한다 — 특정 시각 하나만 의미 있는 요청(알람/리마인더성)을 표현할 수
+  있어야 하므로, "더 빠르면 안 된다"만 막고 "같아도 된다"는 열어둔다.
+- `kind == "unknown"`인데 `reason`이 비어 있으면 `model_validator`로 에러를 낸다. `unknown`은 "분류에
+  실패해 default가 그대로 남은 경우"와 "정말 4개 분류 중 어디에도 안 속한다고 판단한 경우"를 구분하지
+  못하면 의미가 없으므로, 후자임을 확인할 수 있도록 이유를 필수로 남긴다.
 
 # StructuredRequest 스키마 명세
 
@@ -88,12 +96,20 @@ original_text → reason → kind → title → date → start_time → end_time
 ## 필드별 세부 요구사항
 
 - `kind`: 이미 정의된 `RequestKind` Literal(`personal_schedule`, `group_schedule`, `todo`, `reminder`,
-  `unknown`)만 허용한다. `Field(default="unknown", description=...)`로 선언한다.
+  `unknown`)만 허용한다. `Field(default="unknown", description=...)`로 선언한다. `unknown`은 4개 분류
+  중 어디에도 명확히 속하지 않을 때만 선택하고, 이때는 `reason`에 이유를 반드시 남긴다(아래
+  model_validator 참고).
 - `title`/`date`/`start_time`/`end_time`: `str | None`, 기본값 `None`. `date`/`start_time`/`end_time`에는
-  위 공통 규칙의 `pattern`을 건다.
+  위 공통 규칙의 `pattern`을 건다. `date`가 `None`이면, 원문에 날짜 언급이 아예 없었는지 아니면 날짜를
+  언급했지만 특정할 수 없었는지를 `reason`에 남기도록 description에 명시한다 — 이 둘을 구분하지 않으면
+  "언급 없음(시간만 있으면 base_date로 보정해도 안전)"과 "언급했으나 파싱 실패(보정하면 틀린 값이 될 수
+  있음)"를 나중에 구분할 수 없다.
 - `members`: `list[str]`, `default_factory=list`. 모르면 빈 list로 둔다.
 - `priority`: `Literal["high", "medium", "low"] | None`, 기본값 `None`.
-- `reason`: `str | None`, 기본값 `None`. `kind`/필드 값을 그렇게 판단한 근거.
+- `reason`: `str | None`, 기본값 `None`. `kind`/`date` 등 여러 필드 값을 그렇게 판단한 근거를 함께
+  담는 범용 필드다. `kind`가 `unknown`이면 이 필드는 사실상 필수(비어 있으면 model_validator가 에러를
+  낸다). `date`가 `None`인 경우에도 위 두 원인 중 어느 쪽인지 여기에 남긴다(다만 이 경우는 강제
+  검증하지 않는다 — `date`가 없는 게 흔한 정상 케이스라 매번 `reason`을 요구하면 과하다).
 - `original_text`: `str`, 기본값 `""`. 사용자가 입력한 원문 보존용.
 - 모르는 값을 억지로 만들지 않는다. 확실하지 않으면 `None` 또는 빈 list가 안전하다는 점을 각 필드
   description에도 드러낸다.
@@ -101,7 +117,11 @@ original_text → reason → kind → title → date → start_time → end_time
 ## model_validator
 
 - `mode="after"`인 model validator를 하나 추가해 `start_time`/`end_time`이 둘 다 있을 때만 시간 순서를
-  검증한다. (조합이 모순인 경우만 잡아내고, 개별 필드가 `None`이면 통과시킨다.)
+  검증한다. (조합이 모순인 경우만 잡아내고, 개별 필드가 `None`이면 통과시킨다.) `start_time == end_time`은
+  허용한다 — 알람/리마인더처럼 특정 시각 하나만 의미 있는 요청을 표현할 수 있어야 하기 때문이다.
+- `mode="after"`인 model validator를 하나 더 추가해, `kind == "unknown"`인데 `reason`이 비어 있으면
+  에러를 낸다. `unknown`이 "분류 실패로 default가 그대로 남은 경우"와 "정말 애매해서 unknown으로 판단한
+  경우"를 구분하지 못하면 디버깅에 쓸모가 없으므로, 후자임을 이유로 확인할 수 있게 한다.
 
 ## 클래스 docstring 보강
 
@@ -138,6 +158,18 @@ base_date → requests
 - `requests`: 요청이 하나뿐이어도 `StructuredRequest` 하나가 든 list로 채운다. description에 이 규칙을
   명시한다.
 
+## model_validator
+
+- `mode="after"`인 model validator를 추가해, `requests` 안 각 `StructuredRequest`에 대해 `date`가
+  `None`이고 `start_time`/`end_time` 중 하나라도 값이 있으면 `date`를 `base_date`로 채운다. `date`는
+  `start_time`/`end_time`과 독립적인 필드가 아니다 — 시간이 정해졌다는 것은 이미 "언제"가 암묵적으로
+  정해졌다는 뜻이므로, `date`만 비어 있는 상태로 두지 않는다. 이 교차 검증은 `base_date`(Batch 레벨)가
+  있어야 판단 가능하므로 `StructuredRequest`가 아니라 `StructuredRequestBatch`에 둔다.
+  - 알려진 한계: `date`가 `None`인 이유가 "날짜 언급 자체가 없음"과 "언급했으나 파싱 실패"로 갈릴 수
+    있는데, 이 validator는 둘을 구분하지 않고 항상 `base_date`로 채운다. `reason`(위 `StructuredRequest`
+    필드 요구사항 참고)에 어느 쪽인지 근거가 남으므로, 필요하면 사람이 `reason`을 보고 잘못 보정된
+    케이스를 사후에 구분할 수 있다 — 코드가 자동으로 분기하지는 않는다(자유 텍스트 검증의 한계).
+
 ## 클래스 docstring 보강
 
 - 현재 `"""여러 자연어 의도를 StructuredRequest 목록으로 나누는 2차 과제 스키마입니다."""`도 
@@ -146,6 +178,8 @@ base_date → requests
   - 이 스키마가 Week 2 agent의 최종 `structured_response`(response_format)라는 것.
   - `requests`가 `StructuredRequest`의 list이며, 요청이 하나뿐이어도 list 형태를 유지한다는 것.
   - `base_date`가 `requests` 안 상대 날짜 표현 해석의 기준일이라는 것.
+  - `requests` 안 항목의 `date`가 비어 있는데 `start_time`/`end_time` 중 하나라도 있으면 `base_date`로
+    보정한다는 것.
 
 # 참고자료
 
@@ -182,3 +216,111 @@ batch = StructuredRequestBatch(
 - `date`/`start_time`/`end_time`에 형식에 맞지 않는 값(`"2026-13-99"`, `"9:5"` 등)을 넣었을 때
   `ValidationError`가 나는지 확인한다.
 - `end_time`이 `start_time`보다 빠른 값을 넣었을 때 model_validator가 에러를 내는지 확인한다.
+- `start_time == end_time`을 넣었을 때는 에러 없이 통과하는지 확인한다.
+- `kind="unknown"`인데 `reason`이 비어 있으면 `ValidationError`가 나는지, `reason`을 채우면 통과하는지
+  확인한다.
+- `date=None`, `start_time="15:00"`인 `StructuredRequest`를 `StructuredRequestBatch`에 넣었을 때,
+  결과 `requests[0].date`가 `base_date`로 채워지는지 확인한다.
+
+---
+
+# [추가 작업] week02_system_prompt / week02_prompt_parts 구현 가이드
+
+# 작업 목표
+
+`student_parts/week02_structure_natural_language_requests.py`의 `week02_prompt_parts()`와
+`week02_system_prompt()`를 완성해, Week 2 agent가 자연어 요청이나 Week 1 tool JSON을
+`StructuredRequestBatch`로 구조화해 최종 답변으로 반환하도록 만든다.
+
+# 수정 범위
+
+- 수정 대상 함수는 `week02_prompt_parts()`, `week02_system_prompt()` 두 개뿐이다.
+- `StructuredRequest`, `StructuredRequestBatch`, `week02_tools()`, `build_week02_agent()`,
+  `_coerce_structured_request`, `extract_structured_request`, `extract_schedule_request`는 이번
+  작업 범위가 아니다. 건드리지 않는다.
+- 이미 구현된 `join_system_prompt`, `week01_prompt_parts()`, `current_app_date_iso()`는 그대로
+  재사용하고 재정의하지 않는다.
+
+# 하지 말아야 할 것
+
+- 파일 상단의 `[2주차 수강생 구현 가이드]` 주석은 출제 의도 확인용으로 **컨닝하지 않는다**. 주석
+  내용을 그대로 베끼거나 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
+- `week01_prompt_parts()`가 반환한 조각을 지우거나 순서를 바꾸지 않는다. `week02_prompt_parts()`는
+  그 뒤에 Week 2 전용 조각을 이어 붙이기만 한다.
+- 여기 없는 새로운 규칙(Week 3 이상의 저장/조율 관련 지시 등)을 임의로 추가하지 않는다.
+
+# week02_prompt_parts() 구현 명세
+
+`week01_prompt_parts()`가 반환한 list 뒤에, 아래 내용이 드러나는 문자열 조각(들)을 이어 붙인다.
+
+- Week 2 agent의 목적은 Week 1 에이전트의 출력(자연어 답변 또는 tool 호출 결과)을
+  `StructuredRequest` 필드(`kind`/`title`/`date`/`start_time`/`end_time`/`members` 등)로 구조화된
+  pydantic 출력으로 반환하는 것임을 명시한다.
+- 현재 날짜는 `current_app_date_iso()`를 호출한 실행 시점 값이며, 사용자가 "내일", "다음 주
+  화요일"처럼 상대적인 날짜로 말하면 이 날짜를 기준으로 계산한다는 것을 명시한다.
+- Week 1 tool 호출 결과로 JSON을 받은 경우, 그 내용을 다시 만들기 위해 tool을 재호출하지 않고 받은
+  payload를 그대로 읽어 `structured_response`를 채운다는 것을 명시한다.
+- Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다는 범위 제한을 명시한다.
+
+# week02_system_prompt() 구현 명세
+
+- `join_system_prompt(...)`로 `week02_prompt_parts()`가 반환한 조각들과 Week 2 전용 최종 답변
+  규칙을 합쳐 하나의 system prompt 문자열로 반환한다. (`week01_system_prompt()`가
+  `join_system_prompt(week01_prompt_parts())`를 쓰는 것과 동일한 패턴이다.)
+- 최종 답변(`structured_response`) 규칙에는 아래 내용이 드러나야 한다.
+  - 단일 요청을 구조화하는 경우에도 최상위 `structured_response`는 `StructuredRequest` 단독이
+    아니라 항상 `StructuredRequestBatch`(요청 하나가 든 `requests` list) 형태여야 한다는 것.
+  - 개인 일정 생성 요청은 `personal_create_schedule` tool 결과 JSON의 `created_schedule` 필드를
+    읽어 `StructuredRequest`의 각 필드(title/date/start_time/end_time/members 등)를 채운다는 것.
+  - 조회(`personal_list_schedules`)나 삭제(`personal_delete_schedule`) 요청에는 tool 호출 결과를
+    `StructuredRequestBatch`로 구조화하지 않고, tool 호출 결과를 자연어 문장으로 요약해서 답한다는
+    것. 즉 조회/삭제 요청은 `structured_response`를 만드는 대상이 아니다.
+
+# 참고자료
+
+- `week01_system_prompt()`, `week01_prompt_parts()` (`student_parts/week01_wake_up_nana.py`):
+  `join_system_prompt` 사용 패턴과 prompt 조각을 누적하는 방식의 예시로 참고한다.
+- 이 문서 앞부분의 `StructuredRequest`/`StructuredRequestBatch` 스키마 명세: 여기서 지시하는
+  필드/구조 규칙이 이번 prompt 지시 내용의 근거가 된다.
+
+# 검증 방법
+
+- `./run.sh --week2`로 실행한 뒤 "다음 주 화요일 오후 3시에 철수랑 회의 잡아줘"처럼 개인 일정 생성
+  요청을 넣어, 최종 답변이 `StructuredRequestBatch` 형태의 `structured_response`로 나오는지
+  확인한다.
+- "내 일정 보여줘" 같은 조회 요청과 "그 일정 지워줘" 같은 삭제 요청을 넣어, 최종 답변이 구조화 JSON이
+  아니라 자연어 요약 문장으로 나오는지 확인한다.
+- 요청이 하나뿐인 입력에서도 `requests` 안에 `StructuredRequest`가 정확히 하나만 들어 있는지
+  확인한다.
+
+---
+
+# [추가 개선] build_week02_agent() response_format 전략 변경
+
+# 배경
+
+- `build_week02_agent()`가 `response_format=StructuredRequestBatch`를 그대로 넘기면, `create_agent`는
+  모델 이름(`fixed/config.py`의 `openai_model = "openai/gpt-4.1-mini"`)에 `"gpt-4.1"`이 포함된다는
+  이유만으로 자동으로 provider native structured output 전략(`ProviderStrategy`)을 선택한다.
+- 이 전략은 모델의 최종 답변 텍스트(`AIMessage.content`) 전체를 그대로 `json.loads()`로 파싱한다
+  (`langchain/agents/structured_output.py`의 `ProviderStrategyBinding.parse`). 그런데 이 프로젝트가
+  쓰는 프록시(`mlapi.run`) 뒤의 실제 모델은 OpenAI의 strict json_schema 계약을 완벽히 지키지 않고,
+  같은 JSON을 텍스트에 통째로 두 번 반복해서 내보내는 경우가 있었다. 그 결과
+  `StructuredOutputValidationError: ... Extra data: line 2 column 1 (char ...)`가 발생했다
+  (`agent.invoke(...)`로 직접 재현·확인함).
+- 이 문제는 `StructuredRequest`/`StructuredRequestBatch` 스키마나 `week02_prompt_parts()` 내용과
+  무관하게, 스키마가 아주 단순한 요청에서도 동일하게 재현됐다. 즉 스키마/프롬프트를 고쳐서 해결할 수
+  있는 문제가 아니었다.
+
+# 조치
+
+- `build_week02_agent()`의 `response_format`을 `StructuredRequestBatch`(그대로 = native 전략 자동
+  선택)에서 `langchain.agents.structured_output.ToolStrategy(StructuredRequestBatch)`로 바꿨다.
+- `ToolStrategy`는 최종 구조화 출력을 자유 텍스트가 아니라 tool-call의 `arguments`(이미 파싱된
+  `dict`)로 받는다(`OutputToolBinding.parse`는 `json.loads`를 호출하지 않는다). tool-call 인수는
+  API 응답 구조상 자유 텍스트처럼 통째로 반복될 여지가 없고, `handle_errors` 재시도 로직도 포함돼
+  있어 이 프록시 모델에서 더 안정적으로 동작한다.
+- Week 1 tool(`personal_create_schedule` 등) 호출 자체는 이 변경과 무관하게 항상 정상 동작했다(tool
+  호출은 일반 function-calling 경로를 타므로 native/tool 구조화 출력 전략 선택과 별개다). 이번 문제는
+  Week 1 tool 결과를 다 받은 **다음**, 최종 답변을 `StructuredRequestBatch` 모양으로 포장하는 마지막
+  단계에서만 있었다.
