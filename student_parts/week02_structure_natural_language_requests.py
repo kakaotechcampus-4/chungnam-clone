@@ -4,7 +4,6 @@ import json
 from typing import Any, Literal
 
 from langchain.agents import create_agent
-from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
@@ -168,7 +167,7 @@ class StructuredRequest(BaseModel):
     start_time: str | None = Field(default=None, description="HH:MM. 확실할 때만 채운다")
     end_time: str | None = Field(default=None, description="HH:MM. 확실할 때만 채운다")
     members: list[str] = Field(default_factory=list, description="참석자·관련 멤버. 모르면 빈 list")
-    priority: str | None = Field(default=None, description="할 일 우선순위(low/medium/high 등)")
+    priority: str | None = Field(default=None, description="할 일 우선순위(low/medium/high 중 하나)")
     reason: str | None = Field(default=None, description="이 kind로 판단한 근거")
     original_text: str = Field(default="", description="구조화 전 원문 보존")
 
@@ -279,7 +278,7 @@ def build_week02_agent() -> object:
         _WEEK02_AGENT = create_agent(
             model=chat_model(),
             tools=week02_tools(),
-            response_format=ToolStrategy(schema=StructuredRequestBatch),
+            response_format=StructuredRequestBatch,
             system_prompt=week02_system_prompt(),
         )
     return _WEEK02_AGENT
