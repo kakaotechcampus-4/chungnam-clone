@@ -6,7 +6,8 @@ from typing import Any, Literal
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, Field, ValidationError
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -209,7 +210,7 @@ class StructuredRequestBatch(BaseModel):
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
     requests: list[StructuredRequest] = Field(
         default_factory=list,
-        description="구조화된 요청 목록. 요청이 하나뿐이어도 StructuredRequest 하나를 담은 list로 둔다.",
+        description="구조화된 요청 목록. 요청이 하나뿐이어도 list로 유지. 여러 의도는 각각 별도 StructuredRequest로 분리.",
     )
     base_date: str = Field(
         default_factory=current_app_date_iso,
@@ -226,7 +227,12 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     if isinstance(value, StructuredRequest):
         return value
     if isinstance(value, dict):
-        return StructuredRequest.model_validate(value)
+        try:
+            return StructuredRequest.model_validate(value)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"structured output을 StructuredRequest로 검증하지 못했습니다: {exc}"
+            ) from exc
     raise RuntimeError(
         f"structured output이 StructuredRequest 또는 dict가 아닙니다: {type(value)!r}"
     )
@@ -243,8 +249,8 @@ def extract_structured_request(text: str) -> StructuredRequest:
     )
     result = structured_llm.invoke(
         [
-            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
-            {"role": "user", "content": text},
+            SystemMessage(content=join_system_prompt(week02_prompt_parts())),
+            HumanMessage(content=text),
         ]
     )
     return _coerce_structured_request(result)
