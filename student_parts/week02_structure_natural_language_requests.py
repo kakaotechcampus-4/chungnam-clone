@@ -168,10 +168,7 @@ class StructuredRequest(BaseModel):
     )
     date: str | None = Field(
         default=None,
-        description="YYYY-MM-DD 형식의 날짜. base_date를 기준으로 상대 날짜를 계산해서 채운다. "
-                    "예: base_date가 2026-07-08이고 '내일'이면 2026-07-09, "
-                    "'다음 주 화요일'처럼 다음 주를 가리키면 base_date가 속한 주의 다음 주 화요일 날짜로 계산. "
-                    "확실하지 않으면 null.",
+        description="YYYY-MM-DD 형식의 날짜. base_date를 기준으로 상대 날짜를 계산해서 채운다. ",
     )
     start_time: str | None = Field(
         default=None,
@@ -224,14 +221,12 @@ class StructuredRequestBatch(BaseModel):
     # TODO: requests 필드를 list[StructuredRequest] 타입으로 선언하고 default_factory=list를 사용하세요.
     requests: list[StructuredRequest] = Field(
         default_factory=list,
-        description="구조화된 요청 목록. 한 문장에 요청이 하나뿐이어도 리스트 안에 StructuredRequest 하나를 담는다. "
-                    "여러 일정/할 일/알림 의도가 한 문장에 섞여 있으면 각각 별도의 StructuredRequest로 나눈다.",
+        description="구조화된 요청 목록.",
     )
     # TODO: base_date 필드를 str 타입으로 선언하고 default_factory=current_app_date_iso를 사용하세요.
     base_date: str = Field(
         default_factory=current_app_date_iso,
-        description="상대 날짜(예: '다음 주 화요일', '내일')를 해석하는 기준일. "
-                    "YYYY-MM-DD 형식이며 오늘 날짜를 기본값으로 한다.",
+        description="상대 날짜를 해석하는 기준일. YYYY-MM-DD 형식.",
     )
     
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
@@ -242,18 +237,36 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     """LangChain structured output 결과를 StructuredRequest로 정규화합니다."""
 
     # TODO: value가 이미 StructuredRequest이면 그대로 반환하세요.
+    if isinstance(value, StructuredRequest):
+        return value 
+    
     # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+
+
     # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
-    ...
+    raise RuntimeError(f"예상치 못한 structured output 타입: {type(value)}")
+    
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
     # TODO: chat_model().with_structured_output(StructuredRequest, method="function_calling")로 structured LLM을 만드세요.
+    structured_llm = chat_model().with_structured_output(
+        StructuredRequest, method="function_calling"
+    )
+
     # TODO: system 메시지에는 join_system_prompt(week02_prompt_parts())를 넣고, user 메시지에는 text를 넣어 invoke하세요.
+    result = structured_llm.invoke([
+        {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
+        {"role": "user", "content": text},
+    ])
+
     # TODO: LLM 결과를 _coerce_structured_request(...)로 정규화해 StructuredRequest 하나로 반환하세요.
-    ...
+    return _coerce_structured_request(result)
+
 
 
 @tool
@@ -263,7 +276,17 @@ def extract_schedule_request(query: str) -> str:
     # TODO: extract_structured_request(query)를 호출해 자연어 또는 Week 1 JSON payload를 구조화하세요.
     # TODO: ok/tool_name/base_date/structured_request 키를 가진 dict를 만들고 structured_request에는 model_dump() 결과를 넣으세요.
     # TODO: json.dumps(..., ensure_ascii=False)로 JSON 문자열을 반환하세요.
-    ...
+    
+    structured_request = extract_structured_request(query)
+
+    payload = {
+        "ok": True,
+        "tool_name": "extract_schedule_request",
+        "base_date": current_app_date_iso(),
+        "structured_request": structured_request.model_dump(),
+    }
+    
+    return json.dumps(payload, ensure_ascii=False)
 
 
 
@@ -285,10 +308,7 @@ def week02_system_prompt() -> str:
         "requests 필드는 리스트이며, 요청이 하나뿐인 경우에도 반드시 그 안에 StructuredRequest 객체 하나를 담아서 반환해라. "
         "절대 requests를 비워두거나 StructuredRequest를 리스트 밖에 단독으로 반환하지 마라. "
         
-        "personal_create_schedule tool을 호출한 결과 JSON이 있다면, 그 안의 created_schedule 객체를 "
-        "읽어서 title/date/start_time/end_time/attendees 값을 StructuredRequest의 "
-        "title/date/start_time/end_time/members 필드로 옮겨 담아라. attendees는 members에 대응한다. "
-        "tool을 다시 호출하지 마라."
+        "personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채워라."
     )
     return join_system_prompt([*week02_prompt_parts(), final_answer_rule])
 
@@ -314,9 +334,7 @@ def week02_prompt_parts() -> list[str]:
         "읽어 그대로 StructuredRequest 필드로 옮겨 담아라. attendees는 members 필드에 대응한다.",
 
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
-        "너는 이번 주차에서 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다. "
-        "최종 응답은 항상 StructuredRequestBatch 형식으로만 반환하고, 요청이 하나뿐이어도 requests 리스트 "
-        "안에 StructuredRequest 하나를 담아라. 한 문장에 여러 의도가 섞여 있으면 여러 개의 StructuredRequest로 나눠라.",
+        "너는 이번 주차에서 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다.",
     ]
 
 
