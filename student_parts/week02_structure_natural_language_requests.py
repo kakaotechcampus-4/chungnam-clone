@@ -244,11 +244,8 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     
     # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
     if isinstance(value, dict):
-        try:
-            return StructuredRequest.model_validate(value)
-        except ValidationError as e:
-            raise RuntimeError(f"StructuredRequest 검증 실패: {e}") from e
-
+        return StructuredRequest.model_validate(value)
+        
     # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
     raise RuntimeError(f"예상치 못한 structured output 타입: {type(value)}")
     
@@ -281,15 +278,22 @@ def extract_schedule_request(query: str) -> str:
     # TODO: ok/tool_name/base_date/structured_request 키를 가진 dict를 만들고 structured_request에는 model_dump() 결과를 넣으세요.
     # TODO: json.dumps(..., ensure_ascii=False)로 JSON 문자열을 반환하세요.
     
-    structured_request = extract_structured_request(query)
+    try:
+        structured_request = extract_structured_request(query)
 
-    payload = {
-        "ok": True,
-        "tool_name": "extract_schedule_request",
-        "base_date": current_app_date_iso(),
-        "structured_request": structured_request.model_dump(),
-    }
-    
+        payload = {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "base_date": current_app_date_iso(),
+            "structured_request": structured_request.model_dump(),
+        }
+    except Exception as e:
+        payload = {
+            "ok": False,
+            "tool_name": "extract_schedule_request",
+            "error": str(e),
+        }
+        
     return json.dumps(payload, ensure_ascii=False)
 
 
