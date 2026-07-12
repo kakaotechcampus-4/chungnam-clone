@@ -11,7 +11,12 @@ from pydantic import BaseModel, Field
 from fixed.config import CONFIG
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
-from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
+from student_parts.week01_wake_up_nana import (
+    join_system_prompt,
+    personal_create_schedule,
+    week01_prompt_parts,
+    week01_tools,
+)
 
 
 RequestKind = Literal["personal_schedule", "group_schedule", "todo", "reminder", "unknown"]
@@ -189,13 +194,58 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     raise RuntimeError(f"예상하지 못한 structured output 형태입니다: {type(value)!r}")
 
 
-def extract_structured_request(text: str) -> StructuredRequest:
+def _structured_request_from_personal_schedule(
+    created_schedule: dict[str, Any], original_text: str
+) -> StructuredRequest:
+    """personal_create_schedule tool JSON을 LLM 재해석 없이 결정적으로 매핑합니다.
+
+    tool 호출이 이미 발생했다는 사실 자체가 kind="personal_schedule"이라는 확정 신호이므로
+    LLM structured output에 다시 판단시키지 않고 하드코딩합니다. attendees -> members도
+    LLM이 다시 옮겨적게 하지 않고 그대로 복사해 항상 일치하도록 만듭니다.
+    """
+
+    return StructuredRequest(
+        kind="personal_schedule",
+        title=created_schedule.get("title"),
+        date=created_schedule.get("date"),
+        start_time=created_schedule.get("start_time"),
+        end_time=created_schedule.get("end_time"),
+        members=list(created_schedule.get("attendees") or []),
+        original_text=original_text,
+    )
+
+
+def _try_personal_schedule_payload(text: str) -> dict[str, Any] | None:
+    """text가 personal_create_schedule tool 결과 JSON이면 그 dict를 반환하고, 아니면 None입니다."""
+
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    if payload.get("tool_name") != personal_create_schedule.name:
+        return None
+    created_schedule = payload.get("created_schedule")
+    if not isinstance(created_schedule, dict):
+        return None
+    return created_schedule
+
+
+def extract_structured_request(text: str, base_date: str | None = None) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
+    # personal_create_schedule tool JSON이면 LLM에게 다시 판단시키지 않고 결정적으로 매핑합니다.
+    created_schedule = _try_personal_schedule_payload(text)
+    if created_schedule is not None:
+        return _structured_request_from_personal_schedule(created_schedule, original_text=text)
+
+    # 이 호출 하나의 요청(턴) 안에서는 base_date를 한 번만 계산해서 재사용합니다.
+    base_date = base_date or current_app_date_iso()
     structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
     result = structured_llm.invoke(
         [
-            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
+            {"role": "system", "content": join_system_prompt(week02_prompt_parts(base_date=base_date))},
             {"role": "user", "content": text},
         ]
     )
@@ -206,12 +256,13 @@ def extract_structured_request(text: str) -> StructuredRequest:
 def extract_schedule_request(query: str) -> str:
     """Week 3 이상 agent가 저장/조율 전에 호출하는 구조화 bridge tool입니다."""
 
-    structured_request = extract_structured_request(query)
+    base_date = current_app_date_iso()  # 이 호출의 base_date를 한 번만 계산해서 아래 두 군데에 그대로 전달합니다.
+    structured_request = extract_structured_request(query, base_date=base_date)
     return json.dumps(
         {
             "ok": True,
             "tool_name": "extract_schedule_request",
-            "base_date": current_app_date_iso(),
+            "base_date": base_date,
             "structured_request": structured_request.model_dump(),
         },
         ensure_ascii=False,
@@ -224,24 +275,26 @@ def week02_tools() -> list[Any]:
     return week01_tools()
 
 
-def week02_system_prompt() -> str:
+def week02_system_prompt(base_date: str | None = None) -> str:
     """2주차 agent가 따르는 시스템 프롬프트입니다."""
 
-    return join_system_prompt(week02_prompt_parts())
+    return join_system_prompt(week02_prompt_parts(base_date=base_date))
 
 
-def week02_prompt_parts() -> list[str]:
+def week02_prompt_parts(base_date: str | None = None) -> list[str]:
     """2주차 structured output agent가 따르는 system prompt 조각입니다."""
 
+    base_date = base_date or current_app_date_iso()
     return [
-        *week01_prompt_parts(),
-        f"당신은 이제 Week 2 요청 구조화 agent입니다. 오늘 날짜는 {current_app_date_iso()}이며, "
-        "이 날짜를 기준으로 '내일', '다음 주 화요일' 같은 상대 날짜를 해석합니다.",
+        *week01_prompt_parts(),  # week01_prompt_parts()가 이미 "오늘 날짜는 X입니다"를 안내합니다.
+        f"당신은 이제 Week 2 요청 구조화 agent입니다. base_date는 {base_date}이며, "
+        "위에서 이미 안내한 오늘 날짜와 동일한 값입니다. 이 날짜를 기준으로 "
+        "'내일', '다음 주 화요일' 같은 상대 날짜를 해석합니다.",
         "사용자의 자연어 요청 또는 Week 1 tool이 반환한 JSON payload를 읽어 "
         "kind/title/date/start_time/end_time/members/priority/reason/original_text 필드를 채운 "
         "StructuredRequest로 구조화합니다. 한 문장에 여러 일정/할 일/알림 의도가 섞여 있으면 "
         "StructuredRequestBatch.requests에 여러 StructuredRequest로 나눠 담고, 하나뿐이어도 list로 담습니다.",
-        "개인 일정 생성 요청에서는 personal_create_schedule tool을 호출한 뒤, "
+        f"개인 일정 생성 요청에서는 {personal_create_schedule.name} tool을 호출한 뒤, "
         "그 결과 JSON의 created_schedule 필드를 읽어 StructuredRequest 필드를 채웁니다. "
         "이미 tool 결과로 받은 JSON payload가 있다면 다시 tool을 호출하지 않고 그 payload를 그대로 구조화 근거로 사용합니다.",
         "확실하지 않은 값은 억지로 만들지 말고 None 또는 빈 list로 둡니다. "
