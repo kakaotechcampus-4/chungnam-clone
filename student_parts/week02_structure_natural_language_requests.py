@@ -227,10 +227,30 @@ def extract_structured_request(text: str) -> StructuredRequest:
 def extract_schedule_request(query: str) -> str:
     """Week 3 이상 agent가 저장/조율 전에 호출하는 구조화 bridge tool입니다."""
 
-    # TODO: extract_structured_request(query)를 호출해 자연어 또는 Week 1 JSON payload를 구조화하세요.
-    # TODO: ok/tool_name/base_date/structured_request 키를 가진 dict를 만들고 structured_request에는 model_dump() 결과를 넣으세요.
-    # TODO: json.dumps(..., ensure_ascii=False)로 JSON 문자열을 반환하세요.
-    ...
+    # ① 자연어든 Week 1 tool JSON payload든 StructuredRequest 하나로 구조화한다.
+    structured = extract_structured_request(query)
+
+    # ② Week 1 tool들과 같은 규약(ok/tool_name)으로 감싸고, 상대 날짜 해석 기준일을 함께 남긴다.
+    payload = {
+        "ok": True,
+        "tool_name": "extract_schedule_request",
+        "base_date": current_app_date_iso(), # 해석 기준일을 데이터에 동봉. "내일"이 어느 날 기준인지 저장 시점에도 추적 가능.
+        "structured_request": structured.model_dump(),
+    }
+    #    [model_dump()가 필요한 이유 — 같은 데이터의 세 가지 형태]
+    #      형태 1. Pydantic 객체  StructuredRequest(...)   → 파이썬 안에서만 사용. obj.title로 접근, 타입 검증 보장.
+    #      형태 2. dict          {"kind": "todo", ...}    → 검증 없는 기본 자료구조. d["title"]로 접근.
+    #      형태 3. JSON 문자열    '{"kind": "todo", ...}'  → 그냥 글자. 파이썬 밖(tool 반환/저장/전송)으로 나갈 수 있는 유일한 형태.
+    #
+    #    json.dumps(포장)는 dict/list/str/숫자/None 같은 "기본 재료"만 문자열로 바꿀 수 있다.
+    #    StructuredRequest는 우리가 만든 커스텀 클래스라 그대로 넣으면
+    #    TypeError: Object of type StructuredRequest is not JSON serializable 로 죽는다.
+    #    → 그래서 model_dump()(분해: 객체→dict)로 기본 재료로 바꾼 뒤 payload에 담는다.
+    #    참고: model_dump(객체→dict)와 model_validate(dict→객체, _coerce에서 사용)는 서로 역방향 변환이다.
+
+    # ③ tool은 문자열 반환이 안정적 → 위 "형태 3"으로 포장해 내보낸다.
+    #    ensure_ascii=False는 한글이 \uXXXX로 깨지지 않게 하는 옵션.
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def week02_tools() -> list[Any]:
