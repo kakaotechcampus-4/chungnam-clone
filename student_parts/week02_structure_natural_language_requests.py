@@ -4,6 +4,7 @@ import json
 from typing import Any, Literal
 
 from langchain.agents import create_agent
+from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 
@@ -132,26 +133,21 @@ class StructuredRequestBatch(BaseModel):
     base_date: str = Field(default_factory=current_app_date_iso, description="날짜 해석의 기준이 되는 날짜")
     # 이거 있어야 다른 세션에서도 동일한 날짜를 뱉어내는 일관성을 유지할 수 있음
     # TODO: 각 필드에는 Week 2 구조화 결과와 상대 날짜 기준일을 설명하는 한국어 description을 달아주세요.
-    ...
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
 
-    ...
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
 
-    ...
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
     """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
-
-    ...
 
 
 def week02_tools() -> list[Any]:
@@ -179,7 +175,7 @@ def week02_prompt_parts() -> list[str]:
     return [
         *week01_prompt_parts(),
         # TODO: Week 2 요청 구조화 agent 역할과 현재 날짜(current_app_date_iso()) 기준을 추가하세요.
-        f"너는 Week2 요청 구조화 agent다. 오늘 날짜는 {current_app_date_iso()}이다.",
+        "너는 Week2 요청 구조화 agent다.",
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         "사용자 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화한다.",
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
@@ -204,7 +200,10 @@ def build_week02_agent() -> object:
         _WEEK02_AGENT = create_agent(
             model=chat_model(),
             tools=week02_tools(),
-            response_format=StructuredRequestBatch,
+            # Q. response_format=StructuredRequestBatch로만 넘기면 어떤 일이 발생하는가?
+            # A. 전략을 명시 안하고 스키마만 넘긴 경우에 해당하는데, 이렇게 되면 프레임워크가 임의로 기본전략을 고르게 된다.
+            # 이렇게 고른 전략은 그 상황에서 안정적인 방식이 아닐 수 있기 떄문에, 안정적인 출력이 된다고 보기 어렵다.
+            response_format=ToolStrategy(StructuredRequestBatch),
             system_prompt=week02_system_prompt(),
         )
     return _WEEK02_AGENT
