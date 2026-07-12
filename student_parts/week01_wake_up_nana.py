@@ -22,6 +22,7 @@ from fixed.langchain_trace import (
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso, next_weekday_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
+from student_parts.prompting import join_system_prompt
 
 
 PERSONAL_SCHEDULES: list[dict[str, Any]] = []
@@ -32,16 +33,6 @@ CHAT_MEMORY_PROMPT = (
     "이전에 만든 일정을 참조할 때는 personal_list_schedules 를 호출해서 "
     "최신 상태를 확인한 뒤 답한다."
 )
-
-
-def join_system_prompt(parts: list[str]) -> str:
-    """주차별 prompt 조각을 읽기 쉬운 누적 system prompt로 합칩니다."""
-
-    header = (
-        "아래 system prompt는 주차별로 누적된 안내다. "
-        "같은 주제의 지시가 여러 번 나오면 더 높은 주차 또는 더 뒤에 있는 지시를 우선한다."
-    )
-    return "\n\n".join([header, *[part.strip() for part in parts if part.strip()]])
 
 
 # [수강생 구현 가이드]
