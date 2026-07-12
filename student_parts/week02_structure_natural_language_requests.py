@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
-from fixed.runtime_clock import current_app_date_iso
+from fixed.runtime_clock import app_started_at_iso, current_app_date_iso
 from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
 
 
@@ -260,10 +260,19 @@ def week02_prompt_parts() -> list[str]:
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
-        f"너는 Week 2 요청 구조화 agent야. 현재 날짜는 {current_app_date_iso()}이야.",
+        f"너는 Week 2 요청 구조화 agent야. 현재 날짜는 {current_app_date_iso()}이고, 현재 시각은 {app_started_at_iso()}이야.",
+        "'지금', '지금부터 n시간/분 뒤' 같은 상대 시각 표현은 위에서 알려준 현재 시각을 기준으로 계산해.",
         "사용자의 자연어 요청을 kind/title/date/start_time/end_time/members 등 StructuredRequest 필드로 구조화해.",
         "Week 1 tool 결과 JSON을 이미 받았다면 tool을 다시 호출하지 말고, 그 JSON(created_schedule 등)의 값을 읽어 구조화해.",
         "이 단계에서는 SQLite 저장, RAG, 외부 멤버 일정 조율은 하지 않아.",
+        "personal_schedule/group_schedule/todo/reminder는 사용자가 실제로 일정·할 일·알림을 "
+        "만들거나 조회/변경/삭제해달라고 요청한 경우에만 사용해. "
+        "단순히 과거 경험을 이야기하거나 감정을 표현하는 문장(예: '어제 늦게까지 과제했더니 피곤하다')처럼 "
+        "실질적인 요청이 없으면 kind는 unknown으로 분류하고 title/date/start_time/end_time은 None, members는 빈 list로 둬.",
+        "start_time/end_time/date는 사용자가 명시하지 않았거나 확실하지 않으면 반드시 None으로 남겨. "
+        "'미정', '모름' 같은 문자열을 지어내지 마.",
+        "original_text에는 사용자가 입력한 문장을 그대로(요약하거나 바꾸지 말고) 넣어.",
+
     ]
 
 
