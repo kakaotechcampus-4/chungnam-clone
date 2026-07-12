@@ -192,10 +192,15 @@ class StructuredRequestBatch(BaseModel):
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """LangChain structured output 결과를 StructuredRequest로 정규화합니다."""
 
-    # TODO: value가 이미 StructuredRequest이면 그대로 반환하세요.
-    # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
-    # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
-    ...
+    # with_structured_output 결과는 모델/버전에 따라 Pydantic 객체 또는 dict로 올 수 있다.
+    # ① 이미 검증된 객체면 그대로 쓴다.
+    if isinstance(value, StructuredRequest):
+        return value
+    # ② dict면 Pydantic 검증을 거쳐 객체로 바꾼다. (필드/타입이 어긋나면 ValidationError)
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    # ③ 둘 다 아니면 잘못된 LLM 응답 — 조용히 통과시키지 않고 즉시 실패시킨다(fail fast).
+    raise RuntimeError(f"StructuredRequest로 변환할 수 없는 LLM 응답입니다: {type(value).__name__}")
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
