@@ -206,10 +206,21 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
 def extract_structured_request(text: str) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
-    # TODO: chat_model().with_structured_output(StructuredRequest, method="function_calling")로 structured LLM을 만드세요.
-    # TODO: system 메시지에는 join_system_prompt(week02_prompt_parts())를 넣고, user 메시지에는 text를 넣어 invoke하세요.
-    # TODO: LLM 결과를 _coerce_structured_request(...)로 정규화해 StructuredRequest 하나로 반환하세요.
-    ...
+    # agent 없이 모델에 직접 구조화 계약을 건다. function_calling 방식은
+    # 프록시 환경에서도 안정적으로 동작한다(ToolStrategy를 쓴 것과 같은 이유).
+    structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
+
+    # 메인과제와 같은 프롬프트 조각을 재사용해 bridge의 분류 기준을 agent와 일치시킨다.
+    # (멘토님 피드백으로 추가한 경계 규칙도 여기서 그대로 적용되도록.)
+    result = structured_llm.invoke(
+        [
+            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
+            {"role": "user", "content": text},
+        ]
+    )
+
+    # 결과가 Pydantic 객체든 dict든 검증된 StructuredRequest 하나로 정규화한다.
+    return _coerce_structured_request(result)
 
 
 @tool
