@@ -5,12 +5,14 @@ from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
 from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
+from langchain_core.messages import HumanMessage, SystemMessage
+from datetime import datetime
 
 
 RequestKind = Literal["personal_schedule", "group_schedule", "todo", "reminder", "unknown"]
@@ -242,8 +244,10 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     
     # TODO: value가 dict이면 StructuredRequest.model_validate(...)로 검증해 반환하세요.
     if isinstance(value, dict):
-        return StructuredRequest.model_validate(value)
-
+        try:
+            return StructuredRequest.model_validate(value)
+        except ValidationError as e:
+            raise RuntimeError(f"StructuredRequest 검증 실패: {e}") from e
 
     # TODO: 예상한 형태가 아니면 RuntimeError를 발생시켜 잘못된 LLM 응답을 조용히 통과시키지 마세요.
     raise RuntimeError(f"예상치 못한 structured output 타입: {type(value)}")
@@ -260,8 +264,8 @@ def extract_structured_request(text: str) -> StructuredRequest:
 
     # TODO: system 메시지에는 join_system_prompt(week02_prompt_parts())를 넣고, user 메시지에는 text를 넣어 invoke하세요.
     result = structured_llm.invoke([
-        {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
-        {"role": "user", "content": text},
+        SystemMessage(content=join_system_prompt(week02_prompt_parts())),
+        HumanMessage(content=text),
     ])
 
     # TODO: LLM 결과를 _coerce_structured_request(...)로 정규화해 StructuredRequest 하나로 반환하세요.
@@ -319,9 +323,8 @@ def week02_prompt_parts() -> list[str]:
     return [
         *week01_prompt_parts(),
         # TODO: Week 2 요청 구조화 agent 역할과 현재 날짜(current_app_date_iso()) 기준을 추가하세요.
-        "너는 사용자의 자연어 요청 또는 이전 tool 호출 결과를 분석해서 StructuredRequest 형태로 "
-        f"구조화하는 역할을 한다. 오늘 날짜는 {current_app_date_iso()}이며, '다음 주 화요일', '내일' 같은 "
-        "상대 날짜는 이 날짜를 기준으로 계산한다.",
+        "너는 사용자의 자연어 요청 또는 이전 tool 호출 결과를 분석해서 StructuredRequest 형태로 구조화하는 역할을 한다."
+        f"오늘 날짜는 {current_app_date_iso()} 이고 현재 시각은 {datetime.now().strftime('%H:%M')} 이며, '다음 주 화요일', '내일', '20분 뒤' 같은 상대 날짜와 시간은 이 기준을 바탕으로 계산한다."
 
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         "사용자의 자연어 문장을 kind/title/date/start_time/end_time/members/priority/reason 필드로 "
