@@ -250,7 +250,7 @@ def extract_structured_request(text: str) -> StructuredRequest:
     result = structured_llm.invoke(
         [
             ("system", join_system_prompt(week02_prompt_parts())),
-            ("user", text),
+            ("user", text), 
         ]
     )
     return _coerce_structured_request(result)
@@ -294,10 +294,11 @@ def week02_prompt_parts() -> list[str]:
         *week01_prompt_parts(),
 
         (
-            "이 agent는 Week 2 요청 구조화 agent 역할을 수행하며, "
+            "이 agent는 사용자의 요청을 구조화하는 역할을 수행하며, "
             f"현재 날짜({current_app_date_iso()})를 기준으로 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화합니다. "
-            "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만듭니다. "
-            "Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않습니다."
+            "개인 일정 생성 tool(personal_create_schedule)을 호출하면 생성된 일정 정보가 담긴 JSON(created_schedule 필드 포함)이 결과로 돌아옵니다. "
+            "이미 이런 tool 결과 JSON을 받은 상태라면 같은 tool을 다시 호출하지 말고, 그 payload의 값을 읽어 StructuredRequest 각 필드를 채웁니다. "
+            "SQLite 저장, RAG, 외부 멤버 일정 조율은 이 agent의 역할이 아니므로 수행하지 않습니다."
         ),
 
         (
