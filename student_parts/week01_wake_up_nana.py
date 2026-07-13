@@ -27,8 +27,12 @@ PERSONAL_SCHEDULES: list[dict[str, Any]] = []
 _WEEK01_AGENT: Any | None = None
 
 # TODO: 현재 채팅 기억 관련 공통 system prompt를 자유롭게 추가하세요.
-CHAT_MEMORY_PROMPT = ""
-
+CHAT_MEMORY_PROMPT = """
+    너는 사용자의 개인 일정을 관리해주는 AI 비서야.
+    일정 생성은 personal_create_schedule, 조회는 personal_list_schedules, 삭제는 personal_delete_schedule을 사용해줘.
+    날짜나 시간이 불분명하면 사용자에게 되물어봐.
+    답변은 친근하고 간결하게 해줘.
+"""
 
 def join_system_prompt(parts: list[str]) -> str:
     """주차별 prompt 조각을 읽기 쉬운 누적 system prompt로 합칩니다."""
@@ -169,10 +173,12 @@ def personal_create_schedule(
     attendees: list[str] | None = None,
 ) -> str:
     """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
+    #프롬포트 예시를 넣어두면 좋음
+    #어떤 입력이 들어가고 어떤 출력이 나오는지
 
     # TODO: PERSONAL_SCHEDULES에 현재 대화 범위의 개인 일정을 생성하세요.
 
-    attendees if attendees is not None else []
+    attendees = attendees if attendees is not None else []
         
     schedule = {
         "id": _new_personal_id(),
