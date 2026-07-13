@@ -173,8 +173,8 @@ def _current_session_schedules() -> list[dict[str, Any]]:
 def personal_create_schedule(
     title: str,
     date: str,
-    start_time: str,
-    end_time: str = "미정",
+    start_time: str | None = None,
+    end_time: str | None = None,
     attendees: list[str] | None = None,
 ) -> str:
     """Nana의 개인 일정을 현재 대화의 임시 메모리에 생성합니다."""
