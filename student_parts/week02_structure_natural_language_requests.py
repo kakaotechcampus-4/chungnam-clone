@@ -5,7 +5,7 @@ from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -191,7 +191,12 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
 
     # dict이면 StructuredRequest 스키마로 검증해 변환한다.
     if isinstance(value, dict):
-        return StructuredRequest.model_validate(value)
+        try:
+            return StructuredRequest.model_validate(value)
+        except ValidationError as exc:
+            raise RuntimeError(
+                f"dict를 StructuredRequest로 검증할 수 없습니다: {exc}"
+            ) from exc
 
     # 그 외 타입은 잘못된 LLM 응답으로 처리한다.
     raise RuntimeError(
