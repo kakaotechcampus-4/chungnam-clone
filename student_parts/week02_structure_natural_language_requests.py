@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, Literal
 
 from langchain.agents import create_agent
@@ -229,13 +230,45 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     raise RuntimeError(f"예상치 못한 structured output 타입입니다: {type(value)!r}")
 
 
+_NEXT_WEEK_WEEKDAY_PATTERN = re.compile(
+    r"다음\s*주\s*("
+    + "|".join(re.escape(alias) for alias in sorted(_WEEKDAY_ALIASES, key=len, reverse=True))
+    + r")",
+    re.IGNORECASE,
+)
+
+
+def _next_week_weekday_hints(text: str) -> list[str]:
+    """'다음 주 + 요일' 표현을 미리 정확한 날짜로 계산해 LLM에 줄 힌트 목록을 만듭니다.
+
+    extract_structured_request는 tool을 바인딩하지 않으므로(스펙상 with_structured_output만
+    단독 사용), 모델이 resolve_next_week_weekday_date를 호출할 방법이 없다. 그래서 같은 계산을
+    파이썬 코드로 미리 해서 프롬프트에 값으로 주입한다.
+    """
+
+    hints = []
+    for match in _NEXT_WEEK_WEEKDAY_PATTERN.finditer(text):
+        index = _WEEKDAY_ALIASES.get(match.group(1).lower())
+        if index is None:
+            continue
+        hints.append(f"'{match.group(0)}' → {next_weekday_iso(index)}")
+    return hints
+
+
 def extract_structured_request(text: str) -> StructuredRequest:
     """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
     structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
+    system_parts = list(week02_prompt_parts())
+    hints = _next_week_weekday_hints(text)
+    if hints:
+        system_parts.append(
+            "다음 '다음 주 + 요일' 표현은 이미 정확한 날짜로 계산되어 있으니 직접 산수하지 말고 "
+            "그대로 date 필드에 사용한다: " + "; ".join(hints)
+        )
     result = structured_llm.invoke(
         [
-            ("system", join_system_prompt(week02_prompt_parts())),
+            ("system", join_system_prompt(system_parts)),
             ("human", text),
         ]
     )

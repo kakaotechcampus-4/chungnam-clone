@@ -166,3 +166,54 @@ week01 데모 시드에서만 쓰였고, LLM에는 노출되지 않아 LLM이 �
 ### 검증
 - 라이브 E2E: 재현 문장을 `build_week02_agent()`로 5회 연속 실행 → 매번 3건(personal_schedule/reminder/todo) 모두
   포함, "헬스장+개발자 미팅"(동종 2건) 시나리오 3회 재실행으로 회귀 없음 확인.
+
+---
+
+## 버그 수정 — bridge(`extract_structured_request`)의 "다음 주 + 요일" 재발 위험 (2026-07-13)
+
+### 발견 경위
+Claude Code와 코드 리뷰 중 `extract_structured_request` 내부의
+`chat_model().with_structured_output(StructuredRequest, method="function_calling")` 호출을 점검하다가,
+이 호출에는 어떤 tool도 바인딩되어 있지 않다는 사실을 확인함. 그런데 이 호출의 system 메시지
+(`join_system_prompt(week02_prompt_parts())`)에는 위 "다음 주 X요일 날짜 계산 오류 (2026-07-11)" 조치에서
+추가한 "다음 주 + 요일이 나오면 `resolve_next_week_weekday_date` tool을 호출하라"는 지시가 그대로 포함되어 있음.
+
+### 원인
+- `extract_structured_request`는 심화 과제 하드 제약(CLAUDE.md)상 "create_agent 루프를 새로 만들지 않고
+  with_structured_output만 단독 사용"해야 하므로, 애초에 tool을 바인딩할 수 없는 구조임.
+- `week02_prompt_parts()`는 메인 agent(`build_week02_agent()`)와 bridge(`extract_structured_request`)가
+  공유하는 함수라서, 메인 agent에만 유효한 "tool을 호출하라"는 지시가 tool이 없는 bridge 호출에도 그대로 주입됨.
+- 결과적으로 bridge 경로에서는 모델이 실행할 수 없는 tool을 지시받은 채로 남아, 결국 직접 날짜 산수를 하게 됨 —
+  2026-07-11에 메인 agent에서 고쳤던 것과 같은 종류의 "다음 주 + 요일" 오계산이 bridge 경로에서는
+  그대로 재발할 수 있는 상태였음.
+
+### 조치 (`student_parts/week02_structure_natural_language_requests.py` 수정)
+- `_NEXT_WEEK_WEEKDAY_PATTERN` regex와 `_next_week_weekday_hints(text)` 헬퍼를 추가. 기존
+  `_WEEKDAY_ALIASES` dict와 `next_weekday_iso()`(`resolve_next_week_weekday_date`가 쓰는 것과 동일한 헬퍼)를
+  그대로 재사용해 "다음 주 + 요일" 표현을 텍스트에서 찾아 정확한 날짜를 파이썬 코드로 미리 계산.
+- `extract_structured_request(text)`가 `with_structured_output`을 호출하기 전에, 위 헬퍼로 찾은 힌트가
+  있으면 `week02_prompt_parts()` 결과 리스트에 "이 표현은 이미 정확히 계산되어 있으니 그대로 date 필드에
+  써라"는 문장을 append한 뒤 `join_system_prompt(...)`으로 결합해 system 메시지로 사용. 힌트가 없으면 기존과
+  동일하게 `join_system_prompt(week02_prompt_parts())` 그대로 사용됨(하위 호환).
+- 이 방식은 tool을 새로 바인딩하거나 agent loop를 도입하지 않는 순수 문자열 전처리 + 프롬프트 주입이라,
+  "with_structured_output만 단독 사용" 하드 제약을 그대로 지킴.
+
+### 알려진 한계 (의도적으로 미해결, 2026-07-13 사용자 확인 후 보류)
+- regex는 "다음 주 + 요일" 리터럴만 매칭한다. "2주 후 금요일", "3주 후 금요일", "다다음주 화요일" 등은
+  매칭 대상이 아니다.
+- 더 근본적으로 `fixed/runtime_clock.py`의 `next_weekday_date()`/`next_weekday_iso()` 자체가 "다음 주"로
+  1주 고정되어 있고 주차 오프셋 파라미터가 없어서, 설사 regex를 확장해도 계산해 줄 방법이 없다.
+- 이 한계는 bridge뿐 아니라 메인 agent가 쓰는 `resolve_next_week_weekday_date` tool에도 동일하게 있다
+  (새로 생긴 결함이 아니라 기존 구현 전체에 있던 사각지대). 확장하려면 `next_weekday_date`/`next_weekday_iso`에
+  `weeks_ahead` 같은 파라미터를 추가하고 tool·regex 양쪽을 함께 넓혀야 하며, 이번 범위에서는 보류하기로 함.
+- 참고로 `extract_structured_request`의 system 메시지가 힌트가 있을 때 `join_system_prompt(week02_prompt_parts())`
+  결과에 문장을 하나 더 append하게 되어, 심화 과제 규격 문구("system 메시지는 join_system_prompt(week02_prompt_parts())를
+  사용")를 문자 그대로 보면 힌트가 있는 경우엔 그 위에 얹은 확장이다. tool 바인딩·agent loop가 아니므로 하드
+  제약 위반은 아니라고 판단했다.
+
+### 검증
+- 정적: regex를 독립적으로 테스트해 "다음 주 화요일", "다음주화요일"(공백 없음), "다음 주 월요일과 다음 주
+  금요일"(한 문장 2건) 모두 전체 요일 토큰("화요일" 등, "화"로 잘리지 않음)으로 정확히 매칭되고, "오늘 저녁
+  회의"처럼 패턴이 없는 문장에서는 매칭이 없음을 확인.
+- 라이브 E2E는 수행하지 않음(`.env`의 `PROXY_TOKEN` 필요, 이번 세션에서는 미실행) — 기존 관례와 동일하게
+  라이브 검증은 실행 환경이 있는 사용자 몫으로 남긴다.
