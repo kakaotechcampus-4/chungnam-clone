@@ -275,12 +275,19 @@ def week02_prompt_parts() -> list[str]:
         (
             "출력 형식은 반드시 StructuredRequestBatch 입니다. "
             "요청이 하나뿐이어도 반드시 'requests' 필드에 StructuredRequest 하나를 담으세요. "
-            "StructuredRequest는 다음 필드를 가집니다: kind, title, date, start_time, end_time, members, priority, reason, original_text."
+            "StructuredRequest 필드 및 형식:\n"
+            "- kind: personal_schedule, group_schedule, todo, reminder, unknown 중 하나\n"
+            "- title: 일정 또는 할 일의 제목\n"
+            "- date: YYYY-MM-DD\n"
+            "- start_time, end_time: HH:MM\n"
+            "- members: 참석자 목록\n"
+            "- priority, reason, original_text"
         ),
         (
             "만약 Week 1 tool의 JSON payload(예: personal_create_schedule의 created_schedule)를 받으면, "
             "다시 tool을 호출하지 말고 그 payload를 파싱하여 StructuredRequest의 각 필드를 채우세요. "
-            "모르는 값은 빈값(None 또는 [])으로 두고, 날짜/시간은 확실할 때만 YYYY-MM-DD / HH:MM 형식으로 기입하세요."
+            "알 수 없는 kind는 'unknown', members는 [], nullable 필드는 None으로 두세요. "
+            "날짜와 시간은 확실한 경우에만 채우세요."
         ),
         (
             "이번 주차 에이전트는 오직 구조화만 수행합니다. SQLite 저장, RAG 검색, 외부 멤버 일정 조율은 하지 마세요. "
