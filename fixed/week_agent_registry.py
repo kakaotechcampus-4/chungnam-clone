@@ -58,7 +58,9 @@ def normalize_active_week(active_week: int | str | None) -> int:
 def _extract_trace(module: Any, result: dict[str, Any]) -> dict[str, Any]:
     """주차 모듈 전용 trace extractor가 있으면 사용하고, 없으면 공통 extractor를 씁니다."""
 
-    extractor = getattr(module, "extract_langchain_trace", extract_common_langchain_trace)
+    extractor = getattr(
+        module, "extract_langchain_trace", extract_common_langchain_trace
+    )
     trace = extractor(result)
     if isinstance(trace, dict):
         return trace
@@ -78,7 +80,9 @@ def _structured_response_from_stream_chunk(chunk: Any) -> Any | None:
     return None
 
 
-def run_active_week_agent(active_week: int | str | None, messages: list[dict[str, str]]) -> ActiveWeekAgentResult:
+def run_active_week_agent(
+    active_week: int | str | None, messages: list[dict[str, str]]
+) -> ActiveWeekAgentResult:
     """선택된 주차의 student_parts agent를 실행하고 UI trace payload로 변환합니다.
 
     PROXY_TOKEN이 없으면 LangChain agent를 만들지 않고 안내 payload를 반환합니다.
@@ -151,7 +155,9 @@ def stream_active_week_agent(
             for message in stream_chunk_messages(chunk):
                 collected_messages.append(message)
                 for tool_name in message_tool_call_names(message):
-                    yield ActiveWeekAgentStreamEvent(status_text=f"현재 {tool_name} 실행 중")
+                    yield ActiveWeekAgentStreamEvent(
+                        status_text=f"현재 {tool_name} 실행 중"
+                    )
 
         result = {"messages": collected_messages}
         if structured_response is not None:
@@ -159,7 +165,9 @@ def stream_active_week_agent(
         trace = _extract_trace(module, result)
         trace["mode"] = "active_week_agent"
         trace["active_week"] = week
-        yield ActiveWeekAgentStreamEvent(result=ActiveWeekAgentResult(answer=extract_final_text(result), trace=trace))
+        yield ActiveWeekAgentStreamEvent(
+            result=ActiveWeekAgentResult(answer=extract_final_text(result), trace=trace)
+        )
     except Exception as exc:
         yield ActiveWeekAgentStreamEvent(
             result=ActiveWeekAgentResult(
