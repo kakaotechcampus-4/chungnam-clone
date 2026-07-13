@@ -165,6 +165,16 @@ def week02_system_prompt() -> str:
     # TODO: personal_create_schedule tool 결과 JSON의 created_schedule을 읽어 필드를 채우도록 지시하세요.
     return join_system_prompt([*week02_prompt_parts(), 
     "최종 답변은 반드시 StructuredRequestBatch 형식의 structured_response로만 반환해야 돼.",
+    # 2차 수정: personal/group schedule에 대한 명확한 구분을 위한 구체적인 프롬프트 추가
+    "단순히 함께하는 사람 또는 members가 언급된 것으로 group_schedule이라고 단정 지으면 안 돼.",
+    "여러 사람의 일정을 실제로 조율/확인 해야하는 요청일 경우에만 group_schedule로 분류 해야 돼.",
+    # 2차 수정: few-shot 예시 추가(personal/group schedule 구분을 위한 예시만이 아닌 todo/reminder 예시도 추가)
+    "다음 예시를 참고해서 kind를 분류해: ",
+    "'철수랑 회의 잡아줘' -> 이건 personal_schedule (단순히 참석자만 있는 경우)",
+    "'팀원들이랑 다 되는 시간으로 일정 맞춰줘' -> group_schedule (여러 사람이 공통으로 되는 시간으로 일정 조율해야하는 경우)",
+    "'내일까지 과제 제출해야돼.' -> todo (기한이 있는 완료할 작업)",
+    "'3시에 약 먹으라고 알려줘' -> reminder (완료할 작업이 아닌 특정 시각에 대한 알림 요청)",
+    "그리고 내가 관리하는 일정에 참석자가 있는 것 뿐이라면 그건 personal_schedule로 분리해.",
     "요청이 하나뿐이어도 requests 리스트 안에 StructuredRequest를 하나 담아 반환하도록 해야돼.",   
     "personal_create_schedule tool 결과를 JSON created_schedule 필드를 읽어 필드를 채워야 돼.",])
 
@@ -178,6 +188,9 @@ def week02_prompt_parts() -> list[str]:
         "너는 Week2 요청 구조화 agent다.",
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         "사용자 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화한다.",
+        "사용자의 요청은 kind 필드에서 personal_schedule(개인 일정), group_schedule(단체 일정), todo(해야 할 일), reminder(특정 시간 알림), unknown(구분되지 않음) 중 하나로 확실하게 분류한다.",
+        "title/date/start_time/end_time/members 등 사용자의 요청에서 확실한 부분만 채우고, 불확실한 부분은 None으로 남겨둔다.",
+        "우선순위와 관련된 내용이 있다면(예: 가장 우선으로, 2번째로 중요한 등) 높음/중간/낮음 중 하나로 채우고, 이와 관련된 내용이 없으면 None으로 채운다.",
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만든다.",
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
@@ -203,6 +216,7 @@ def build_week02_agent() -> object:
             # Q. response_format=StructuredRequestBatch로만 넘기면 어떤 일이 발생하는가?
             # A. 전략을 명시 안하고 스키마만 넘긴 경우에 해당하는데, 이렇게 되면 프레임워크가 임의로 기본전략을 고르게 된다.
             # 이렇게 고른 전략은 그 상황에서 안정적인 방식이 아닐 수 있기 떄문에, 안정적인 출력이 된다고 보기 어렵다.
+            # 따라서 ToolStrategy로 감싸게 되면 전략을 고정하여 안정성을 올릴 수 있기 때문에, 이 방법을 채택한다.
             response_format=ToolStrategy(StructuredRequestBatch),
             system_prompt=week02_system_prompt(),
         )
