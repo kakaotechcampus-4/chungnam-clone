@@ -377,16 +377,23 @@ def list_saved_requests(
 ) -> str:
     """SQLite에 저장된 구조화 요청 목록을 조회합니다."""
 
-    # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
-    ...
+    # ① 필터를 그대로 store에 넘긴다. WHERE 절 조립과 ? 바인딩(SQL 인젝션 방지)은 store 담당.
+    rows = _store().list_saved_requests(kind=kind, date_from=date_from, date_to=date_to)
+
+    # ② 결과가 없어도 예외 없이 rows=[] 그대로 반환한다 — "없음"도 정상적인 조회 결과다.
+    return json_payload(tool_result("list_saved_requests", rows=rows))
 
 
 @tool(args_schema=SavedRequestGetInput)
 def get_saved_request(request_id: str) -> str:
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
-    # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-    ...
+    # ① 영수증 번호(request_id)로 단건 조회. store가 못 찾으면 None을 돌려준다.
+    row = _store().get_saved_request(request_id)
+
+    # ② 못 찾아도 예외를 던지지 않고 row=None을 유지한다 —
+    #    LLM이 "해당 요청을 찾지 못했다"고 자연스럽게 답할 수 있게 한다.
+    return json_payload(tool_result("get_saved_request", row=row))
 
 
 @tool(args_schema=SavedScheduleListInput)
