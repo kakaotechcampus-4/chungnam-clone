@@ -341,9 +341,32 @@ def save_structured_request(
 ) -> str:
     """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
 
-    # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
-    # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-    ...
+    # ① 함수 인자들을 저장용 dict 하나로 모은다.
+    #    이 함수가 호출됐다는 것 자체가 args_schema(SaveStructuredRequestInput) 검증을
+    #    이미 통과했다는 뜻이므로, 여기서 다시 Pydantic 검증을 만들 필요가 없다.
+    payload = {
+        "kind": kind,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "members": members or [],
+        "priority": priority,
+        "reason": reason,
+        "original_text": original_text,
+        "source_schedule_id": source_schedule_id,
+    }
+
+    # ② None 값은 제외한다 — "모르는 값"을 DB의 원본 감사 로그(raw_json)에 남기지 않는다.
+    #    store가 .get()으로 읽으므로 키가 없어도 안전하게 None으로 처리된다.
+    payload = {key: value for key, value in payload.items() if value is not None}
+
+    # ③ 실제 SQL(원본 저장 + kind별 테이블 분기 + 공유 저장소 동기화)은 fixed store가 담당한다.
+    result = _store().save_structured_request(payload)
+
+    # ④ ok/tool_name 껍데기에 store 결과(request_id/kind/saved_rows/shared_sync)를 합쳐
+    #    JSON 문자열로 반환한다. LLM은 이 결과를 보고 저장 성공 답변을 만든다.
+    return json_payload(tool_result("save_structured_request", **result))
 
 
 @tool(args_schema=SavedRequestListInput)
