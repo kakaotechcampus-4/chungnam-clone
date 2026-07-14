@@ -27,11 +27,30 @@ from student_parts.week02_structure_natural_language_requests import (
 
 _WEEK03_AGENT: Any | None = None
 
-# TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = ""
+# Week 3 영속 메모리 규칙: SQLite 기록장은 대화·재시작과 무관하게 유지된다.
+SQLITE_MEMORY_PROMPT = (
+    "SQLite에 저장된 일정/할 일/알림은 영구 기록장이다. "
+    "대화가 바뀌거나 앱을 다시 시작해도 유지되며, 과거 대화에서 저장한 항목도 조회 tool로 찾을 수 있다. "
+    "'저장', '기록', '기억해 둬' 같은 요청은 현재 대화용 임시 메모가 아니라 SQLite 기록장에 저장한다."
+)
 
-# TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = ""
+# Week 3 tool 호출 순서 규칙: 구조화 → 저장 → 조회/수정/삭제.
+#
+# [마지막 줄 "조건 없는 삭제 금지"를 프롬프트에 넣는 이유 — 심층 방어(defense in depth)]
+#   같은 규칙을 삭제 tool 코드(_delete_saved_schedules)에서도 한 번 더 막는다.
+#   - 프롬프트 = LLM이 애초에 조건 없는 삭제 호출을 만들지 않게 하는 1차 방어
+#   - 코드 guard = 그래도 그런 호출이 오면 거부하는 2차 방어
+#   프롬프트만 믿으면 LLM이 흔들릴 때 전체 삭제 사고가 나고,
+#   코드 guard만 있으면 사용자가 불필요한 에러 응답을 자주 보게 된다. 둘 다 필요하다.
+WEEK03_TOOL_CALL_PROMPT = (
+    "자연어 저장 요청은 먼저 extract_schedule_request로 구조화한 뒤, "
+    "그 결과의 structured_request 필드 값들을 save_structured_request 인자로 전달해 저장한다. "
+    "저장된 일정 조회는 personal_list_saved_schedules, 저장 요청 이력 조회는 list_saved_requests, "
+    "단건 확인은 get_saved_request를 쓴다. "
+    "수정은 personal_update_saved_schedule, 삭제는 personal_delete_saved_schedules를 쓰며, "
+    "schedule_id를 모르면 먼저 personal_list_saved_schedules로 후보를 조회해 확인한다. "
+    "삭제는 schedule_ids나 명시적인 날짜/제목 조건 없이 호출하지 않는다."
+)
 
 
 # [3주차 수강생 구현 가이드]
@@ -491,12 +510,34 @@ def week03_system_prompt() -> str:
 def week03_prompt_parts() -> list[str]:
     """1~3주차 system prompt 조각을 누적합니다."""
 
+    # 기준일은 1·2주차와 같은 방식으로 동적 주입한다.
+    today = current_app_date_iso()
+
     return [
         *week02_prompt_parts(),
-        # TODO: Week 2 구조화 결과를 Week 3 SQLite 저장 흐름으로 연결하는 지시를 추가하세요.
+        # Week 2 구조화 결과 → Week 3 저장 입력 연결 규칙.
+        #
+        # ["래퍼 키를 넘기지 않는다"가 중요한 이유]
+        #   extract_schedule_request의 반환은 {ok, tool_name, base_date, structured_request:{...}} 봉투 형태다.
+        #   LLM이 이 봉투째로 save_structured_request에 넘기면, 저장 tool이 받은 인자가 통째로
+        #   DB의 원본 감사 로그(structured_requests.raw_json)에 박제되므로
+        #   ok/tool_name 같은 "통신용 메타데이터"가 일정 데이터에 섞여 버린다.
+        #   저장할 것은 봉투가 아니라 내용물(structured_request 안의 필드들)뿐이다.
+        (
+            "Week 2의 구조화 결과는 이제 최종 답변이 아니라 저장 입력이다. "
+            "extract_schedule_request 결과 JSON의 structured_request 안에 있는 필드 값들만 "
+            "save_structured_request에 그대로 전달하고, ok/tool_name/base_date 같은 "
+            "래퍼 키나 원문 문장 전체를 저장 인자로 넘기지 않는다."
+        ),
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
-        # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
+        # 현재 날짜 + Week 3 tool 선택 기준 + 이번 주차 범위.
+        (
+            f"오늘은 {today}이다. "
+            "일정/할 일/알림의 저장·조회·수정·삭제는 SQLite 기록장 tool을 우선 사용한다. "
+            "tool 결과를 받은 뒤에는 저장/조회 내용을 짧고 정확하게 한국어로 답한다. "
+            "이번 주에는 RAG 검색이나 외부 멤버 일정 조율을 하지 않는다."
+        ),
     ]
 
 
