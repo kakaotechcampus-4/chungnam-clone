@@ -4,6 +4,8 @@ __pycache__/
 
 스크린샷/
 
+student-week-sync-CLAUDE.md
+
 .env
 .env.*
 !.env.example
