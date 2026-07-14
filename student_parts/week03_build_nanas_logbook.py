@@ -405,9 +405,17 @@ def personal_list_saved_schedules(
 ) -> str:
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
 
-    # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
-    # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
-    ...
+    # ① kind를 지정하지 않으면 개인 일정을 기본으로 본다 — 이 tool의 주 용도가 "내 일정 보여줘"라서다.
+    effective_kind = kind or "personal_schedule"
+
+    # ② 실제 적용된 필터를 결과에 같이 담는다(echo). LLM과 trace를 읽는 사람이
+    #    "무슨 기준으로 조회된 목록인지"를 결과만 보고 알 수 있다.
+    filters = {"kind": effective_kind, "date_from": date_from, "date_to": date_to, "limit": limit}
+
+    # ③ 서랍(schedules 테이블) 조회. 날짜/시간순 정렬과 request_kind 결합은 store 담당.
+    schedules = _store().list_schedules(limit=limit, kind=effective_kind, date_from=date_from, date_to=date_to)
+
+    return json_payload(tool_result("personal_list_saved_schedules", filters=filters, schedules=schedules))
 
 
 def delete_saved_schedules_dict(
