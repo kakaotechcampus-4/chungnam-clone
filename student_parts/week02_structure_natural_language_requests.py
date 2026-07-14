@@ -6,7 +6,7 @@ from typing import Any, Literal
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -170,6 +170,21 @@ class StructuredRequest(BaseModel):
     reason: str | None = Field(default=None, description="이렇게 구조화한 판단 근거입니다.")
     original_text: str = Field(default="", description="구조화의 근거가 된 원문 텍스트입니다.")
 
+    @model_validator(mode="after")
+    def _resolve_personal_group_contradiction(self) -> "StructuredRequest":
+        """순수 LLM 판단 경로에서만 동작하는 방어 로직.
+
+        personal_schedule인데 members가 채워져 있으면, "참석자 조율이 필요한 일정"이라는
+        신호로 보고 group_schedule로 자동 보정합니다. (tool 호출 결과를 근거로 만든 경로는
+        model_construct()로 이 validator를 우회하므로 영향받지 않습니다.)
+        """
+
+        if self.kind == "personal_schedule" and self.members:
+            note = "[auto-corrected] members가 있어 personal_schedule -> group_schedule로 보정됨"
+            self.reason = f"{self.reason} {note}".strip() if self.reason else note
+            self.kind = "group_schedule"
+        return self
+
 
 class StructuredRequestBatch(BaseModel):
     """여러 자연어 의도를 StructuredRequest 목록으로 나누는 메인과제 스키마입니다."""
@@ -197,20 +212,22 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
 def _structured_request_from_personal_schedule(
     created_schedule: dict[str, Any], original_text: str
 ) -> StructuredRequest:
-    """personal_create_schedule tool JSON을 LLM 재해석 없이 결정적으로 매핑합니다.
+    """personal_create_schedule tool JSON을 LLM 재해석/재검증 없이 결정적으로 매핑합니다.
 
-    tool 호출이 이미 발생했다는 사실 자체가 kind="personal_schedule"이라는 확정 신호이므로
-    LLM structured output에 다시 판단시키지 않고 하드코딩합니다. attendees -> members도
-    LLM이 다시 옮겨적게 하지 않고 그대로 복사해 항상 일치하도록 만듭니다.
+    model_construct()로 만들어 _resolve_personal_group_contradiction validator를 우회합니다.
+    Week1 tool은 "개인 일정 + attendees 동반"을 정상 케이스로 지원하므로, members가 있어도
+    group_schedule로 보정되면 안 되기 때문입니다.
     """
 
-    return StructuredRequest(
+    return StructuredRequest.model_construct(
         kind="personal_schedule",
         title=created_schedule.get("title"),
         date=created_schedule.get("date"),
         start_time=created_schedule.get("start_time"),
         end_time=created_schedule.get("end_time"),
         members=list(created_schedule.get("attendees") or []),
+        priority=None,
+        reason="personal_create_schedule tool 호출 결과를 근거로 결정적으로 매핑함",
         original_text=original_text,
     )
 
@@ -294,6 +311,11 @@ def week02_prompt_parts(base_date: str | None = None) -> list[str]:
         "kind/title/date/start_time/end_time/members/priority/reason/original_text 필드를 채운 "
         "StructuredRequest로 구조화합니다. 한 문장에 여러 일정/할 일/알림 의도가 섞여 있으면 "
         "StructuredRequestBatch.requests에 여러 StructuredRequest로 나눠 담고, 하나뿐이어도 list로 담습니다.",
+        "요청 종류(kind)를 판단할 때는 다음 기준을 따릅니다: "
+        "다른 사람이 참석자로 언급되어 일정 조율이 필요하면 group_schedule이고 members에 그 인원을 채웁니다. "
+        "사용자 혼자만 참여하는 일정은 personal_schedule이며 이 경우 members는 비워둡니다. "
+        "마감이나 완료 여부가 중요한 개인 작업은 todo, 특정 시점 알림만 필요하면 reminder입니다. "
+        "판단이 애매하면 unknown으로 둡니다.",
         f"개인 일정 생성 요청에서는 {personal_create_schedule.name} tool을 호출한 뒤, "
         "그 결과 JSON의 created_schedule 필드를 읽어 StructuredRequest 필드를 채웁니다. "
         "이미 tool 결과로 받은 JSON payload가 있다면 다시 tool을 호출하지 않고 그 payload를 그대로 구조화 근거로 사용합니다.",
