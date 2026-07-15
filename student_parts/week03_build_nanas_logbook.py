@@ -359,9 +359,56 @@ def _delete_saved_schedules(
 ) -> dict[str, Any]:
     """삭제 guard와 DB 호출을 한 곳에 둡니다."""
 
-    # TODO: 삭제 조건이 없으면 거부하고, delete_all 또는 명시 필터에 맞는 store 메서드를 호출하세요.
-    # TODO: deleted_count, filters, deleted가 포함된 tool 결과 dict를 반환하세요.
-    ...
+    # 어떤 조건으로 삭제를 시도했는지 결과에 그대로 되돌려준다(자기서술적 응답).
+    filters = {
+        "schedule_ids": schedule_ids,
+        "date": date,
+        "title": title,
+        "start_time": start_time,
+        "time_unspecified": time_unspecified,
+        "delete_all": delete_all,
+    }
+
+    # ① 심층 방어 2차(코드 guard): 삭제 조건이 하나도 없으면 거부한다.
+    #    프롬프트(1차)가 뚫려도 여기서 전체 오삭제 사고를 막는다.
+    #
+    #    schedule_ids만 bool()로 따로 감싼 이유:
+    #    None(인자 안 옴)과 빈 리스트 [](인자는 왔지만 ID가 0개) 둘 다 "조건 없음"으로
+    #    취급해야 한다. bool(None)도 bool([])도 False라서 두 경우를 한 번에 걸러내며,
+    #    any() 안의 다른 값들과 분리해 "리스트는 내용물이 있어야 조건으로 인정"이라는
+    #    의도를 코드에서 바로 읽을 수 있게 했다.
+    has_condition = bool(schedule_ids) or any([date, title, start_time, time_unspecified, delete_all])
+    if not has_condition:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            error="삭제 조건이 없습니다. schedule_ids 또는 날짜/제목 같은 명시 조건이 필요합니다.",
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+        )
+
+    # ② 전체 삭제는 delete_all=True라는 "명시적 의사표시"가 있을 때만 별도 경로로 실행한다.
+    #    나머지는 명시 필터에 맞는 일정만 골라 지운다. (공유 저장소 복사본 정리는 store 담당)
+    if delete_all:
+        deleted = store.delete_all_schedules()
+    else:
+        deleted = store.delete_schedules_by_filter(
+            schedule_ids=schedule_ids,
+            date=date,
+            title=title,
+            start_time=start_time,
+            time_unspecified=time_unspecified,
+        )
+
+    # ③ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지
+    #    3종 세트로 반환한다 — trace에서 삭제 내역을 추적하기 위한 규약.
+    return tool_result(
+        "personal_delete_saved_schedules",
+        deleted_count=len(deleted),
+        filters=filters,
+        deleted=deleted,
+    )
 
 
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
