@@ -385,6 +385,12 @@ def save_structured_request(
 
     # ④ ok/tool_name 껍데기에 store 결과(request_id/kind/saved_rows/shared_sync)를 합쳐
     #    JSON 문자열로 반환한다. LLM은 이 결과를 보고 저장 성공 답변을 만든다.
+    #
+    #    [shared_sync는 어디서 오나 — 우리가 만든 값이 아니다]
+    #    fixed/app_store.py의 save_structured_request가 일정(kind=personal/group_schedule)을
+    #    저장할 때, 외부 "공유 저장소"에도 내 busy-time 사본을 자동 복사하고 그 결과를
+    #    shared_sync로 돌려준다. Week 5-6에서 카나가 여러 사람의 일정을 조율할 때
+    #    서로의 바쁜 시간을 보기 위한 밑작업이며, 이 tool은 **result로 그대로 통과시킬 뿐이다.
     return json_payload(tool_result("save_structured_request", **result))
 
 
