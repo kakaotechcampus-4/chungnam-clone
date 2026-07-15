@@ -174,22 +174,54 @@ class StructuredRequestBatch(BaseModel):
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
-    """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
+    """dict/JSON 문자열/StructuredRequest 를 StructuredRequest 하나로 정규화합니다. LLM을 호출하지 않습니다."""
 
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return StructuredRequest(kind="unknown", original_text=value)
+        if isinstance(parsed, dict):
+            return StructuredRequest.model_validate(parsed)
+        return StructuredRequest(kind="unknown", original_text=value)
+    raise TypeError(f"StructuredRequest로 정규화할 수 없는 타입입니다: {type(value)!r}")
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
-    """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
+    """자연어 한 문장을 LLM structured output으로 StructuredRequest 하나로 구조화합니다."""
 
-    ...
+    prompt = (
+        "아래 한 문장을 StructuredRequest 필드로 구조화하라. "
+        f"오늘은 {current_app_date_iso()}이다. "
+        "사용자가 상대적인 날짜(내일, 다음 주 화요일 등)를 말하면 오늘 날짜 기준으로 YYYY-MM-DD로 변환한다. "
+        "확실하지 않은 필드는 None 또는 빈 리스트로 둔다.\n\n"
+        f"문장: {text}"
+    )
+    structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
+    result = structured_llm.invoke(prompt)
+    structured = _coerce_structured_request(result)
+    if not structured.original_text:
+        structured = structured.model_copy(update={"original_text": text})
+    return structured
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
+    """자연어 요청을 StructuredRequest로 구조화해 저장 흐름에 넘길 수 있는 JSON 문자열로 반환합니다."""
 
-    ...
+    structured = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "structured_request": structured.model_dump(),
+        },
+        ensure_ascii=False,
+    )
 
 
 def week02_tools() -> list[Any]:
