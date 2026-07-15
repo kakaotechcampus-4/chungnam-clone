@@ -467,20 +467,19 @@ def personal_delete_saved_schedules(
 
 
 def week03_tools() -> list[Any]:
-    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
+    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회 도구를 조립합니다."""
 
-    base_tools = [
-        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item for item in week01_tools()
-    ]
+    # 1차 PR(메인과제)에서는 구현이 끝난 tool만 노출한다.
+    # 심화 tool(personal_create_schedule 이중기록, personal_update/delete_saved_schedules)은
+    # 아직 stub 이라 노출하면 LLM 이 호출해 None 을 받을 수 있으므로 2차 PR 전까지 목록에서 제외한다.
+    # (Week 1 personal_create_schedule 은 임시 메모리 생성 tool 그대로 둔다.)
     return [
-        *base_tools,
+        *week01_tools(),
         extract_schedule_request,
         save_structured_request,
         list_saved_requests,
         get_saved_request,
         personal_list_saved_schedules,
-        personal_update_saved_schedule,
-        personal_delete_saved_schedules,
     ]
 
 
