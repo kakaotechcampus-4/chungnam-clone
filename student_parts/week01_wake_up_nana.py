@@ -254,7 +254,7 @@ def week01_prompt_parts() -> list[str]:
         f"오늘 날짜는 {current_app_date_iso()}이다.",
         "날짜는 항상 YYYY-MM-DD 형식을 사용한다.",
         "상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다.",
-        f"개인적인 일정 생성이 필요하면 {personal_create_schedule.name} 도구를 호출한 뒤 짧게 답한다."
+        f"개인적인 일정 생성이 필요하면 {personal_create_schedule.name} 도구를 호출한 뒤 짧게 답한다.",
         f"일정 조회가 필요하면 {personal_list_schedules.name} 도구를 사용한다.",
         f"{personal_list_schedules.name} tool을 사용할때는 date_from과 date_to를 YYYY-MM-DD 형식으로 넣는다.",
         f"일정 삭제가 필요하면 {personal_delete_schedule.name} 도구를 사용한다.",
