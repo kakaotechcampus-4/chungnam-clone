@@ -49,7 +49,13 @@ WEEK03_TOOL_CALL_PROMPT = (
     "단건 확인은 get_saved_request를 쓴다. "
     "수정은 personal_update_saved_schedule, 삭제는 personal_delete_saved_schedules를 쓰며, "
     "schedule_id를 모르면 먼저 personal_list_saved_schedules로 후보를 조회해 확인한다. "
-    "삭제는 schedule_ids나 명시적인 날짜/제목 조건 없이 호출하지 않는다."
+    "삭제는 schedule_ids나 명시적인 날짜/제목 조건 없이 호출하지 않는다. "
+    # 시나리오 검증 중 발견한 도구 혼동 방지 규칙:
+    # 모델이 이름이 비슷한 Week 1 인메모리 tool(personal_list_schedules)을 집어
+    # "일정 없음"으로 오답한 사례가 있어, 두 저장소의 구분을 명시한다.
+    "주의: personal_list_schedules와 personal_delete_schedule은 현재 대화 전용 임시 메모리만 보는 "
+    "Week 1 tool이라 SQLite 기록장과 결과가 다르다. "
+    "저장된 일정의 조회와 수정/삭제 후보 확인에는 반드시 personal_list_saved_schedules를 쓴다."
 )
 
 
