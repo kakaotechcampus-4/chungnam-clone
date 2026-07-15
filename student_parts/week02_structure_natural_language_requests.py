@@ -146,22 +146,48 @@ class StructuredRequestBatch(BaseModel):
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
-    """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
+    """LangChain structured output 결과를 StructuredRequest로 정규화합니다."""
 
-    ...
+    if isinstance(value, StructuredRequest): #value가 Pydantic 객체면 그대로 리턴
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value) #dict 형식으로 왔을 경우 Pydantic 모델로 검증하며 변환시킴
+    raise RuntimeError(
+        "StructuredRequest 또는 dict 형태의 structured output이 필요합니다. "
+        f"현재 타입: {type(value).__name__}"
+    )
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
-    """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
+    """Week 3 이상에서 agent를 새로 띄우지 않고 자연어를 StructuredRequest로 바꿉니다."""
 
-    ...
+    structured_model = chat_model().with_structured_output( #단순히 자연어를 StructuredRequest 구조로 변환하는 LLM 생성
+        StructuredRequest,
+        method="function_calling",
+    )
+    result = structured_model.invoke(
+        [
+            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
+            {"role": "user", "content": text},
+        ]
+    )
+    return _coerce_structured_request(result) #결과를 한번 더 검증하여 StructuredRequest 객체를 리턴하기
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
+    """Week 3 이상 agent가 저장/조율 전에 호출하는 구조화 bridge tool입니다."""
 
-    ...
+    structured = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "base_date": current_app_date_iso(),
+            "structured_request": structured.model_dump(), #StructuredRequest객체를 dict 타입으로 변환하기
+        },
+        ensure_ascii=False,
+    )
 
 
 def week02_tools() -> list[Any]:

@@ -343,11 +343,29 @@ def save_structured_request(
 
     # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
     # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-    ...
+    payload = { #검증된 함수 인자를 dict로 만들어 저장
+        "kind" : kind,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "members": members or [],
+        "priority": priority,
+        "reason": reason,
+        "original_text": original_text,
+        "source_schedule_id": source_schedule_id,
+    }
+    #payload에서 value 값이 None인 것을 제외한 dict 생성
+    save_payload = {key : value for key, value in payload.items() if value is not None}
+    #_store()를 통해 DB와 연결된 객체를 생성하고 함수 호출로 save_payload 전달하여 SQLite에 저장 후 결과 dict 받아오기
+    result = _store().save_structured_request(save_payload)
+
+    # tool_result 헬퍼 함수를 통해 ok/tool_name을 포함하여 저장 결과를 문자열로 만들어 리턴
+    return json_payload(tool_result(save_structured_request.name, **result))
 
 
 @tool(args_schema=SavedRequestListInput)
-def list_saved_requests(
+def list_saved_requests( # "이번 주에 내가 만든 할 일/알림/일정 전체 이력 보여줘" 같은 요청에 답할 때 사용하는 툴
     kind: RequestKind | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
@@ -355,19 +373,23 @@ def list_saved_requests(
     """SQLite에 저장된 구조화 요청 목록을 조회합니다."""
 
     # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
-    ...
+    #인자 그대로 넘겨서 조회한 결과를 result로 가져오기
+    result = _store().list_saved_requests(kind, date_from, date_to)
+
+    return json_payload(tool_result(list_saved_requests.name, rows = result))
 
 
 @tool(args_schema=SavedRequestGetInput)
-def get_saved_request(request_id: str) -> str:
+def get_saved_request(request_id: str) -> str: # 여러 요청 중 하나를 조회하는 함수
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
     # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-    ...
+    row = _store().get_saved_request(request_id)
+    return json_payload(tool_result(get_saved_request.name, row = row))
 
 
 @tool(args_schema=SavedScheduleListInput)
-def personal_list_saved_schedules(
+def personal_list_saved_schedules( # 원본 전체가 아닌 schedules 테이블만 조회함. 즉 일정에 대해서 조회하는 함수
     limit: int = 50,
     kind: RequestKind | None = None,
     date_from: str | None = None,
@@ -377,7 +399,16 @@ def personal_list_saved_schedules(
 
     # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
     # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
-    ...
+    kind = kind or "personal_schedule"
+    schedules = _store().list_schedules(limit, kind, date_from, date_to)
+
+    return json_payload(
+        tool_result(
+            personal_list_saved_schedules.name,
+            filters={"kind": kind, "date_from": date_from, "date_to": date_to},
+            schedules = schedules,
+        )
+    )
 
 
 def delete_saved_schedules_dict(
@@ -470,7 +501,11 @@ def build_week03_agent() -> object:
     global _WEEK03_AGENT
     if _WEEK03_AGENT is None:
         # TODO: chat_model(), week03_tools(), week03_system_prompt()로 Week 3 LangChain agent를 생성하세요.
-        ...
+        _WEEK03_AGENT = create_agent(
+            model=chat_model(),
+            tools=week03_tools(),
+            system_prompt=week03_system_prompt(),
+        )
     return _WEEK03_AGENT
 
 
