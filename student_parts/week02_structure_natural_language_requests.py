@@ -176,7 +176,7 @@ def extract_structured_request(text: str) -> StructuredRequest:
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
+    """사용자의 자연어 일정/할 일 요청을 구조화된 데이터(JSON)로 변환해주는 도구입니다."""
 
     structured_request = extract_structured_request(query)
     return json.dumps(
