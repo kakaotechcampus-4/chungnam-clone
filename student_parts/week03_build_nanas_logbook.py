@@ -340,10 +340,25 @@ def save_structured_request(
     source_schedule_id: str | None = None,
 ) -> str:
     """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
+    field_to_dict = {
+        "kind": kind,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "members": members,
+        "priority": priority,
+        "reason": reason,
+        "original_text": original_text,
+        "source_schedule_id": source_schedule_id,
+    }
 
     # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
+    save_DB_result = _store().save_structured_request(field_to_dict)
+
     # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-    ...
+    return json_payload(tool_result("save_structured_request", **save_DB_result))
+    
 
 
 @tool(args_schema=SavedRequestListInput)
@@ -355,7 +370,8 @@ def list_saved_requests(
     """SQLite에 저장된 구조화 요청 목록을 조회합니다."""
 
     # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
-    ...
+    search_rows = _store().list_saved_requests(kind=kind, date_from=date_from, date_to=date_to)
+    return json_payload(tool_result("list_saved_requests", rows=search_rows))
 
 
 @tool(args_schema=SavedRequestGetInput)
@@ -363,7 +379,8 @@ def get_saved_request(request_id: str) -> str:
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
     # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-    ...
+    single_search_row = _store().get_saved_request(request_id)
+    return json_payload(tool_result("get_saved_request", row=single_search_row))
 
 
 @tool(args_schema=SavedScheduleListInput)
@@ -376,8 +393,15 @@ def personal_list_saved_schedules(
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
 
     # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
+    if kind is None: 
+        effective_kind = "personal_schedule" 
+    else: 
+        effective_kind = kind
+    filters_schedules = _store().list_schedules(limit=limit, kind=effective_kind, date_from=date_from, date_to=date_to)
+
     # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
-    ...
+    filters = {"limit": limit, "kind": effective_kind, "date_from": date_from, "date_to": date_to}
+    return json_payload(tool_result("personal_list_saved_schedules", filters=filters, schedules=filters_schedules))
 
 
 def delete_saved_schedules_dict(
@@ -470,7 +494,11 @@ def build_week03_agent() -> object:
     global _WEEK03_AGENT
     if _WEEK03_AGENT is None:
         # TODO: chat_model(), week03_tools(), week03_system_prompt()로 Week 3 LangChain agent를 생성하세요.
-        ...
+        _WEEK03_AGENT = create_agent(
+            model=chat_model(),
+            tools=week03_tools(),
+            system_prompt=week03_system_prompt(),
+        )
     return _WEEK03_AGENT
 
 
