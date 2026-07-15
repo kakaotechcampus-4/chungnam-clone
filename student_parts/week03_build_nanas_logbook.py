@@ -256,9 +256,32 @@ class SaveStructuredRequestInput(StructuredRequest):
 def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dict[str, Any] | str) -> SaveStructuredRequestInput:
     """저장 입력을 SaveStructuredRequestInput 하나로 모읍니다."""
 
-    # TODO: dict/JSON/자연어/StructuredRequest 입력을 SaveStructuredRequestInput으로 검증하고 정규화하세요.
-    ...
+    # ① 이미 저장 입력이면 그대로 통과 (불필요한 재검증 없음).
+    if isinstance(value, SaveStructuredRequestInput):
+        return value
 
+    # ② StructuredRequest 객체와 dict는 model_validate로 —
+    #    검증 직전에 unwrap_legacy_payload(1층)가 자동으로 봉투를 벗긴다.
+    if isinstance(value, (StructuredRequest, dict)):
+        return SaveStructuredRequestInput.model_validate(value)
+
+    # ③ 문자열: JSON이면 dict로 풀어 검증하고, JSON이 아니면 자연어로 보고
+    #    Week 2 bridge(extract_structured_request, LLM 호출)로 구조화한다.
+    if isinstance(value, str):
+        try:
+            decoded = json.loads(value)
+        except json.JSONDecodeError:
+            decoded = None
+        if isinstance(decoded, dict):
+            return SaveStructuredRequestInput.model_validate(decoded)
+        return SaveStructuredRequestInput.model_validate(extract_structured_request(value).model_dump())
+
+    # ④ 그 외 타입은 조용히 통과시키지 않는다 (2주차 _coerce와 같은 fail fast).
+    raise RuntimeError(f"저장 입력으로 변환할 수 없는 타입입니다: {type(value).__name__}")
+
+# save_structured_request_payload   ← 3층: 정규화된 입력을 실제로 저장
+#     └─ _save_input_from           ← 2층: 타입별 분류 (객체/dict/JSON/자연어)
+#         └─ unwrap_legacy_payload  ← 1층: 봉투 벗기기 (Pydantic 검증 직전 자동 실행)
 
 def save_structured_request_payload(
     request: SaveStructuredRequestInput | StructuredRequest | dict[str, Any] | str,
