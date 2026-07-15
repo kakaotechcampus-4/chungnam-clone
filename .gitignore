@@ -17,6 +17,9 @@ htmlcov/
 .vscode/
 .idea/
 
+.gradio/
+CLAUDE.md
+
 venv/
 .venv/
 node_modules/
