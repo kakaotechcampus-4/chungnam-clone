@@ -418,6 +418,17 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
     ...
 
 
+# [@tool 데코레이터의 역할 — 함수를 LLM용 "부스"로 바꾸는 장치]
+#   ① 간판(명함) 생성: 함수명 + docstring + 인자 스키마를 JSON Schema로 변환해
+#      매 LLM 호출마다 동봉한다. docstring은 사람용 문서가 아니라 LLM이 tool을
+#      고르는 근거가 되는 프롬프트의 일부다.
+#   ② 검문소: 모델이 보낸 tool_call 인자를 args_schema(Pydantic)로 함수 실행 "전"에
+#      검증한다. 불량 인자는 함수 본문에 닿지 못하고 에러로 모델에게 돌아가 재시도된다.
+#      (SaveStructuredRequestInput의 unwrap_legacy_payload도 이 검문 단계에서 자동 실행)
+#   ③ 실행 대리인: 데코레이터를 거친 함수는 StructuredTool 객체가 된다. agent 루프가
+#      tool_call 이름으로 이 객체를 찾아 .invoke(인자)로 실행하고, 반환 문자열을
+#      같은 id의 tool_result로 포장해 모델에게 돌려준다.
+#      → 그래서 테스트에서도 일반 호출이 아니라 .invoke({...})를 쓴다.
 @tool("personal_create_schedule")
 def personal_create_schedule(
     title: str,
@@ -583,9 +594,24 @@ def personal_delete_saved_schedules(
 ) -> str:
     """Nana가 고른 일정 ID나 날짜/제목/시간 필터로 저장 일정을 삭제합니다."""
 
-    # TODO: _delete_saved_schedules(...)에 삭제 조건을 전달하고 결과를 JSON 문자열로 반환하세요.
-    ...
+    # LLM용 입구: args_schema 검증을 통과한 조건을 핵심부에 그대로 전달하고,
+    # 결과 dict를 JSON 문자열로 포장만 한다(LLM에게 가는 반환은 항상 문자열).
+    # guard(조건 없는 삭제 거부)는 핵심부가 담당하므로 여기서 반복하지 않는다.
+    return json_payload(
+        _delete_saved_schedules(
+            store=_store(),
+            schedule_ids=schedule_ids,
+            date=date,
+            title=title,
+            start_time=start_time,
+            time_unspecified=time_unspecified,
+            delete_all=delete_all,
+        )
+    )
 
+# [LLM]  personal_delete_saved_schedules (@tool, JSON 반환) ─┐
+#                                                            ├→ _delete_saved_schedules
+# [코드]  delete_saved_schedules_dict (dict 반환) ────────────┘   (guard + store 호출, 단일 진실)
 
 def week03_tools() -> list[Any]:
     """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
