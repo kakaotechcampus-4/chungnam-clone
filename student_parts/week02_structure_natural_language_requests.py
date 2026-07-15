@@ -230,9 +230,23 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     raise RuntimeError(f"예상치 못한 structured output 타입입니다: {type(value)!r}")
 
 
+def _weekday_alias_fragment(alias: str) -> str:
+    """별칭 하나를 정규식 alternation 조각으로 만듭니다.
+
+    월/화/수/목/금/토/일처럼 한 글자짜리 별칭은 "토익"의 "토"처럼 다른 단어의 일부일 수 있다.
+    바로 뒤에 다른 글자가 이어져 단어 경계가 없으면(예: 토+익) 매칭하지 않도록 \b로 제한한다.
+    "요일" 전체형/영문 별칭(길이>1)은 "월요일과"처럼 조사가 바로 붙는 기존 케이스가 있어 그대로 둔다.
+    """
+
+    escaped = re.escape(alias)
+    if len(alias) == 1:
+        return escaped + r"\b"
+    return escaped
+
+
 _NEXT_WEEK_WEEKDAY_PATTERN = re.compile(
     r"다음\s*주\s*("
-    + "|".join(re.escape(alias) for alias in sorted(_WEEKDAY_ALIASES, key=len, reverse=True))
+    + "|".join(_weekday_alias_fragment(alias) for alias in sorted(_WEEKDAY_ALIASES, key=len, reverse=True))
     + r")",
     re.IGNORECASE,
 )
