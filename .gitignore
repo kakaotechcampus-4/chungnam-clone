@@ -4,9 +4,6 @@ __pycache__/
 
 스크린샷/
 
-CLAUDE.local.md
-.claude/
-
 .env
 .env.*
 !.env.example
