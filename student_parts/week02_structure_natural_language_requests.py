@@ -341,7 +341,7 @@ def week02_prompt_parts() -> list[str]:
         "읽어 그대로 StructuredRequest 필드로 옮겨 담아라. attendees는 members 필드에 대응한다.",
 
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
-        "너는 이번 주차에서 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다.",
+        "너는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율 tool이 주어지지 않는 한 그 기능을 쓰지 않는다.",
     ]
 
 

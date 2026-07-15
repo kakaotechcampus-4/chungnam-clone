@@ -28,10 +28,25 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = ""
+SQLITE_MEMORY_PROMPT = """
+    너는 이제 Week 1처럼 대화 안에서만 기억하는 임시 메모리를 쓰지 않아.
+    저장된 일정/할 일/알림은 앱의 SQLite DB에 남아 있으며,
+    대화가 새로 시작되거나 앱이 재시작되어도 그대로 유지돼야 해.
+    사용자가 '내 일정 뭐 있어?', '알림 보여줘', '할 일 뭐 있어?', '아까 저장한 거 뭐였지?' 처럼
+    기존 일정/할 일/알림의 존재나 내용을 묻는 말이면(꼭 '저장된'이라는 단어가 없어도),
+    네 기억이나 이전 turn의 대화 내용에 의존하지 말고
+    반드시 personal_list_saved_schedules 나 list_saved_requests / get_saved_request 로
+    DB를 직접 조회한 뒤 답하도록.
+"""
+
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = ""
+WEEK03_TOOL_CALL_PROMPT = """
+    일정/할 일/알림을 저장해야 하는 자연어 요청이 들어오면
+    먼저 extract_schedule_request 를 호출해 구조화한 뒤,
+    그 결과의 structured_request 필드 값을 그대로 save_structured_request 의 인자로 전달해라.
+    구조화 없이 자연어를 바로 save_structured_request 에 넘기지 마라.
+"""
 
 
 # [3주차 수강생 구현 가이드]
@@ -341,9 +356,26 @@ def save_structured_request(
 ) -> str:
     """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
 
-    # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
-    # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-    ...
+    members = members if members is not None else []
+
+    payload = {
+        "kind": kind,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "members": members,
+        "priority": priority,
+        "reason": reason,
+        "original_text": original_text,
+        "source_schedule_id": source_schedule_id,
+    }
+
+    payload = {k: v for k, v in payload.items() if v is not None}
+
+    result = _store().save_structured_request(payload)
+    return json_payload(tool_result("save_structured_request", **result))
+
 
 
 @tool(args_schema=SavedRequestListInput)
@@ -354,16 +386,16 @@ def list_saved_requests(
 ) -> str:
     """SQLite에 저장된 구조화 요청 목록을 조회합니다."""
 
-    # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
-    ...
+    rows = _store().list_saved_requests(kind=kind, date_from=date_from, date_to=date_to)
+    return json_payload(tool_result("list_saved_requests", rows=rows))
 
 
 @tool(args_schema=SavedRequestGetInput)
 def get_saved_request(request_id: str) -> str:
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
-    # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-    ...
+    row = _store().get_saved_request(request_id)
+    return json_payload(tool_result("get_saved_request", row=row))
 
 
 @tool(args_schema=SavedScheduleListInput)
@@ -375,9 +407,27 @@ def personal_list_saved_schedules(
 ) -> str:
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
 
-    # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
-    # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
-    ...
+    kind = kind if kind is not None else "personal_schedule"
+
+    schedules = _store().list_schedules(
+        limit=limit, 
+        kind=kind, 
+        date_from=date_from,
+        date_to=date_to
+    )
+    filters = {
+        "limit": limit,
+        "kind": kind,
+        "date_from": date_from,
+        "date_to": date_to,
+    }
+
+    return json_payload(tool_result(
+        "personal_list_saved_schedules",
+        filters=filters,
+        schedules=schedules,
+    ))
+
 
 
 def delete_saved_schedules_dict(
@@ -458,7 +508,9 @@ def week03_prompt_parts() -> list[str]:
         # TODO: Week 2 구조화 결과를 Week 3 SQLite 저장 흐름으로 연결하는 지시를 추가하세요.
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
-        # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
+        "일정/할 일/알림을 새로 만들 때는 extract_schedule_request 로 구조화한 뒤 save_structured_request 로 저장해라. "
+        "저장된 내용을 조회할 때는 personal_list_saved_schedules를 사용해라. "
+        "너는 이번 주차에서 RAG 검색이나 외부 멤버와의 일정 조율까지는 하지 않는다.",
     ]
 
 
@@ -469,8 +521,11 @@ def build_week03_agent() -> object:
         raise RuntimeError("PROXY_TOKEN이 .env에 필요합니다.")
     global _WEEK03_AGENT
     if _WEEK03_AGENT is None:
-        # TODO: chat_model(), week03_tools(), week03_system_prompt()로 Week 3 LangChain agent를 생성하세요.
-        ...
+        _WEEK03_AGENT = create_agent(
+            model=chat_model(),
+            tools=week03_tools(),
+            system_prompt=week03_system_prompt(),
+        )
     return _WEEK03_AGENT
 
 
