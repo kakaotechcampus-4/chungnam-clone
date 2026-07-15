@@ -290,8 +290,16 @@ def save_structured_request_payload(
 ) -> dict[str, Any]:
     """검증된 structured request를 앱 DB에 저장합니다."""
 
-    # TODO: 입력을 검증한 뒤 AppSQLiteStore.save_structured_request(...)로 저장하고 tool 결과를 반환하세요.
-    ...
+    # ① 어떤 형태(객체/dict/JSON/자연어)든 2층(_save_input_from)으로 정규화·검증한다.
+    save_input = _save_input_from(request)
+
+    # ② None 값을 제외한 dict로 바꿔 저장한다 — save_structured_request tool과 같은 규칙.
+    payload = {key: value for key, value in save_input.model_dump().items() if value is not None}
+    result = (store or _store()).save_structured_request(payload)
+
+    # ③ tool과 같은 껍데기로 돌려주되 JSON 문자열이 아니라 dict를 반환한다 —
+    #    이 helper는 LLM이 아니라 파이썬 코드가 직접 부르는 경로이기 때문이다.
+    return tool_result("save_structured_request", **result)
 
 
 class SavedRequestListInput(BaseModel):
