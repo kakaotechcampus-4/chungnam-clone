@@ -414,8 +414,22 @@ def _delete_saved_schedules(
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
-    # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
-    ...
+    # Week 1 dict와 Week 3 스키마의 어휘 차이를 매핑한다:
+    #   attendees → members            (Week 2부터 넓어진 이름)
+    #   id        → source_schedule_id (store의 중복 저장 방지 열쇠 — 같은 임시 일정을
+    #                                    두 번 변환해도 SQLite에는 한 번만 저장된다)
+    # end_time의 Week 1 기본값 "미정"은 자리표시 문자열이므로 None으로 정규화한다(규칙 ⑤와 일관).
+    end_time = schedule.get("end_time")
+    return SaveStructuredRequestInput(
+        kind="personal_schedule",
+        title=schedule.get("title"),
+        date=schedule.get("date"),
+        start_time=schedule.get("start_time"),
+        end_time=None if end_time == "미정" else end_time,
+        members=schedule.get("attendees") or [],
+        source_schedule_id=schedule.get("id"),
+        reason="Week 1 임시 일정을 SQLite 기록장에 이중 기록",
+    )
 
 
 # [@tool 데코레이터의 역할 — 함수를 LLM용 "부스"로 바꾸는 장치]
