@@ -243,10 +243,7 @@ class SaveStructuredRequestInput(StructuredRequest):
         for wrapper_key in ("payload", "structured_request"):
             inner = value.get(wrapper_key)
             if isinstance(inner, dict):
-                merged = {**value, **inner}
-                merged.pop("payload", None)
-                merged.pop("structured_request", None)
-                return merged
+                return inner
         return value
 
 
@@ -285,7 +282,11 @@ def save_structured_request_payload(
     }
     active_store = store or _store()
     store_result = active_store.save_structured_request(clean_payload)
-    return tool_result("save_structured_request", ok=True, store_result=store_result)
+    return tool_result(
+        "save_structured_request", 
+        ok=True, 
+        **store_result,
+    )
 
 
 class SavedRequestListInput(BaseModel):
@@ -375,9 +376,17 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
+    deleted = [
+        {
+            "source": "app_db",
+            "schedule": row,
+        }
+        for row in deleted
+    ]
+
     return tool_result(
         "personal_delete_saved_schedules",
-        ok=True,
+        ok= len(deleted) > 0,
         deleted_count=len(deleted),
         filters=filters,
         deleted=deleted,
@@ -395,6 +404,8 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
         end_time=schedule.get("end_time"),
         members=schedule.get("attendees") or [],
         source_schedule_id=schedule.get("id"),
+        original_text= schedule.get("title") or "",
+        reason="week01_scheduele_import"
     )
 
 
@@ -409,12 +420,14 @@ def personal_create_schedule(
     """Nana의 개인 일정을 생성하고 Week 3+ 앱 SQLite DB에도 저장합니다."""
 
     created_result = json.loads(
-        week01_personal_create_schedule.func(
-            title=title,
-            date=date,
-            start_time=start_time,
-            end_time=end_time,
-            attendees=attendees,
+        week01_personal_create_schedule.invoke(
+            {
+                "title": title,
+                "date": date,
+                "start_time": start_time,
+                "end_time": end_time,
+                "attendees": attendees,
+            }
         )
     )
     created_schedule = created_result.get("created_schedule", {})
@@ -474,7 +487,7 @@ def save_structured_request(
     result_payload = tool_result(
         "save_structured_request",
         ok=True,
-        store_result=store_result,
+        **store_result,
     )
 
     return json_payload(result_payload)
@@ -544,7 +557,7 @@ def personal_list_saved_schedules(
 
     schedules = store.list_schedules(
         limit=limit,
-        kind=resolved_kind,
+        kind= resolved_kind,
         date_from=date_from,
         date_to=date_to,
     )
@@ -564,7 +577,6 @@ def personal_list_saved_schedules(
     )
 
     return json_payload(result_payload)
-
 
 def delete_saved_schedules_dict(
     schedule_ids: list[str] | None = None,
@@ -706,7 +718,7 @@ def build_week03_agent() -> object:
         _WEEK03_AGENT = create_agent(
             model=chat_model(),
             tools=week03_tools(),
-            system_prompt=week03_system_prompt(),
+            system_prompt=week03_system_prompt(), 
         )
     return _WEEK03_AGENT
 
