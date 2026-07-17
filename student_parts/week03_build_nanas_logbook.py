@@ -356,9 +356,9 @@ def _delete_saved_schedules(
             filters=filters,
             deleted=[],
         )
-    if delete_all:
-        deleted = store.delete_all_schedules()
-    else:
+    # delete_all과 명시 필터가 함께 들어오면 명시 필터를 우선한다.
+    # 모델이 "그 날짜 것 다 지워줘"를 delete_all=True로 잘못 보내도 전체 삭제로 번지지 않게 한다.
+    if has_filter:
         deleted = store.delete_schedules_by_filter(
             schedule_ids=schedule_ids,
             date=date,
@@ -366,6 +366,8 @@ def _delete_saved_schedules(
             start_time=start_time,
             time_unspecified=time_unspecified,
         )
+    else:
+        deleted = store.delete_all_schedules()
     return tool_result(
         "personal_delete_saved_schedules",
         deleted_count=len(deleted),
@@ -410,7 +412,15 @@ def personal_create_schedule(
         )
     )
     save_input = structured_request_from_week01_schedule(created.get("created_schedule") or {})
-    sqlite_save = save_structured_request_payload(save_input)
+    try:
+        sqlite_save = save_structured_request_payload(save_input)
+    except Exception as exc:
+        # 이중 기록의 부분 실패: 임시 일정은 이미 생성됐으므로 숨기지 않고 함께 보고한다.
+        sqlite_save = {
+            "ok": False,
+            "tool_name": "save_structured_request",
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     return json_payload(
         {
             **created,
