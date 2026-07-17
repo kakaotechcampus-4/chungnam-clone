@@ -337,16 +337,21 @@ def personal_create_schedule(
     attendees: list[str] | None = None,
 ) -> str:
     """Nana의 개인 일정을 생성하고 Week 3+ 앱 SQLite DB에도 저장합니다."""
-
-    # TODO: Week 1 임시 일정 tool을 호출한 뒤 결과를 StructuredRequest로 바꿔 SQLite에도 저장하세요.
-    # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
-    ...
-
-#1. save_structured_request
-#      - @tool(args_schema=SaveStructuredRequestInput)으로 Week 2 구조화 결과를 검증합니다.
-#      - tool 본문에서는 Pydantic class를 다시 만들지 말고, 함수 인자로 들어온 값을 바로 저장 dict로 정리합니다.
-#      - 자연어 문자열이나 ok/tool_name/base_date wrapper를 직접 저장하지 않습니다.
-#
+    week01_result = json.loads(week01_personal_create_schedule.invoke({
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "attendees": attendees
+        })
+    )
+    week01_schedule = week01_result["created_schedule"]
+    
+    week03_schedule = structured_request_from_week01_schedule(week01_schedule)
+    payload = week03_schedule.model_dump(exclude_none=True)
+    week03_result = _store().save_structured_request(payload)
+    
+    return json_payload(tool_result("personal_create_schedule", ok=True, created_schedule=week01_schedule, structured_request=week03_schedule.model_dump(), sqlite_save=week03_result))
 
 @tool(args_schema=SaveStructuredRequestInput)
 def save_structured_request(
@@ -421,8 +426,6 @@ def personal_list_saved_schedules(
         "date_to": date_to,
         "limit": limit
     }
-    # limit은 structured request에는 존재하지 않는 필드인데 filters에 담으면 어떻게 되는지 이해가 되지 않습니다. 
-
     rows = _store().list_schedules(**filters)
     return json_payload(tool_result("personal_list_saved_schedules", **{"filters": filters, "schedules": rows}))
 

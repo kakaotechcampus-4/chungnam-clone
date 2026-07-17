@@ -139,12 +139,6 @@ class StructuredRequestBatch(BaseModel):
     requests: list[StructuredRequest] = Field(default_factory=list, description="구조화된 요청 목록")
     base_date: str = Field(default_factory=current_app_date_iso, description="상대 날짜 기준일 YYYY-MM-DD")
 
-#default와 default_factory 차이.
-#1. default: 해당 값으로 고정.
-#   수정 가능한 객체(list, dict 등)에 default를 설정하면 모든 인스턴스가 같은 객체를 공유함.
-#2. default_factory: 호출할 때 마다 새로운 객체가 생성됨.
-#   수정 가능한 객체(list, dict 등)에 default_factory를 사용해야 함.
-
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """LangChain structured output 결과를 StructuredRequest 객체로 검증하고 정규화합니다."""
