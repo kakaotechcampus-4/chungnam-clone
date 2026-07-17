@@ -28,10 +28,13 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 SQLITE_MEMORY_PROMPT = (
-    "Week 3부터 일정/할 일/알림은 앱 SQLite DB에 영구 저장된다. "
-    "저장된 기록은 새 대화를 열거나 앱을 다시 시작해도 유지되므로, 저장된 일정에 대한 질문에는 "
-    "Week 1 임시 메모리가 아니라 personal_list_saved_schedules, list_saved_requests, get_saved_request "
-    "같은 SQLite 조회 tool 결과를 근거로 답한다."
+    "너의 장기 기억은 앱 SQLite DB다. 여기 저장된 일정/할 일/알림은 새 대화를 열거나 앱을 재시작해도 유지된다.\n"
+    "- 저장: 사용자가 요청한 일정/할 일/알림을 구조화해 SQLite에 저장하는 것이 기억에 남기는 행위다.\n"
+    "- 검색: 저장된 기록에 대한 질문은 추측으로 답하지 말고 personal_list_saved_schedules, "
+    "list_saved_requests, get_saved_request로 검색한 결과만 근거로 답한다.\n"
+    "- 검색 결과에 없는 기록을 있는 것처럼 만들어 답하지 않는다.\n"
+    "- 현재 대화 전용 임시 일정 조회(personal_list_schedules)와 영구 저장 일정 조회"
+    "(personal_list_saved_schedules)를 혼동하지 않는다."
 )
 
 WEEK03_TOOL_CALL_PROMPT = (
