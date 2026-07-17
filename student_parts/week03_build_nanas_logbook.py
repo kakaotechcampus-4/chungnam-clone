@@ -28,11 +28,19 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = "일정/할 일/알림은 앱 SQLite DB에 영속 저장된다. 과거에 저장한 내용은 대화 기억이 아니라 조회 tool로 찾아라. 새 대화여도 DB에는 남아 있다."
+SQLITE_MEMORY_PROMPT = "일정/할 일/알림은 앱 SQLite DB에 영속 저장됩니다. 과거에 저장한 내용은 대화 기억이 아니라 조회 tool로 찾으십시오."
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = "자연어 → 구조화 → 저장과 조회/수정/삭제 순서로 실행한다. 저장된 내용은 조회 tool로 다시 찾는다. 조회 시에는 날짜/종류/제목/시간 필터를 적절히 조합해 사용한다."
-
+WEEK03_TOOL_CALL_PROMPT = """
+- 일정/할일/알림 저장 요청은 반드시 extract_schedule_request 먼저 호출한다. 
+→ 반환 JSON 안의 structured_request 필드만 save_structured_request에 전달하여 DB에 저장한다. (ok/tool_name/base_date wrapper는 저장 금지)
+- 일정 조회는 personal_list_saved_schedules
+- todo/reminder/전체 기록은 list_saved_requests
+- ID 단건은 get_saved_request
+- 수정/삭제는 먼저 personal_list_saved_schedules로 후보와 schedule_id 확인 후 해당 tool 호출
+- 자연어 저장 요청에서 personal_create_schedule을 직접 호출하지 않는다 (extract → save 경로만 사용)
+- 일정 조회에 personal_list_schedules(Week 1 임시 메모리)를 사용하지 않는다 — 반드시 personal_list_saved_schedules(앱 DB)를 사용한다.
+"""
 
 # [3주차 수강생 구현 가이드]
 #
@@ -305,9 +313,19 @@ def _delete_saved_schedules(
 
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
+    payload = {
+        "kind": "personal_schedule",
+        "title": schedule["title"],
+        "date": schedule["date"],
+        "start_time": schedule["start_time"],
+        "end_time": schedule["end_time"] if schedule["end_time"] != "미정" else None,
+        "members": schedule["attendees"] or [],
+        "reason": "Week 1 임시 일정을 StructuredRequest 타입으로 변환",
+        "source_schedule_id": schedule["id"],
+    }
+    
+    return SaveStructuredRequestInput(**payload)
 
-    # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
-    ...
 
 
 @tool("personal_create_schedule")
@@ -324,6 +342,11 @@ def personal_create_schedule(
     # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
     ...
 
+#1. save_structured_request
+#      - @tool(args_schema=SaveStructuredRequestInput)으로 Week 2 구조화 결과를 검증합니다.
+#      - tool 본문에서는 Pydantic class를 다시 만들지 말고, 함수 인자로 들어온 값을 바로 저장 dict로 정리합니다.
+#      - 자연어 문자열이나 ok/tool_name/base_date wrapper를 직접 저장하지 않습니다.
+#
 
 @tool(args_schema=SaveStructuredRequestInput)
 def save_structured_request(
@@ -493,8 +516,11 @@ def build_week03_agent() -> object:
         raise RuntimeError("PROXY_TOKEN이 .env에 필요합니다.")
     global _WEEK03_AGENT
     if _WEEK03_AGENT is None:
-        # TODO: chat_model(), week03_tools(), week03_system_prompt()로 Week 3 LangChain agent를 생성하세요.
-        ...
+        _WEEK03_AGENT = create_agent(
+            model=chat_model(),
+            tools=week03_tools(),
+            system_prompt=week03_system_prompt()
+        )
     return _WEEK03_AGENT
 
 

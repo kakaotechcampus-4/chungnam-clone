@@ -163,11 +163,10 @@ def extract_structured_request(text: str) -> StructuredRequest:
         schema=StructuredRequest,
         method="function_calling"
     )
-
     result = Structured_model.invoke(
         [
             {"role": "system", "content": week02_system_prompt()},
-            {"role": "user", "content": f"사용자 요청: {text}"}
+            {"role": "user", "content": text}
         ]
     )
 
@@ -176,7 +175,7 @@ def extract_structured_request(text: str) -> StructuredRequest:
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """사용자의 자연어 일정/할 일 요청을 구조화된 데이터(JSON)로 변환해주는 도구입니다."""
+    """사용자의 자연어 일정/할 일/알림 요청을 구조화된 데이터(JSON)로 변환해주는 도구입니다."""
 
     structured_request = extract_structured_request(query)
     return json.dumps(
