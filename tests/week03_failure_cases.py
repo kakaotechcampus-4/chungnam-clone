@@ -29,8 +29,9 @@ w3._store = lambda: store  # 모든 tool이 임시 DB를 쓰게 해 실제 앱 D
 def case_a_partial_failure() -> None:
     """A. 임시 메모리는 저장됐는데 SQLite 저장이 실패한 경우.
 
-    이중 기록의 부분 실패가 예외로 터지거나 조용히 사라지지 않고,
-    sqlite_save.ok=False로 응답에 드러나야 한다.
+    이중 기록이 부분 상태로 남으면 안 된다. SQLite(진실의 원천) 저장이 실패하면
+    방금 만든 임시 일정을 보상 삭제(rollback)하고 ok=False로 실패를 보고한다.
+    같은 요청을 다시 보내도 메모리에 유령 일정이 쌓이지 않는다.
     """
 
     class FailingStore:
@@ -45,15 +46,22 @@ def case_a_partial_failure() -> None:
                 {"title": "부분 실패 테스트", "date": "2026-08-01", "start_time": "09:00"}
             )
         )
+        retry = json.loads(
+            w3.personal_create_schedule.invoke(
+                {"title": "부분 실패 테스트", "date": "2026-08-01", "start_time": "09:00"}
+            )
+        )
     finally:
         w3._store = original_store
 
-    assert result["created_schedule"]["title"] == "부분 실패 테스트", result  # 메모리 기록은 성공
-    assert result["sqlite_save"]["ok"] is False, result  # SQLite 실패가 숨겨지지 않음
-    assert "모의 SQLite 장애" in result["sqlite_save"]["error"], result
-    assert any(s["title"] == "부분 실패 테스트" for s in PERSONAL_SCHEDULES)  # Week 1 임시 메모리에 존재
-    assert store.list_schedules(limit=100) == []  # DB에는 저장되지 않음
-    print("A. 이중 기록 부분 실패 보고 OK")
+    assert result["ok"] is False, result  # 실패가 실패로 보고됨
+    assert result["rolled_back"] is True, result  # 임시 일정이 보상 삭제됨
+    assert "모의 SQLite 장애" in result["error"], result
+    memory_titles = [s["title"] for s in PERSONAL_SCHEDULES]
+    assert memory_titles.count("부분 실패 테스트") == 0, memory_titles  # 재시도 후에도 유령/중복 없음
+    assert retry["ok"] is False and retry["rolled_back"] is True, retry
+    assert store.list_schedules(limit=100) == []  # DB에도 없음 (둘 다 없거나, 둘 다 있거나)
+    print("A. SQLite 실패 시 보상 롤백 + 재시도 중복 없음 OK")
 
 
 def case_b_delete_all_with_filter() -> None:

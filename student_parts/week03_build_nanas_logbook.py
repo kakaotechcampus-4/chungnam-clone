@@ -14,6 +14,7 @@ from fixed.app_store import AppSQLiteStore
 from student_parts.week01_wake_up_nana import (
     join_system_prompt,
     personal_create_schedule as week01_personal_create_schedule,
+    personal_delete_schedule as week01_personal_delete_schedule,
     week01_tools,
 )
 from student_parts.week02_structure_natural_language_requests import (
@@ -418,12 +419,22 @@ def personal_create_schedule(
     try:
         sqlite_save = save_structured_request_payload(save_input)
     except Exception as exc:
-        # 이중 기록의 부분 실패: 임시 일정은 이미 생성됐으므로 숨기지 않고 함께 보고한다.
-        sqlite_save = {
-            "ok": False,
-            "tool_name": "save_structured_request",
-            "error": f"{type(exc).__name__}: {exc}",
-        }
+        # 진실의 원천(SQLite) 저장이 실패하면 파생 기록(임시 메모리)을 보상 삭제해
+        # "둘 다 있거나, 둘 다 없거나"를 유지한다. 재시도해도 유령 일정이 쌓이지 않는다.
+        rollback_id = str(save_input.source_schedule_id or "")
+        rolled_back = False
+        if rollback_id:
+            rollback = json.loads(week01_personal_delete_schedule.invoke({"schedule_id": rollback_id}))
+            rolled_back = bool(rollback.get("deleted"))
+        return json_payload(
+            tool_result(
+                "personal_create_schedule",
+                ok=False,
+                error=f"SQLite 저장 실패로 일정 생성을 되돌렸습니다: {type(exc).__name__}: {exc}",
+                rolled_back=rolled_back,
+                structured_request=save_input.model_dump(),
+            )
+        )
     return json_payload(
         {
             **created,
