@@ -303,7 +303,10 @@ class SavedScheduleListInput(BaseModel):
     """저장 일정 목록 조회 입력입니다."""
 
     limit: int = Field(default=50, ge=1, le=200)
-    kind: RequestKind | None = None
+    kind: RequestKind | None = Field(
+        default=None,
+        description="조회할 일정 종류. 지정하지 않으면 개인/그룹 모든 저장 일정을 조회한다.",
+    )
     date_from: str | None = None
     date_to: str | None = None
 
@@ -504,16 +507,16 @@ def personal_list_saved_schedules(
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> str:
-    """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
+    """앱 DB에 저장된 내(owner=me) 일정 목록을 반환합니다. kind를 지정하지 않으면 개인/그룹
+    모든 종류를 조회하며, Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
 
-    effective_kind = kind or "personal_schedule"
     schedules = _store().list_schedules(
         limit=limit,
-        kind=effective_kind,
+        kind=kind,
         date_from=date_from,
         date_to=date_to,
     )
-    filters = {"kind": effective_kind, "date_from": date_from, "date_to": date_to, "limit": limit}
+    filters = {"kind": kind, "date_from": date_from, "date_to": date_to, "limit": limit}
     return json_payload(tool_result("personal_list_saved_schedules", filters=filters, schedules=schedules))
 
 

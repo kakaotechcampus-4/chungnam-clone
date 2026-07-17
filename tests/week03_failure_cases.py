@@ -91,8 +91,9 @@ def case_b_delete_all_with_filter() -> None:
 def case_c_kind_unspecified_list() -> None:
     """C. 일정 종류를 말하지 않은 조회.
 
-    kind 미지정이면 personal_schedule만 보이고, group_schedule은
-    kind를 명시해야 조회된다는 기본 동작을 고정한다.
+    kind 미지정이면 개인/그룹 모든 저장 일정이 보여야 한다.
+    "저장된 일정 보여줘"에서 그룹 일정이 조용히 빠지면 사용자는
+    저장 실패로 오해할 수 있다. kind를 지정하면 해당 종류로 좁혀진다.
     """
 
     w3.save_structured_request_payload(
@@ -102,13 +103,18 @@ def case_c_kind_unspecified_list() -> None:
     default_titles = [
         s["title"] for s in json.loads(w3.personal_list_saved_schedules.invoke({}))["schedules"]
     ]
-    assert "남을 일정" in default_titles and "그룹 회의" not in default_titles, default_titles
+    assert "남을 일정" in default_titles and "그룹 회의" in default_titles, default_titles
+    personal_titles = [
+        s["title"]
+        for s in json.loads(w3.personal_list_saved_schedules.invoke({"kind": "personal_schedule"}))["schedules"]
+    ]
+    assert "남을 일정" in personal_titles and "그룹 회의" not in personal_titles, personal_titles
     group_titles = [
         s["title"]
         for s in json.loads(w3.personal_list_saved_schedules.invoke({"kind": "group_schedule"}))["schedules"]
     ]
     assert group_titles == ["그룹 회의"], group_titles
-    print("C. kind 미지정 조회 → personal_schedule 한정, group은 kind 명시 필요 OK")
+    print("C. kind 미지정 조회 → 전체(개인+그룹), kind 지정 시 해당 종류로 축소 OK")
 
 
 def case_d_no_condition_delete_guard() -> None:
