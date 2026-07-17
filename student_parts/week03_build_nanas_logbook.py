@@ -19,6 +19,8 @@ from student_parts.week01_wake_up_nana import (
 from student_parts.week02_structure_natural_language_requests import (
     RequestKind,
     StructuredRequest,
+    extract_schedule_request,
+    extract_structured_request,
     week02_prompt_parts,
 )
 
@@ -218,44 +220,6 @@ def tool_result(tool_name: str, *, ok: bool = True, **payload: Any) -> dict[str,
     """Week 3 tool들이 공통으로 쓰는 JSON payload 껍데기를 만듭니다."""
 
     return {"ok": ok, "tool_name": tool_name, **payload}
-
-
-def extract_structured_request(text: str) -> StructuredRequest:
-    """agent를 새로 띄우지 않고 자연어(또는 JSON 문자열)를 StructuredRequest 하나로 구조화합니다."""
-
-    structured_model = chat_model().with_structured_output(
-        StructuredRequest,
-        method="function_calling",
-    )
-    result = structured_model.invoke(
-        [
-            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
-            {"role": "user", "content": text},
-        ]
-    )
-    if isinstance(result, StructuredRequest):
-        return result
-    if isinstance(result, dict):
-        return StructuredRequest.model_validate(result)
-    raise RuntimeError(
-        "StructuredRequest 또는 dict 형태의 structured output이 필요합니다. "
-        f"현재 타입: {type(result).__name__}"
-    )
-
-
-@tool
-def extract_schedule_request(query: str) -> str:
-    """저장 전에 자연어를 Week 2 StructuredRequest로 구조화하는 bridge tool입니다."""
-
-    structured = extract_structured_request(query)
-    return json_payload(
-        {
-            "ok": True,
-            "tool_name": "extract_schedule_request",
-            "base_date": current_app_date_iso(),
-            "structured_request": structured.model_dump(),
-        }
-    )
 
 
 class SaveStructuredRequestInput(StructuredRequest):
