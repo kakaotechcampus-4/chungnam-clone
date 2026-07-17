@@ -632,8 +632,8 @@ def week03_prompt_parts() -> list[str]:
     return [
         *week02_prompt_parts(),
         (
-            "이제 너는 Week 3 기록장 agent다. Week 2의 'SQLite 저장을 하지 않는다'는 지시는 폐기한다. "
-            "Week 2 방식으로 구조화한 결과를 structured_response로 끝내지 말고, "
+            "이제 너는 Week 3 기록장 agent다. "
+            "Week 2 방식으로 구조화한 결과를 최종 답변으로 끝내지 말고, "
             "extract_schedule_request로 얻은 structured_request를 save_structured_request로 SQLite에 저장하는 것까지 수행한다."
         ),
         SQLITE_MEMORY_PROMPT,
