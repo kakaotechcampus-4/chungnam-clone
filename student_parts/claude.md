@@ -1,51 +1,71 @@
-# 작업 목표
+# 이 문서의 역할
 
-`student_parts/week03_build_nanas_logbook.py`의 `WEEK03_TOOL_CALL_PROMPT`를 완성해, Week 3 agent가
-자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool을 어떤 순서·조건으로 호출할지 알도록 만든다.
+`student_parts/` 안에서 학생과 함께 과제 코드를 구현할 때 참고하는 진입점 문서다. 실제 구현
+스펙(작업 목표·수정 범위·검증 방법 등)은 주차별 `weekN_claude.md`에 있고, 이 문서는 그 위치를
+안내하고 학생과 협업할 때 지켜야 할 공통 원칙을 담는다.
 
-# 수정 범위
+# 주차별 구현 플랜 위치
 
-- 수정 대상은 `WEEK03_TOOL_CALL_PROMPT = ""` 한 곳뿐이다.
-- `SQLITE_MEMORY_PROMPT`, `SaveStructuredRequestInput`, 각 tool 함수 본문, `week03_prompt_parts()`의
-  나머지 `# TODO` 등 다른 부분은 이번 작업 범위가 아니다. 건드리지 않는다.
+| 주차 | 플랜 문서 | 구현 대상 파일 |
+|---|---|---|
+| Week 1 | `student_parts/week01_claude.md` | `student_parts/week01_wake_up_nana.py` |
+| Week 2 | `student_parts/week02_claude.md` | `student_parts/week02_structure_natural_language_requests.py` |
+| Week 3 | `student_parts/week03_claude.md` | `student_parts/week03_build_nanas_logbook.py` |
 
-# 하지 말아야 할 것
+해당 주차 작업을 시작하기 전에 위 표에서 그 주차의 `weekN_claude.md`를 먼저 읽고 거기 적힌
+작업 목표·수정 범위·하지 말아야 할 것을 따른다. 새 주차가 추가되면 같은 이름 규칙
+(`weekN_claude.md` ↔ `weekN_*.py`)으로 이 표에 행을 추가한다.
 
-- 파일 상단의 `[3주차 수강생 구현 가이드]` 주석은 출제 의도 확인용으로 **컨닝하지 않는다**. 그 내용을
-  그대로 베끼거나 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
-- Week 4 이상(RAG, 외부 멤버 일정 조율 등) 범위의 지시를 섞지 않는다.
+# 주차 간 system prompt 누적과 tool 충돌 처리
 
-# WEEK03_TOOL_CALL_PROMPT 명세
+각 `weekN_*.py`의 `weekN_prompt_parts()`는 다음 주차 `week(N+1)_prompt_parts()`가 그대로 이어받아
+`join_system_prompt`로 계속 누적하는 구조다. 이 방식은 새 주차가 **이전 주차와 같은 역할이지만
+저장 방식 등 내부 동작이 다른 tool**을 추가할 때 문제가 된다 — 이전 주차가 특정 tool 이름을 못박은
+호출 규칙("X 요청에는 personal_list_schedules를 호출한다")이 그대로 이어진 상태에서 새 주차가 같은
+역할의 다른 tool(예: SQLite 영속 버전)을 추가하면, 두 지시가 동시에 활성화돼 agent가 어떤 tool·
+저장소를 써야 하는지 혼란스러워한다. 같은 이유로 "이번 주차에서는 아직 X를 하지 않는다"처럼 범위를
+제한하는 문장도, 다음 주차가 실제로 X를 하게 되면 거짓 지시로 남아 새 지시와 모순된다.
 
-다음 내용이 모두 드러나는 system prompt 조각으로 작성한다.
+새 weekN_claude.md를 작성하거나 기존 주차 코드를 구현할 때 다음을 지킨다.
 
-- 저장 순서: 새 일정/할 일/알림을 저장할 때는 반드시
-  ① `extract_schedule_request(query=...)`로 자연어를 구조화한 뒤,
-  ② 그 결과의 `structured_request` 필드 값을 그대로 `save_structured_request`의 인자로 전달해 저장한다.
-  (자연어 문자열이나 `ok`/`tool_name`/`base_date` wrapper를 그대로 저장하지 않는다는 원칙을 여기서
-  agent 지시로 드러낸다.)
-- 저장 요청 키워드: "일정 등록해줘", "기억해줘", "저장해줘", "메모해줘" 같은 표현을 저장 의도의 단서로
-  삼는다.
-- 조회: "내 일정 보여줘" 같은 질문에는 `personal_list_saved_schedules`(또는 `list_saved_requests`)를
-  호출해 답한다.
-- 수정/삭제 전 확인: `personal_update_saved_schedule`/`personal_delete_saved_schedules`를 호출하기
-  전에 `personal_list_saved_schedules`로 후보 일정과 `schedule_id`를 먼저 확인한다.
-- 삭제 안전 규칙: 조건 없이 전체를 지우는 것은 사용자가 명시적으로 전체 삭제를 요구했을 때만
-  `delete_all`로 수행한다.
+- 새로 추가하는 tool이 이전 주차 tool과 **역할이 겹치는지** 먼저 확인한다.
+- 겹친다면, 이전 주차 파일에서 그 tool 이름을 구체적으로 못박은 호출 규칙이나 "아직 하지 않는다"
+  범위 제한 문장을 찾아 `week(N-1)_prompt_parts()`(다음 주차로 계속 누적되는 함수)에서 빼고,
+  `week(N-1)_tool_call_prompt()`처럼 별도 함수로 분리한다.
+- 분리한 조각은 그 tool을 **그대로(저장 방식 변경 없이) 재사용하는 주차들의 `weekN_system_prompt()`**
+  에서만 명시적으로 이어붙인다. tool 구성이 바뀌는 주차(지금 새로 작업 중인 주차) 이후로는 자동으로
+  섞이지 않게 한다. (예시: `week01_wake_up_nana.py`의 `week01_tool_call_prompt()` — `week01_prompt_parts()`
+  에는 없고 `week01_system_prompt()`·`week02_system_prompt()`에만 명시적으로 들어간다.)
+- "더 뒤 주차 지시가 우선한다"는 `join_system_prompt`의 안내 문구에 기대어 충돌을 방치하지 않는다.
+  런타임에 LLM이 그 우선순위를 안정적으로 지킨다는 보장이 없으므로, 충돌 자체를 애초에 이어받지
+  않는 방식(위 분리)으로 해소하는 것을 기본으로 한다.
 
-# 참고자료
+# 협업 원칙 (프롬프트를 사용하는 학생과)
 
-- `student_parts/week02_structure_natural_language_requests.py`의 `extract_schedule_request`: 반환
-  JSON 모양(`{"ok", "tool_name", "base_date", "structured_request": {...}}`)이 위 저장 순서 지시의
-  근거다.
-- `student_parts/week03_build_nanas_logbook.py`의 tool 목록(`save_structured_request`,
-  `list_saved_requests`, `personal_list_saved_schedules`, `personal_update_saved_schedule`,
-  `personal_delete_saved_schedules`): 이 prompt가 호출 순서를 안내해야 하는 실제 대상.
+## 1. 학생이 인지하는 프로젝트 범위
 
-# 검증 방법
+이 프로젝트를 진행하는 학생은 `student_parts/` 디렉토리 내부의 내용만 인지한 채로 프로젝트를
+이해하고 있다. 그 외부의 모듈(`fixed/`, `app.py`, `mcp_server/` 등)은 이미 구현된 채로 제공되므로,
+학생 입장에서는 "주어진 것"이지 자신이 이해하고 있는 대상이 아니다.
 
-- `./run.sh --week3`에서 "내일 10시 개인 코칭 저장해줘"를 입력했을 때, trace에서
-  `extract_schedule_request` 다음에 `save_structured_request`가 바로 이어 호출되는지 확인한다.
-- "내 일정 보여줘"를 입력했을 때 `personal_list_saved_schedules`가 호출되는지 확인한다.
-- "그 일정 지워줘"류 요청에서 삭제 tool 호출 전에 먼저 조회 tool이 호출되어 후보를 확인하는지
-  확인한다.
+- 외부 모듈 내부의 메커니즘을 이해해야 학생이 자기 코드를 올바르게 짤 수 있는 경우에는, 그
+  메커니즘을 쉽고 자세하게 설명한다. 학생이 이미 알고 있다고 가정하지 않는다.
+- 외부 모듈 내부를 자세히 이해할 필요가 없는 경우에는, 내부 구현을 파고들지 않고 "이 함수/모듈은
+  이런 입력을 받아 이런 결과를 돌려준다"는 인터페이스 관점으로 설명한다.
+
+## 2. 도전과제 처리
+
+구현해야 할 tool/함수의 본문이 비어 있는 위치에 "도전과제"·"도전 관련"과 유사한 문구가 달려
+있으면, 그 부분은 도전과제 영역이다.
+
+- 학생이 아직 그 사실을 인지하지 못한 상태로 간주하고, 코드 작성과 설명에서 이 영역에 대한
+  언급을 최대한 피한다.
+- 언급이 꼭 필요한 경우에만 짧게 설명한 뒤 사용한다.
+- 학생이 도전과제 영역을 구현해 달라는 취지의 프롬프트를 준 경우에는, 이 항목(§2)의 존재를
+  먼저 알리고 이 지시사항을 삭제할지 물어본다.
+
+## 3. 플랜/코드 추가 시 충돌 확인
+
+이 디렉토리의 플랜(`weekN_claude.md` 등)이나 코드에 새 내용을 추가하려 할 때, 추가하려는 내용이
+기존 플랜에 이미 적힌 지시·범위·검증 방법과 상충하면(반대되거나 모순되면) 임의로 판단해 덮어쓰지
+않고, 먼저 사용자에게 어느 쪽을 따를지 질문한다.
