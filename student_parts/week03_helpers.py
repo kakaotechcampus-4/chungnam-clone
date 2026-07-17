@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Week 3 입력 변환과 SQLite 호출을 담당하는 비-tool helper입니다."""
+
+from __future__ import annotations
 
 import json
 from typing import Any
@@ -36,7 +36,6 @@ def _save_input_from(
 ) -> SaveStructuredRequestInput:
     """저장 입력을 SaveStructuredRequestInput 하나로 모읍니다."""
 
-    # TODO: dict/JSON/자연어/StructuredRequest 입력을 SaveStructuredRequestInput으로 검증하고 정규화하세요.
     if isinstance(value, SaveStructuredRequestInput):
         return value
     if isinstance(value, str):
@@ -54,7 +53,6 @@ def save_structured_request_payload(
 ) -> dict[str, Any]:
     """검증된 structured request를 앱 DB에 저장합니다."""
 
-    # TODO: 입력을 검증한 뒤 AppSQLiteStore.save_structured_request(...)로 저장하고 tool 결과를 반환하세요.
     save_input = _save_input_from(request)
     app_store = store if store is not None else _store()
     saved = app_store.save_structured_request(save_input.model_dump(exclude_none=True))
@@ -73,8 +71,6 @@ def _delete_saved_schedules(
 ) -> dict[str, Any]:
     """삭제 guard와 DB 호출을 한 곳에 둡니다."""
 
-    # TODO: 삭제 조건이 없으면 거부하고, delete_all 또는 명시 필터에 맞는 store 메서드를 호출하세요.
-    # TODO: deleted_count, filters, deleted가 포함된 tool 결과 dict를 반환하세요.
     filters = {
         "schedule_ids": schedule_ids,
         "date": date,
@@ -109,6 +105,15 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
     )
+    if not deleted:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="조건에 맞는 일정이 없습니다.",
+        )
     return tool_result(
         "personal_delete_saved_schedules",
         deleted_count=len(deleted),
@@ -120,7 +125,6 @@ def _delete_saved_schedules(
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
-    # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
     return SaveStructuredRequestInput(
         kind="personal_schedule",
         title=schedule["title"],
@@ -130,35 +134,6 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
         members=schedule["attendees"],
         source_schedule_id=schedule["id"],
     )
-
-    # 다음 field는 채우지 않는게 맞는 것 같음.
-    # reason: str | None = Field(
-    #     default=None, description="요청을 이렇게 구조화한 판단 근거."
-    # )
-    # original_text: str = Field(
-    #     default="", description="사용자가 입력한 요청 원문. 원문 보존용 필드다."
-    # )
-    #
-    # Week 1 일정의 personal_... ID는 source_schedule_id로 전달되고,
-    # AppSQLiteStore가 이를 schedules.schedule_id로 그대로 사용한다.
-    # source_schedule_id가 없는 일반 저장 일정은 sch_... ID가 생성되므로
-    # 현재 ID 규칙에서는 schedule_id로 Week 1 변환 여부를 구분할 수 있다.
-    #
-    # 또, reason은 llm이 구조화한 근거를 담는 필드이므로..
-    # original_text는 원문 보존용 필드인데, Week 1의 schedule에는 원문이 없으므로 그냥 빈 문자열로 두는게 맞는 것 같다.
-
-    # SaveStructuredRequestInput
-    # kind: RequestKind = "unknown",
-    # title: str | None = None,
-    # date: str | None = None,
-    # start_time: str | None = None,
-    # end_time: str | None = None,
-    # members: list[str] = list,
-    # priority: str | None = None,
-    # reason: str | None = None,
-    # original_text: str = "",
-    # source_schedule_id: str | None = None
-
 
 def delete_saved_schedules_dict(
     schedule_ids: list[str] | None = None,

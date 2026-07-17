@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """Week 3 SQLite tool 입력을 검증하는 Pydantic 모델입니다."""
+
+from __future__ import annotations
 
 from typing import Any
 
@@ -20,7 +20,6 @@ class SaveStructuredRequestInput(StructuredRequest):
     def unwrap_legacy_payload(cls, value: Any) -> Any:
         """예전 trace의 payload wrapper만 짧게 풀고 실제 검증은 필드 스키마에 맡깁니다."""
 
-        # TODO: StructuredRequest와 예전 payload/structured_request wrapper를 저장 입력 형태로 정규화하세요.
         if isinstance(value, StructuredRequest):
             return value.model_dump()
         if not isinstance(value, dict):
