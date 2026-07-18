@@ -382,14 +382,16 @@ def _delete_saved_schedules(
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
-    # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
-    
+    def _clean_time(value: str | None) -> str | None:
+        # Week 1의 "미정" 기본값/빈 값을 Week 2 구조화와 동일하게 None으로 정규화합니다.
+        return value if value and value != "미정" else None
+
     return SaveStructuredRequestInput(
         kind="personal_schedule",
         title=schedule.get("title"),
         date=schedule.get("date"),
-        start_time=schedule.get("start_time"),
-        end_time=schedule.get("end_time"),
+        start_time=_clean_time(schedule.get("start_time")),
+        end_time=_clean_time(schedule.get("end_time")),
         members=schedule.get("attendees") or [],
         source_schedule_id=schedule.get("id"),
     )
@@ -404,9 +406,6 @@ def personal_create_schedule(
 ) -> str:
     """Nana의 개인 일정을 생성하고 Week 3+ 앱 SQLite DB에도 저장합니다."""
 
-    # TODO: Week 1 임시 일정 tool을 호출한 뒤 결과를 StructuredRequest로 바꿔 SQLite에도 저장하세요.
-    # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
-    
     created_raw = week01_personal_create_schedule.invoke({
         "title": title,
         "date": date,
@@ -444,9 +443,6 @@ def save_structured_request(
 ) -> str:
     """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
 
-    # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
-    # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-    
     payload = {
         "kind": kind,
         "title": title,
@@ -462,9 +458,6 @@ def save_structured_request(
 
     payload = {k: v for k, v in payload.items() if v is not None}
 
-    # TODO: payload를 SQLite에 저장하세요.
-    # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.
-
     saved = _store().save_structured_request(payload)
     return json_payload(tool_result("save_structured_request", ok=True, saved=saved))
 
@@ -477,8 +470,6 @@ def list_saved_requests(
 ) -> str:
     """SQLite에 저장된 구조화 요청 목록을 조회합니다."""
 
-    # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
-    
     rows = _store().list_saved_requests(
         kind=kind, 
         date_from=date_from, 
@@ -493,8 +484,6 @@ def list_saved_requests(
 def get_saved_request(request_id: str) -> str:
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
-    # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-
     row = _store().get_saved_request(request_id=request_id)
 
     return json_payload(tool_result("get_saved_request", ok=True, row=row))
@@ -508,9 +497,6 @@ def personal_list_saved_schedules(
     date_to: str | None = None,
 ) -> str:
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
-
-    # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
-    # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
 
     kind_tmp = kind or "personal_schedule"
     
