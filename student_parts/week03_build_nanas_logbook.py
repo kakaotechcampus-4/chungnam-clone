@@ -373,9 +373,12 @@ def save_structured_request(
         "original_text": original_text,
         "source_schedule_id": source_schedule_id,        
     }
+    
+    # none딕셔너리 구성
+    not_none_args = {k: v for k, v in args.items() if v is not None}
 
     # SQLite 저장
-    saved = _store().save_structured_request({k: v for k, v in args.items() if v is not None})
+    saved = _store().save_structured_request(not_none_args)
 
     # 툴 이름과 함께 dict 언패킹
     return json_payload(tool_result("save_structured_request", **saved))
