@@ -323,8 +323,16 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
     # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
-    ...
-
+    return SaveStructuredRequestInput(
+        title=schedule["title"],
+        date=schedule["date"],
+        start_time=schedule["start_time"],
+        end_time=schedule["end_time"],
+        members=schedule["attendees"],
+        source_schedule_id=schedule["id"],
+        kind="personal_schedule",
+        original_text="",
+    )
 
 @tool("personal_create_schedule")
 def personal_create_schedule(
@@ -338,8 +346,25 @@ def personal_create_schedule(
 
     # TODO: Week 1 임시 일정 tool을 호출한 뒤 결과를 StructuredRequest로 바꿔 SQLite에도 저장하세요.
     # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
-    ...
-
+    # MY: Week1의 tool을 호출 -> structured_request_from_week01_schedule
+    created_schedule = week01_personal_create_schedule.invoke({
+        "title":title,
+        "date":date,
+        "start_time":start_time,
+        "end_time":end_time,
+        "attendees":attendees,
+    })    
+    # 결과를 Structured Request로 바꾼다 -> ?
+    created = json.loads({"ok":True, "tool_name":"personal_create_schedule", "created_schedule": created_schedule})
+    schedule_dict = created["created_schedule"]
+    # SQLite DB에  저장 -> saved_structured_request?
+    translated = structured_request_from_week01_schedule(schedule_dict)
+    # created 결과 부분에서 request와 sqlive_save를 합쳐 JSON 문자열로 반환한다는 건 잘 모르겠음 -> 마지막은 json_payload tool을 쓰는거 같은데
+    sqlite_save = _store().save_structured_request(translated.model_dump())
+    
+    created["structured_request"] = translated.model_dump()
+    created["sqlite_save"] = sqlite_save
+    return json_payload(created)
 
 @tool(args_schema=SaveStructuredRequestInput)
 def save_structured_request(
