@@ -417,23 +417,30 @@ def personal_list_saved_schedules(
     date_to: str | None = None,
 ) -> str:
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
-
+    # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
+    # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
 
     # 기본 kind를 personal_schedule로 
     default_kind = kind or "personal_schedule"
+    schedules = []
 
-    schedules = _store().list_schedules(
-        limit=limit,
-        kind=default_kind,
-        date_from=date_from,
-        date_to=date_to
-    )
+    # kind가 todo나 reminder일 경우 작동 패스
+    if default_kind in ["personal_schedule", "group_schedule"]: 
+        schedules = _store().list_schedules(
+            limit=limit,
+            kind=default_kind,
+            date_from=date_from,
+            date_to=date_to
+        )
 
     # 필터 저장
     filters = {"kind": default_kind, "date_from": date_from, "date_to": date_to, "limit": limit}
 
     # filters, schedules 반환
     return json_payload(tool_result("personal_list_saved_schedules", filters=filters, schedules=schedules))
+    
+
+
 
 
 def delete_saved_schedules_dict(
@@ -511,10 +518,9 @@ def week03_prompt_parts() -> list[str]:
 
     return [
         *week02_prompt_parts(),
-        # TODO: Week 2 구조화 결과를 Week 3 SQLite 저장 흐름으로 연결하는 지시를 추가하세요.
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
-        # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
+
         # 역할
         f"너는 Week 3 SQLite DB 저장 흐름 관련 담당 agent다. ",
 
@@ -533,7 +539,12 @@ def build_week03_agent() -> object:
     global _WEEK03_AGENT
     if _WEEK03_AGENT is None:
         # TODO: chat_model(), week03_tools(), week03_system_prompt()로 Week 3 LangChain agent를 생성하세요.
-        ...
+        _WEEK03_AGENT = create_agent(
+            model=chat_model(),
+            tools=week03_tools(),
+            system_prompt=week03_system_prompt(),
+        )
+        
     return _WEEK03_AGENT
 
 
