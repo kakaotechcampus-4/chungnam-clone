@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain_core.tools import tool
@@ -58,8 +58,9 @@ WEEK03_TOOL_CALL_PROMPT = (
     "언급하지 않았다면 date_from/date_to를 반드시 비워(None) 전체 기간에서 찾는다 — 오늘 날짜로 "
     "임의로 좁혀서 조회하면 실제로 있는 일정도 후보에 안 잡혀 '없다'고 잘못 답하게 된다. 사용자가 "
     "날짜나 기간을 직접 언급했을 때만 그 값으로 date_from/date_to를 채운다. "
-    "(4) schedule_ids나 날짜/제목/시간 같은 조건을 하나도 지정하지 않은 채로 일정을 전부 지우도록 요청하지 않는다. "
-    "사용자가 명확히 전체 삭제를 원할 때만 delete_all=True로 호출한다. "
+    "(4) schedule_ids가 없다면 date/title/start_time/time_unspecified 중 최소 2개를 함께 지정해야 "
+    "삭제가 진행된다 — 이 중 하나만으로는 안전하지 않다고 보고 거부된다. 사용자가 명확히 전체 삭제를 "
+    "원할 때만 delete_all=True로 호출한다. "
     "(5) personal_list_schedules와 personal_delete_schedule(둘 다 이름에 saved가 없다)은 Week 1의 임시 "
     "세션 메모리 전용 tool이며 SQLite 기록장을 전혀 건드리지 않는다. save_structured_request나 "
     "personal_create_schedule로 SQLite에 저장한 일정을 조회/수정/삭제할 때 이 두 tool을 절대 쓰지 않는다 — "
@@ -356,11 +357,19 @@ class SavedRequestGetInput(BaseModel):
     request_id: str
 
 
+SavedScheduleKind = Literal["personal_schedule", "group_schedule"]
+
+
 class SavedScheduleListInput(BaseModel):
-    """저장 일정 목록 조회 입력입니다."""
+    """저장 일정 목록 조회 입력입니다.
+
+    kind는 personal_schedule/group_schedule만 받는다 — todo/reminder는 schedules 테이블이 아니라
+    todos/reminders 테이블에 저장되므로, 이 스키마로 그 값을 받아줘도 조회 결과는 항상 빈 리스트일
+    뿐이다. args_schema 단계에서 아예 막아 혼란을 없앤다(todo/reminder 조회는 list_saved_requests 사용).
+    """
 
     limit: int = Field(default=50, ge=1, le=200)
-    kind: RequestKind | None = None
+    kind: SavedScheduleKind | None = None
     date_from: str | None = None
     date_to: str | None = None
 
@@ -407,17 +416,21 @@ def _delete_saved_schedules(
         "time_unspecified": time_unspecified,
         "delete_all": delete_all,
     }
-    # 안전 가드: schedule_ids가 빈 리스트([])인 경우도 "조건 없음"으로 취급한다.
-    # delete_all=True가 명시적으로 들어온 경우에만 조건 없는 전체 삭제를 허용하고,
-    # 그 외에는 조건이 하나도 없으면 실제 삭제를 수행하지 않고 즉시 거부한다.
-    has_condition = bool(schedule_ids) or bool(date) or bool(title) or bool(start_time) or time_unspecified
+    # 안전 가드: schedule_ids(가장 정밀한 조건)는 단독으로도 허용한다. 그 외 date/title/start_time/
+    # time_unspecified는 각각 혼자 쓰면 너무 넓게 걸릴 위험이 있다 — title은 AppSQLiteStore가
+    # LIKE %title% 부분 일치로 찾으므로 짧은 제목 하나로도 여러 건에 걸릴 수 있고, date/time_unspecified
+    # 단독도 그 날/그 상태의 모든 일정을 건드릴 수 있다. 그래서 이 넷 중 최소 2개를 함께 지정했을
+    # 때만 필터 삭제를 허용한다. delete_all=True가 명시적으로 들어온 경우에만 조건 없는 전체 삭제를
+    # 허용하고, 그 외에는 조건이 부족하면 실제 삭제를 수행하지 않고 즉시 거부한다.
+    loose_filter_count = sum([bool(date), bool(title), bool(start_time), time_unspecified])
+    has_condition = bool(schedule_ids) or loose_filter_count >= 2
     if not delete_all and not has_condition:
         return tool_result(
             "personal_delete_saved_schedules",
             ok=False,
             error=(
-                "삭제 조건이 없습니다. schedule_ids나 날짜/제목/시간 필터를 지정하거나, "
-                "정말 전체 삭제를 원하면 delete_all=True로 호출하세요."
+                "삭제 조건이 부족합니다. schedule_ids를 지정하거나 날짜/제목/시간/시간미정 조건을 "
+                "2개 이상 함께 지정하세요. 정말 전체 삭제를 원하면 delete_all=True로 호출하세요."
             ),
             deleted_count=0,
             filters=filters,
@@ -574,11 +587,15 @@ def get_saved_request(request_id: str) -> str:
 @tool(args_schema=SavedScheduleListInput)
 def personal_list_saved_schedules(
     limit: int = 50,
-    kind: RequestKind | None = None,
+    kind: SavedScheduleKind | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> str:
-    """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
+    """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다.
+
+    kind는 personal_schedule/group_schedule만 지정할 수 있습니다. todo/reminder는 이 tool로 절대
+    조회되지 않으므로(schedules 테이블이 아니라 별도 테이블에 저장됨), list_saved_requests를 쓰세요.
+    """
 
     effective_kind = kind or "personal_schedule"
     schedules = _store().list_schedules(limit=limit, kind=effective_kind, date_from=date_from, date_to=date_to)

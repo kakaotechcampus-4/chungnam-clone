@@ -655,3 +655,45 @@ week02 프롬프트 누적분 포함).
 - `personal_create_schedule.invoke(...)` 반환 JSON 최상단이 정확히 `{"ok", "tool_name",
   "created_schedule", "structured_request", "sqlite_save"}` 형태임을 확인.
 - 생성된 `original_text`에 `"personal_create_schedule"` 같은 내부 함수명이 더 이상 노출되지 않음을 확인.
+
+### R3 — 조회/삭제 핵심 취약점
+
+**리뷰 피드백 요지**: `personal_list_saved_schedules`가 `todo`/`reminder` kind를 받으면 에러 없이
+그냥 빈 결과만 주는 문제를 방지하도록 kind 입력 범위를 제한하고, `_delete_saved_schedules`의
+`has_condition` 판단 규칙을 강화해 필드 하나만으로 광범위한 삭제가 일어나지 않게 한다.
+
+**조치**:
+1. `SavedScheduleListInput.kind`(및 `personal_list_saved_schedules` 함수 시그니처의 kind 타입 힌트)를
+   `RequestKind | None`에서 새로 정의한 `SavedScheduleKind = Literal["personal_schedule",
+   "group_schedule"] | None`으로 좁혔다. 이 tool은 `AppSQLiteStore.list_schedules()`로 `schedules`
+   테이블만 조회하는데, `todo`/`reminder`는 애초에 `todos`/`reminders`라는 별개 테이블에 저장되므로
+   `kind='todo'`를 넣어도 항상 빈 리스트만 나온다 — "조회했는데 없다"처럼 보이지만 실제로는 "이 tool로는
+   원천적으로 조회 불가능한 종류"라 오해의 소지가 있었다. 이제 args_schema 단계에서 `ValidationError`로
+   명확히 막고, docstring에 "todo/reminder는 list_saved_requests를 쓰라"는 안내를 추가했다. (규칙 7의
+   group_schedule 폴백은 `personal_schedule`/`group_schedule`만 쓰므로 이 변경과 완전히 호환된다.)
+2. `_delete_saved_schedules`의 안전 가드를 강화했다: 기존엔 `schedule_ids`/`date`/`title`/`start_time`/
+   `time_unspecified` 중 **아무거나 하나**만 있어도 삭제가 진행됐다. `title`은
+   `AppSQLiteStore.find_schedules`에서 `LIKE %title%`(부분 일치)로 찾으므로 짧거나 흔한 제목 하나만
+   줘도 의도보다 넓게 삭제될 위험이 있고, `date`/`time_unspecified` 단독도 마찬가지다. 이제
+   **`schedule_ids`(가장 정밀한 조건)는 단독으로도 허용**하되, 그 외 4개 필드 중 **최소 2개를 결합**
+   했을 때만 필터 삭제를 허용하도록 `loose_filter_count = sum([bool(date), bool(title),
+   bool(start_time), time_unspecified])` 기준을 추가했다. `delete_all=True`는 기존처럼 조건 없이도
+   전체 삭제를 허용하는 유일한 명시적 경로로 유지했다.
+
+**검증(정적, 임시 격리 DB)**:
+- `personal_list_saved_schedules.invoke({"kind": "todo"})` / `{"kind": "reminder"}` → 둘 다
+  `ValidationError`로 명확히 막힘 확인. `kind="personal_schedule"`/`"group_schedule"`/미지정은 여전히
+  정상 통과 확인.
+- `_delete_saved_schedules(title="회의"만)` → `ok=False`(거부) 확인.
+- `_delete_saved_schedules(date="2026-07-20"만)` → `ok=False`(거부) 확인.
+- `_delete_saved_schedules(title="회의", date="2026-07-20")`(2개 결합) → `ok=True`(허용) 확인.
+- `_delete_saved_schedules(schedule_ids=["sch_x"])`(단독) → `ok=True`(허용, 회귀 없음) 확인.
+- 조건 전혀 없음 → `ok=False`(기존 규칙 유지), `delete_all=True`(조건 없어도) → `ok=True`(기존 규칙
+  유지) 확인.
+
+### 종합 검증
+- `python -m py_compile student_parts/week03_build_nanas_logbook.py` 통과.
+- R1~R3 전체를 반영한 상태로 10단계 통합 시나리오("수진이랑 스터디" / "요가 수업")를 실제 LLM으로
+  처음부터 끝까지 재실행 — 이슈 없이 전부 통과, 최종 `schedules` 행 수 0건 확인.
+- 이번 리팩토링으로 새로 도입한 리스크(프롬프트 압축으로 인한 신뢰성 저하, 삭제 가드 강화로 인한
+  정상 시나리오 오탐)는 모두 실제 LLM 재실행으로 확인했으며, 회귀는 발견되지 않았다.
