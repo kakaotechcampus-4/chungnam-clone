@@ -170,12 +170,14 @@ WEEK03_TOOL_CALL_PROMPT = (
 #     후보 목록(preview)만 돌려줍니다. 실제 SQL 삭제는 AppSQLiteStore가 수행하고, 이 함수는
 #     안전 규칙과 응답 모양을 정리합니다.
 #
-#   - [추가] structured_request_from_week01_schedule(schedule)
+#   - [추가] structured_request_from_week01_schedule(schedule, original_text)
 #     Week 1의 임시 schedule dict를 Week 3 저장 입력으로 변환합니다. personal_create_schedule 호환 wrapper에서 사용합니다.
+#     original_text는 Week 1 schedule dict엔 없는 값이라 호출자가 별도로 넘겨야 감사 기록에 남습니다.
 #
 #   - [추가] personal_create_schedule(...)
 #     Week 1과 같은 이름을 유지하는 호환 tool입니다. 먼저 Week 1 임시 일정을 만들고, 같은 내용을 SQLite에도 저장합니다.
 #     SQLite 저장 단계가 실패하면 방금 만든 Week 1 임시 일정을 롤백해 재시도 시 중복이 남지 않게 합니다.
+#     original_text 인자로 사용자의 원래 문장을 받아 저장 기록에 함께 남깁니다.
 #
 #   - [메인] save_structured_request(...)
 #     Week 2 structured_request 필드를 직접 받아 SQLite에 저장하는 Week 3 핵심 tool입니다.
@@ -418,11 +420,15 @@ def _delete_saved_schedules(
     )
 
 
-def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
+def structured_request_from_week01_schedule(
+    schedule: dict[str, Any], original_text: str = ""
+) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다.
 
     참석자가 있으면 group_schedule로 분류해야 외부 공유 저장소에도 참석자별로 동기화된다.
     kind를 무조건 personal_schedule로 고정하면 참석자가 있어도 "나"만 동기화되어 버린다.
+    original_text는 Week 1 schedule dict엔 없는 값이라 호출자가 사용자의 원래 문장을
+    별도로 넘겨줘야 SQLite 감사 기록에 남는다.
     """
 
     attendees = schedule.get("attendees") or []
@@ -433,6 +439,7 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
         start_time=schedule.get("start_time"),
         end_time=schedule.get("end_time"),
         members=attendees,
+        original_text=original_text,
         source_schedule_id=schedule.get("id"),
     )
 
@@ -444,6 +451,7 @@ def personal_create_schedule(
     start_time: str,
     end_time: str = "미정",
     attendees: list[str] | None = None,
+    original_text: str = "",
 ) -> str:
     """Nana의 개인 일정을 생성하고 Week 3+ 앱 SQLite DB에도 저장합니다."""
 
@@ -460,7 +468,7 @@ def personal_create_schedule(
     )
     schedule = created["created_schedule"]
     try:
-        save_input = structured_request_from_week01_schedule(schedule)
+        save_input = structured_request_from_week01_schedule(schedule, original_text=original_text)
         sqlite_save = save_structured_request_payload(save_input)
     except Exception as exc:
         # SQLite 저장 실패는 (fixed/app_store.py 기준) 항상 커밋 전 실패라 SQLite엔 아무것도
@@ -683,6 +691,7 @@ def week03_prompt_parts() -> list[str]:
         f"오늘은 {current_app_date_iso()}이다. Week 3의 범위는 SQLite에 대한 저장/조회/수정/삭제까지다. "
         "RAG 검색이나 외부 멤버 일정 조율은 이후 주차의 몫이므로 다루지 않는다. "
         "다른 사람이 언급되지 않는 단순한 '개인 일정 만들어줘' 요청에는 personal_create_schedule을 사용하고, "
+        "이때 original_text 인자에 사용자가 입력한 원래 문장을 그대로 함께 전달한다(감사 기록 보존용). "
         "그 외 자연어 저장 요청이나 todo/reminder/group_schedule 처럼 personal_schedule이 아닌 요청은 "
         "extract_schedule_request로 구조화한 뒤 save_structured_request로 저장한다.",
     ]
