@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, Literal
 
 from langchain.agents import create_agent
 from langchain_core.tools import tool
@@ -295,11 +295,17 @@ class SavedRequestGetInput(BaseModel):
     request_id: str
 
 
+# list_schedules는 schedules 테이블만 조회하므로, 이 테이블에 저장되는 일정 kind로만 제한한다.
+# todo/reminder는 각각 todos/reminders 테이블에 저장되어 여기로는 조회되지 않으므로
+# (그쪽은 list_saved_requests로 조회), 이 tool의 kind에서 제외한다.
+ScheduleKind = Literal["personal_schedule", "group_schedule"]
+
+
 class SavedScheduleListInput(BaseModel):
     """저장 일정 목록 조회 입력입니다."""
 
     limit: int = Field(default=50, ge=1, le=200)
-    kind: RequestKind | None = None
+    kind: ScheduleKind | None = None
     date_from: str | None = None
     date_to: str | None = None
 
@@ -360,6 +366,27 @@ def _delete_saved_schedules(
     if delete_all:
         deleted = store.delete_all_schedules()
     else:
+        # 전체 삭제도 아니고 schedule_ids로 콕 집은 것도 아닌데 필터에 여러 건이 걸리면,
+        # 바로 지우지 말고 후보를 보여줘 어떤 것을 지울지 schedule_ids로 다시 고르게 한다.
+        # (title은 store에서 LIKE 부분 일치라 "회의"가 "월간 회의" 등도 매칭할 수 있다.)
+        if not schedule_ids:
+            candidates = store.find_schedules(
+                date=date,
+                title=title,
+                start_time=start_time,
+                time_unspecified=time_unspecified,
+            )
+            if len(candidates) > 1:
+                return tool_result(
+                    "personal_delete_saved_schedules",
+                    ok=False,
+                    require_confirmation=True,
+                    error=f"{len(candidates)}건이 매칭됩니다. 어떤 일정을 지울지 골라 schedule_ids로 다시 삭제하세요.",
+                    deleted_count=0,
+                    filters=filters,
+                    deleted=[],
+                    candidates=candidates,
+                )
         deleted = store.delete_schedules_by_filter(
             schedule_ids=schedule_ids,
             date=date,
@@ -380,6 +407,11 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
     # TODO: Week 1 schedule의 attendees/id를 Week 3 members/source_schedule_id에 맞춰 변환하세요.
+
+    title = schedule.get("title") or ""
+    date = schedule.get("date") or ""
+    start_time = schedule.get("start_time") or ""
+    original_text = " ".join(part for part in (date, start_time, title) if part)
     return SaveStructuredRequestInput(
         kind="personal_schedule",
         title=schedule.get("title"),
@@ -387,7 +419,7 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
         start_time=schedule.get("start_time"),
         end_time=schedule.get("end_time"),
         members=schedule.get("attendees") or [],
-        original_text=schedule.get("title") or "",
+        original_text=original_text,
         source_schedule_id=schedule.get("id"),
     )
 
@@ -416,14 +448,16 @@ def personal_create_schedule(
     schedule = created.get("created_schedule", {})
     save_input = structured_request_from_week01_schedule(schedule)
     sqlite_save = save_structured_request_payload(save_input)
-    # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
-    payload = {
-        **created,
-        "tool_name": "personal_create_schedule",
-        "structured_request": save_input.model_dump(),
-        "sqlite_save": sqlite_save,
-    }
-    return json_payload(payload)
+    # 다른 tool들과 동일하게 tool_result가 ok/tool_name을 책임진다.
+    # created_schedule의 필드는 structured_request에 이미 반영되므로
+    # 응답에는 structured_request와 sqlite_save만 담는다.
+    return json_payload(
+        tool_result(
+            "personal_create_schedule",
+            structured_request=save_input.model_dump(),
+            sqlite_save=sqlite_save,
+        )
+    )
 
 
 @tool(args_schema=SaveStructuredRequestInput)
@@ -485,7 +519,7 @@ def get_saved_request(request_id: str) -> str:
 @tool(args_schema=SavedScheduleListInput)
 def personal_list_saved_schedules(
     limit: int = 50,
-    kind: RequestKind | None = None,
+    kind: ScheduleKind | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> str:
@@ -626,7 +660,9 @@ def week03_prompt_parts() -> list[str]:
         # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
         "저장은 save_structured_request, 요청 원본 조회는 list_saved_requests/get_saved_request, "
         "일정 조회는 personal_list_saved_schedules, 수정은 personal_update_saved_schedule, "
-        "삭제는 personal_delete_saved_schedules를 사용한다.",
+        "삭제는 personal_delete_saved_schedules를 사용한다. "
+        "단, personal_list_saved_schedules는 일정(personal_schedule/group_schedule)만 조회하므로 "
+        "todo/reminder 조회는 list_saved_requests(kind=...)로 한다.",
         "앞의 Week 2 범위 제한과 달리, 이번 Week 3에서는 SQLite 저장과 조회/수정/삭제까지 수행한다. "
         "다만 RAG 검색과 외부 멤버 일정 조율은 아직 하지 않는다.",
     ]
