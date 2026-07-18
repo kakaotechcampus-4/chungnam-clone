@@ -515,6 +515,13 @@ def week03_prompt_parts() -> list[str]:
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
         # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
+        # 역할
+        f"너는 Week 3 SQLite DB 저장 흐름 관련 담당 agent다. ",
+
+        # tool 선택 기준
+        "Week 1의 personal_list_schedules/personal_delete_schedule은 현재 대화에서만 유지되는 임시 메모리 tool이다. "
+        "Week 3 이후로 일정 조회/삭제는 SQLite에 남는 personal_list_saved_schedules/personal_delete_saved_schedules를 사용하고, "
+        "위 두 Week 1 tool은 더 이상 조회/삭제 목적으로 사용하지 않는다.",
     ]
 
 
