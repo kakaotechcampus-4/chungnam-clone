@@ -610,7 +610,7 @@ def week03_prompt_parts() -> list[str]:
         "personal_list_saved_schedules(kind=\"group_schedule\")로 명시해서 호출해라. "
         "personal_list_saved_schedules는 할 일/알림은 찾지 못하니, "
         "할 일이나 알림을 조회할 때는 list_saved_requests(kind=\"todo\" 또는 \"reminder\")를 사용해라. "
-        "사용자가 '일정 전부 보여줘'처럼 개인/그룹 구분 없이 묻거나 무엇을 조회해야 할지 애매하면 "
+        "사용자가 '일정 보여줘'처럼 개인/그룹 구분 없이 묻거나 무엇을 조회해야 할지 애매하면 "
         "kind 없이 list_saved_requests를 호출해 전체를 확인해라. ",
         WEEK03_TOOL_CALL_PROMPT,
         "너는 이번 주차에서 RAG 검색이나 외부 멤버와의 일정 조율까지는 하지 않는다.",
