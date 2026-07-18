@@ -45,10 +45,7 @@ WEEK03_TOOL_CALL_PROMPT = (
     "personal_delete_saved_schedules를 schedule_ids 없이(delete_all이나 date/title/start_time 필터로) "
     "호출하면 confirmed=true를 주기 전까지는 실제로 삭제되지 않고 삭제 후보 목록만 돌아온다. "
     "이 후보 목록을 사용자에게 보여주고 삭제하겠다는 명시적인 확인을 채팅으로 받은 뒤에만 "
-    "같은 조건에 confirmed=true를 추가해 다시 호출한다. "
-    "personal_list_schedules와 personal_delete_schedule은 Week 1의 대화 범위 임시 메모리 전용 도구이니 "
-    "저장된(SQLite) 일정을 조회하거나 삭제할 때는 사용하지 않는다. 그럴 때는 반드시 "
-    "personal_list_saved_schedules와 personal_delete_saved_schedules를 사용한다."
+    "같은 조건에 confirmed=true를 추가해 다시 호출한다."
 )
 
 
@@ -202,7 +199,8 @@ WEEK03_TOOL_CALL_PROMPT = (
 #
 #   - [공통] week03_tools()
 #     Week 1 tool 목록에 Week 2 구조화 tool과 Week 3 SQLite tool을 누적합니다. Week 1 personal_create_schedule은
-#     SQLite 저장까지 수행하는 이 파일의 호환 tool로 교체합니다.
+#     SQLite 저장까지 수행하는 이 파일의 호환 tool로 교체합니다. personal_list_schedules/personal_delete_schedule은
+#     SQLite 버전과 목적이 겹쳐 agent가 잘못 고를 수 있어 목록에서 제외합니다.
 #
 #   - [공통] week03_system_prompt() / week03_prompt_parts()
 #     Week 3 agent가 "구조화 후 저장" 흐름을 따르도록 system prompt를 조립합니다.
@@ -645,10 +643,17 @@ def personal_delete_saved_schedules(
 
 
 def week03_tools() -> list[Any]:
-    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
+    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다.
+
+    personal_list_schedules/personal_delete_schedule(Week 1의 임시 메모리 전용 조회/삭제)은
+    SQLite 버전(personal_list_saved_schedules/personal_delete_saved_schedules)과 목적이
+    겹쳐서 agent가 잘못 고를 위험이 있으므로 Week 3 tool 목록에는 올리지 않는다.
+    """
 
     base_tools = [
-        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item for item in week01_tools()
+        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item
+        for item in week01_tools()
+        if _tool_name(item) not in {"personal_list_schedules", "personal_delete_schedule"}
     ]
     return [
         *base_tools,
