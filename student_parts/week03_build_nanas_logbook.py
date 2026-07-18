@@ -31,16 +31,26 @@ _WEEK03_AGENT: Any | None = None
 SQLITE_MEMORY_PROMPT = (
     "Week 3부터 일정, 할 일, 알림은 앱 SQLite DB에 영구 저장된다. "
     "따라서 새 대화나 앱 재시작 후에도 이전에 저장한 기록은 그대로 남아 있다. "
-    "사용자가 저장된 내용을 물으면 기억에 의존하지 말고 항상 조회 tool로 실제 DB를 확인한다."
+    "사용자가 저장된 내용을 물으면 기억에 의존하지 말고 항상 조회 tool로 실제 DB를 확인한다. "
+    "Week 1의 personal_list_schedules / personal_delete_schedule은 대화 임시 메모리용이다. "
+    "이미 SQLite에 저장한 일정을 묻거나 지울 때는 절대 쓰지 말고, "
+    "personal_list_saved_schedules / personal_delete_saved_schedules만 사용한다."
 )
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
 WEEK03_TOOL_CALL_PROMPT = (
-    "저장 요청이면 먼저 extract_schedule_request(query=사용자 원문)로 자연어를 구조화한 뒤, "
+    "Week 3 일반 저장 요청은 extract_schedule_request(query=사용자 원문)로 구조화한 뒤, "
     "그 structured_request의 kind/title/date/start_time/end_time/members/priority/reason/original_text를 "
     "save_structured_request 인자로 그대로 넘겨 저장한다. "
-    "'내 일정 보여줘' 같은 조회는 personal_list_saved_schedules를 쓰고, 저장 요청 원본 기록은 "
-    "list_saved_requests / get_saved_request로 확인한다. "
+    "한 번의 저장 요청에서는 이 경로만 쓰고, personal_create_schedule을 같이 호출하지 않는다. "
+    "둘을 함께 호출하면 SQLite에 같은 일정이 두 번 저장될 수 있다. "
+    "personal_create_schedule은 Week 1 호환용이다. "
+    "임시 메모리와 SQLite에 동시에 남겨야 하거나, 제목/날짜/시간이 이미 분해된 생성만 필요할 때 "
+    "이 tool만 단독으로 사용한다. 일반 Week 3 자연어 저장에는 쓰지 않는다. "
+    "'내 일정 보여줘', '내일 일정 뭐야'처럼 저장된 일정을 묻는 질문에는 "
+    "반드시 personal_list_saved_schedules만 사용한다. "
+    "personal_list_schedules는 Week 1 임시 메모리라 비어 있을 수 있으니 쓰지 않는다. "
+    "저장 요청 원본 기록은 list_saved_requests / get_saved_request로 확인한다. "
     "일정 수정은 personal_update_saved_schedule, 삭제는 personal_delete_saved_schedules를 사용한다. "
     "수정·삭제 전에는 먼저 personal_list_saved_schedules로 대상 schedule_id를 확인하고, "
     "조건 없이 전체를 지우지 않는다."
@@ -260,15 +270,21 @@ def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dic
         return SaveStructuredRequestInput.model_validate(value)
     if isinstance(value, str):
         text = value.strip()
+        if not text:
+            raise RuntimeError("invalid_json_payload_type: 빈 문자열은 저장 payload로 사용할 수 없습니다.")
         try:
             parsed = json.loads(text)
         except (ValueError, TypeError):
-            parsed = None
+            # JSON이 아니면 자연어로 보고 Week 2 구조화를 거친다.
+            structured = extract_structured_request(text)
+            return SaveStructuredRequestInput.model_validate(structured.model_dump())
         if isinstance(parsed, dict):
             return SaveStructuredRequestInput.model_validate(parsed)
-        # 자연어 문자열이면 Week 2 구조화를 먼저 거친다.
-        structured = extract_structured_request(text)
-        return SaveStructuredRequestInput.model_validate(structured.model_dump())
+        # JSON 파싱은 됐지만 객체가 아니면 LLM에 넘기지 않고 거부한다.
+        raise RuntimeError(
+            "invalid_json_payload_type: 저장 payload는 JSON 객체(dict)여야 합니다. "
+            f"현재 파싱 결과 타입: {type(parsed).__name__}"
+        )
     raise RuntimeError(
         "저장 입력은 SaveStructuredRequestInput/StructuredRequest/dict/str 중 하나여야 합니다. "
         f"현재 타입: {type(value).__name__}"
@@ -358,7 +374,8 @@ def _delete_saved_schedules(
         "delete_all": delete_all,
     }
 
-    has_condition = delete_all or bool(schedule_ids) or any([date, title, start_time, time_unspecified])
+    has_filter = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
+    has_condition = delete_all or has_filter
     if not has_condition:
         return tool_result(
             "personal_delete_saved_schedules",
@@ -368,6 +385,36 @@ def _delete_saved_schedules(
             deleted=[],
             error="no_filter",
             message="삭제 조건이 필요합니다. schedule_ids나 날짜/제목/시간, 또는 delete_all을 지정하세요.",
+        )
+
+    # delete_all과 다른 필터가 같이 오면 의도가 모호하므로 삭제하지 않는다.
+    if delete_all and has_filter:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="ambiguous_filter",
+            message=(
+                "delete_all과 schedule_ids/날짜/제목/시간 필터를 함께 지정할 수 없습니다. "
+                "전체 삭제는 delete_all만, 조건부 삭제는 필터만 사용하세요."
+            ),
+        )
+
+    # 특정 시각 삭제와 시간 미정 삭제는 동시에 쓸 수 없다.
+    if start_time and time_unspecified:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="conflicting_time_filters",
+            message=(
+                "start_time과 time_unspecified를 함께 지정할 수 없습니다. "
+                "특정 시각 삭제는 start_time만, 시간 미정 삭제는 time_unspecified만 사용하세요."
+            ),
         )
 
     if delete_all:
@@ -429,9 +476,28 @@ def personal_create_schedule(
     created = json.loads(created_json)
     schedule = created.get("created_schedule", {})
     save_input = structured_request_from_week01_schedule(schedule)
-    sqlite_save = _store().save_structured_request(save_input.model_dump(exclude_none=True))
     created["structured_request"] = save_input.model_dump()
-    created["sqlite_save"] = sqlite_save
+    created["temp_memory"] = {"ok": True, "schedule_id": schedule.get("id")}
+
+    # 이중 기록은 완전 원자성을 보장하지 않는다.
+    # SQLite 실패 시에도 어느 어디까지 반영됐는지 결과에 남긴다.
+    try:
+        sqlite_save = _store().save_structured_request(save_input.model_dump(exclude_none=True))
+        created["sqlite_save"] = {"ok": True, **sqlite_save}
+        created["ok"] = True
+        created["partial_success"] = False
+    except Exception as exc:
+        created["ok"] = False
+        created["partial_success"] = True
+        created["sqlite_save"] = {
+            "ok": False,
+            "error": type(exc).__name__,
+            "message": str(exc),
+        }
+        created["message"] = (
+            "임시 메모리 저장은 성공했지만 SQLite 저장에 실패했습니다. "
+            "어느 저장소까지 반영됐는지는 temp_memory/sqlite_save를 확인하세요."
+        )
     return json_payload(created)
 
 
