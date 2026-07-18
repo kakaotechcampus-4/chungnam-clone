@@ -36,16 +36,14 @@ SQLITE_MEMORY_PROMPT = (
 )
 
 WEEK03_TOOL_CALL_PROMPT = (
+    # 아래는 tool 하나의 docstring만으로는 표현할 수 없는 "여러 tool에 걸친 순서" 규칙만 담는다.
+    # 각 tool 자체의 동작(예: 삭제 confirm 여부)은 그 tool의 docstring이 단일 출처이므로 여기서 반복하지 않는다.
     "자연어로 들어온 일정/할 일/알림 저장 요청은 곧바로 저장하지 않는다. 먼저 extract_schedule_request로 "
     "요청을 구조화한 뒤, 그 결과를 save_structured_request 인자로 그대로 전달해 저장한다. "
     "일정을 수정하거나 삭제하기 전에는 personal_list_saved_schedules(또는 list_saved_requests/"
     "get_saved_request)로 먼저 후보를 조회해 정확한 schedule_id를 확인한 뒤에만 "
     "personal_update_saved_schedule, personal_delete_saved_schedules를 호출한다. "
-    "schedule_ids나 명시적인 필터, delete_all 확인 없이 조건 없는 삭제를 호출하지 않는다. "
-    "personal_delete_saved_schedules를 schedule_ids 없이(delete_all이나 date/title/start_time 필터로) "
-    "호출하면 confirmed=true를 주기 전까지는 실제로 삭제되지 않고 삭제 후보 목록만 돌아온다. "
-    "이 후보 목록을 사용자에게 보여주고 삭제하겠다는 명시적인 확인을 채팅으로 받은 뒤에만 "
-    "같은 조건에 confirmed=true를 추가해 다시 호출한다."
+    "삭제/확인 조건의 구체적인 동작은 personal_delete_saved_schedules의 tool 설명을 따른다."
 )
 
 
@@ -155,7 +153,8 @@ WEEK03_TOOL_CALL_PROMPT = (
 #
 #   - [추가] _save_input_from(value)
 #     테스트나 직접 호출 helper에서 dict, JSON 문자열, StructuredRequest를 SaveStructuredRequestInput 하나로 맞춥니다.
-#     자연어 문자열이 들어오면 Week 2 extract_structured_request(...)로 먼저 구조화합니다.
+#     {나 [로 시작하는 문자열만 JSON으로 보고 파싱하며, 깨져 있으면 자연어로 넘기지 않고 바로 에러를 냅니다.
+#     그 외 문자열만 자연어로 보고 Week 2 extract_structured_request(...)로 구조화합니다.
 #
 #   - [추가] save_structured_request_payload(...)
 #     tool wrapper 없이 직접 저장을 테스트해야 할 때 쓰는 helper입니다. 입력을 검증한 뒤 AppSQLiteStore.save_structured_request(...)에 넘깁니다.
@@ -182,6 +181,7 @@ WEEK03_TOOL_CALL_PROMPT = (
 #   - [메인] save_structured_request(...)
 #     Week 2 structured_request 필드를 직접 받아 SQLite에 저장하는 Week 3 핵심 tool입니다.
 #     args_schema가 입력 검증을 끝낸 뒤 들어오므로, 본문은 저장 dict를 만들어 store에 넘기는 일만 합니다.
+#     kind가 personal_schedule인데 members가 있으면 group_schedule로 교정합니다.
 #
 #   - [메인] list_saved_requests(...) / get_saved_request(...)
 #     SQLite에 저장된 structured_requests 원본 기록을 목록 또는 단건으로 조회합니다.
@@ -263,14 +263,20 @@ def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dic
     elif isinstance(value, dict):
         normalized = value
     elif isinstance(value, str):
-        try:
-            parsed = json.loads(value)
-        except json.JSONDecodeError:
-            normalized = extract_structured_request(value).model_dump()
-        else:
+        stripped = value.strip()
+        if stripped.startswith("{") or stripped.startswith("["):
+            # {나 [로 시작하면 JSON을 의도한 입력으로 본다. 파싱이 깨지면 오타로 보고
+            # 바로 에러를 내야지, 자연어로 취급해 LLM으로 넘기면 오타와 진짜 자연어 요청이
+            # 로그상 구분되지 않는다.
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError(f"JSON으로 보이지만 파싱할 수 없는 입력입니다: {exc}") from exc
             if not isinstance(parsed, dict):
                 raise TypeError(f"저장 입력으로 정규화할 수 없는 JSON 값입니다: {type(parsed)!r}")
             normalized = parsed
+        else:
+            normalized = extract_structured_request(value).model_dump()
     else:
         raise TypeError(f"저장 입력으로 정규화할 수 없는 타입입니다: {type(value)!r}")
     return SaveStructuredRequestInput.model_validate(normalized)
@@ -507,7 +513,18 @@ def save_structured_request(
     original_text: str = "",
     source_schedule_id: str | None = None,
 ) -> str:
-    """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
+    """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다.
+
+    자연어 입력을 구조화하려면 extract_schedule_request를 먼저 호출해 그 결과를
+    이 tool 인자로 그대로 전달하세요.
+    kind가 personal_schedule인데 members가 있으면 group_schedule로 교정합니다.
+    참석자가 있는데도 personal_schedule로 저장되면 외부 공유 저장소에 "나"만
+    동기화되고 나머지 참석자의 busy time은 빠지기 때문입니다(personal_create_schedule
+    경로의 structured_request_from_week01_schedule과 동일한 안전장치).
+    """
+
+    if kind == "personal_schedule" and members:
+        kind = "group_schedule"
 
     payload = {
         "kind": kind,
@@ -593,7 +610,10 @@ def personal_update_saved_schedule(
     end_time: str | None = None,
     attendees: list[str] | None = None,
 ) -> str:
-    """앱 DB에 저장된 내 일정 원본을 수정하고 공유 일정 복사본을 같은 값으로 갱신합니다."""
+    """앱 DB에 저장된 내 일정 원본을 수정하고 공유 일정 복사본을 같은 값으로 갱신합니다.
+
+    정확한 schedule_id는 personal_list_saved_schedules로 먼저 조회해 확인하세요.
+    """
 
     result = _store().update_schedule(
         schedule_id,
@@ -633,6 +653,7 @@ def personal_delete_saved_schedules(
 ) -> str:
     """Nana가 고른 일정 ID나 날짜/제목/시간 필터로 저장 일정을 삭제합니다.
 
+    정확한 schedule_id는 personal_list_saved_schedules로 먼저 조회해 확인하세요.
     schedule_ids 없이 여러 건을 지우는 요청은 confirmed=True가 올 때까지 실제로
     삭제하지 않고 후보 목록만 돌려줍니다.
     """
