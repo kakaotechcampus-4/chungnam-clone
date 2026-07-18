@@ -44,7 +44,11 @@ WEEK03_TOOL_CALL_PROMPT = (
     "personal_delete_saved_schedules 에 그 schedule_id 를 넘긴다. 조회 없이 바로 삭제하지 않는다. "
     "후보를 조회할 때 사용자가 날짜를 말하지 않았으면 date_from, date_to 필터를 걸지 않는다. "
     "수정과 삭제에 넘기는 ID 는 저장 결과의 request_id 가 아니라 "
-    "personal_list_saved_schedules 가 반환한 schedule_id 다."
+    "personal_list_saved_schedules 가 반환한 schedule_id 다.\n"
+    "예시) 사용자: 스터디 일정 삭제해줘\n"
+    "1. personal_list_saved_schedules 를 필터 없이 호출해서 제목이 스터디인 일정의 schedule_id 를 찾는다.\n"
+    "2. personal_delete_saved_schedules 에 schedule_ids=[찾은 schedule_id] 를 넘긴다.\n"
+    "3. deleted_count 를 확인하고 삭제된 일정의 제목과 날짜를 한국어로 답한다."
 )
 
 
