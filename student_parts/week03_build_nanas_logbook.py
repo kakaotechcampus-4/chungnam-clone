@@ -368,12 +368,17 @@ def _delete_saved_schedules(
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
-    return SaveStructuredRequestInput.model_construct(
+    def _normalize_time(value: Any) -> str | None:
+        if value in (None, "", "미정"):
+            return None
+        return value
+    
+    return SaveStructuredRequestInput(
         kind="personal_schedule",
         title=schedule.get("title"),
         date=schedule.get("date"),
-        start_time=schedule.get("start_time"),
-        end_time=schedule.get("end_time"),
+        start_time=_normalize_time(schedule.get("start_time")),
+        end_time=_normalize_time(schedule.get("end_time")),
         members=list(schedule.get("attendees") or []),
         priority=None,
         reason="Week 1 personal_create_schedule 결과를 SQLite 저장 입력으로 변환함",
