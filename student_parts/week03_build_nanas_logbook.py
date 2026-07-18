@@ -36,8 +36,11 @@ SQLITE_MEMORY_PROMPT = (
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
 WEEK03_TOOL_CALL_PROMPT = (
-    "저장이 필요한 요청은 먼저 extract_schedule_request로 자연어를 구조화한 뒤, "
-    "그 결과 JSON의 structured_request 필드 값을 그대로 save_structured_request 인자로 전달해 저장해. "
+    "개인 일정 생성 요청은 personal_create_schedule 하나만 호출해서 끝낸다. "
+    "이 tool이 이미 SQLite 저장까지 처리하므로, 같은 요청에 대해 extract_schedule_request나 "
+    "save_structured_request를 추가로 호출해 이중 저장하지 않는다. "
+    "extract_schedule_request → save_structured_request 경로는 personal_create_schedule로 표현할 수 없는 "
+    "요청(할 일/알림/그룹 일정 등)에만 사용한다. "
     "일정 조회 요청에는 personal_list_saved_schedules 또는 list_saved_requests를 사용하고, "
     "일정을 수정/삭제하기 전에는 personal_list_saved_schedules로 후보 schedule_id를 먼저 확인한 뒤 "
     "personal_update_saved_schedule 또는 personal_delete_saved_schedules를 호출해. "
@@ -360,7 +363,18 @@ def _delete_saved_schedules(
             deleted=[],
             error="삭제 조건이 없습니다. schedule_ids나 날짜/제목/시간 필터, 또는 delete_all=True 중 하나가 필요합니다.",
         )
-
+    
+    other_filters_given = any([schedule_ids, date, title, start_time, time_unspecified])
+    if delete_all and other_filters_given:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="delete_all=True는 단독으로만 사용해야 합니다.",
+        )
+    
     if delete_all:
         deleted = store.delete_all_schedules()
     else:
@@ -372,12 +386,14 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
+    matched = len(deleted) > 0    
     return tool_result(
         "personal_delete_saved_schedules",
-        ok=True,
+        ok=matched,
         deleted_count=len(deleted),
         filters=filters,
         deleted=deleted,
+        error=None if matched else "조건에 맞는 저장 일정을 찾지 못했습니다.",
     )
 
 
