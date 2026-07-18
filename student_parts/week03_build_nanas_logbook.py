@@ -28,10 +28,43 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = ""
+SQLITE_MEMORY_PROMPT = (
+    "너는 SQLite DB에 영구 기억을 가진 Nana이다. 사용자가 이전에 저장을 요청한 "
+    "일정/할 일/알림은 SQLite DB에 영구 저장되며, 새로운 대화에서도 그대로 남아있다. "
+
+    "Week 1의 임시 메모리와 달리, 여기 저장된 일정/할 일/알림은 대화가 끝나거나 앱을 재시작해도 사라지지 않는다. "
+
+    "사용자가 '내 일정 보여줘', '저장되어 있는 일정 뭐가 있어?' 처럼 과거에 저장된 "
+    "정보를 물어보는 경우, 네 기억이나 이전 대화 내용에 의존해 추측하지 말고 반드시 "
+    "조회 tool(personal_list_saved_schedules, list_saved_requests, get_saved_request)을 "
+    "호출해서 실제 DB 값을 확인한 뒤 대답해라. "
+
+    "저장된 게 없다거나 모르겠다고 대답하기 전에, 먼저 조회 tool을 호출했는지 확인하라."
+)
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = ""
+WEEK03_TOOL_CALL_PROMPT = (
+    "저장: 사용자가 새 일정/할 일/알림을 요청하면, 먼저 extract_schedule_request(또는 "
+    "extract_structured_request)로 자연어를 구조화한 뒤, 그 결과를 save_structured_request의 "
+    "인자로 그대로 전달해 SQLite에 저장하라. 구조화 없이 바로 저장 tool을 호출하지 마라."
+
+    "조회: 일정만 궁금할 때(예: '내 일정 보여줘', '이번 주 일정 뭐 있어?')는 "
+    "personal_list_saved_schedules tool을 사용한다."
+
+    "조회: 저장된 요청 전체(일정+할일+알림 원본)를 훑어보고 싶다면 "
+    "list_saved_requests tool을 사용한다."
+
+    "조회: request_id 하나를 이미 알고 있을 때는 get_saved_request tool을 사용한다."
+
+    "수정/삭제: 일정을 고치거나 지우기 전에는 먼저 personal_list_saved_schedules로 대상 "
+    "후보를 조회해 schedule_id를 확인하라. 그 뒤 personal_update_saved_schedule 또는 "
+    "personal_delete_saved_schedules에 확인된 schedule_id 또는 명확한 필터(date, title 등)를 "
+    "전달하라. 후보 확인 없이 곧바로 수정/삭제 tool을 호출하지 마라."
+
+    "삭제: _delete_saved_schedules는 삭제 조건이 하나도 없으면 요청을 거부하도록 "
+    "구현되어 있다. delete_all 또는 명시적 필터(schedule_ids, date, title, start_time 등) "
+    "중 하나는 반드시 있어야 하므로, 조건 없이 삭제 tool을 호출하지 마라."
+)
 
 
 # [3주차 수강생 구현 가이드]
@@ -219,8 +252,24 @@ class SaveStructuredRequestInput(StructuredRequest):
     @classmethod
     def unwrap_legacy_payload(cls, value: Any) -> Any:
         """예전 trace의 payload wrapper만 짧게 풀고 실제 검증은 필드 스키마에 맡깁니다."""
-
+        #dict 타입인지확인하기 
+        if not isinstance(value, dict):
+            return value
         # TODO: StructuredRequest와 예전 payload/structured_request wrapper를 저장 입력 형태로 정규화하세요.
+        #껍데기(?) payload/sturcutred_request를 반복문을 통해서 확인하기
+        for wrapper_key in ("payload", "structured_request"):
+            # {"payload": {"kind": "personal_schedule", "title": "코칭"}} 이라면 key 는{"kind": "personal_schedule", "title": "코칭"} 이거다
+            # key 가 없다면 ? None 이 들어갈 것이다. 
+            inner = value.get(wrapper_key)
+
+            # dict 타입인지 확인하기 
+            if isinstance(inner, dict):
+                # sourse_schedule_id 같은 inner에 없는 필드를 가져오기위해서 
+                # value 내용 펼치고 inner 내용 펼쳐서 하나의 dict로 합치고, wrapper_key는 제거하기
+                merged = {**value, **inner}
+                merged.pop(wrapper_key, None)
+                return merged
+            
         return value
 
 
@@ -354,6 +403,12 @@ def save_structured_request(
     }
 
     # TODO: 검증된 함수 인자를 저장 dict로 만들고 None 값을 제외한 뒤 SQLite에 저장하세요.
+    filtered_fields = {}
+    for key, value in field_to_dict.items():
+        if value is not None:
+            filtered_fields[key] = value
+    field_to_dict = filtered_fields
+
     save_DB_result = _store().save_structured_request(field_to_dict)
 
     # TODO: ok/tool_name과 저장 결과가 포함된 JSON 문자열을 반환하세요.

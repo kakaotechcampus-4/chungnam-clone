@@ -138,21 +138,46 @@ class StructuredRequestBatch(BaseModel):
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
-
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    raise RuntimeError(
+        "StructuredRequest 또는 dict 형태의 structured output이 필요합니다. "
+        f"현재 타입: {type(value).__name__}"
+    )
+    
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
-
-    ...
+    structured_model = chat_model().with_structured_output(
+        StructuredRequest,
+        method="function_calling",
+    )
+    result = structured_model.invoke(
+        [
+            {"role": "system", "content": join_system_prompt(week02_prompt_parts())},
+            {"role": "user", "content": text},
+        ]
+    )
+    return _coerce_structured_request(result)
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
     """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
-
-    ...
+    structured = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "base_date": current_app_date_iso(),
+            "structured_request": structured.model_dump(),
+        },
+        ensure_ascii=False,
+    )
+    
 
 
 def week02_tools() -> list[Any]:
@@ -208,7 +233,6 @@ def week02_prompt_parts() -> list[str]:
         # priority
         "priority 필드는 항상 low/medium/high 중 하나로 채운다. 마감이 임박하거나(당일, 긴급 표현) 중요하다는 표현이 있으면 high, 특별한 긴급함이 없으면 medium, 여유 있거나 사소한 내용이면 low로 판단한다.",
     
-        "최종 답변은 StructuredRequestBatch 형식의 JSON 객체 하나만 반환한다. JSON 앞뒤에 어떤 설명, 인사말, 부연 문장도 추가하지 않는다.",
 
     ]
 
