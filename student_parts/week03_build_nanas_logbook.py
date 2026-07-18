@@ -407,14 +407,23 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
-    # ③ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지
-    #    3종 세트로 반환한다 — trace에서 삭제 내역을 추적하기 위한 규약.
-    return tool_result(
-        "personal_delete_saved_schedules",
-        deleted_count=len(deleted),
-        filters=filters,
-        deleted=deleted,
-    )
+    # ③ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지 반환한다.
+    #
+    #    멘토님 리뷰 반영: 조건은 있었지만 매칭이 0건인 경우(예: 존재하지 않는 schedule_id),
+    #    ok=True + deleted_count=0만으로는 LLM이 "삭제 성공"으로 오해할 수 있다.
+    #    ok는 "tool이 정상 실행됐는가"만 말하게 두고, 실제 삭제 결과는
+    #    status 필드("deleted"/"no_match")가 명시적으로 말하게 역할을 분리한다.
+    status = "deleted" if deleted else "no_match"
+    payload: dict[str, Any] = {
+        "status": status,
+        "deleted_count": len(deleted),
+        "filters": filters,
+        "deleted": deleted,
+    }
+    if status == "no_match":
+        # LLM이 그대로 읽고 사용자에게 안내할 수 있는 명시적 설명을 담는다.
+        payload["message"] = "조건에 일치하는 일정이 없어 아무것도 삭제되지 않았습니다. schedule_id나 날짜/제목 조건을 다시 확인하세요."
+    return tool_result("personal_delete_saved_schedules", **payload)
 
 
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
