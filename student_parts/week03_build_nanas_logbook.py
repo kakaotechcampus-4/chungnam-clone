@@ -38,17 +38,15 @@ SQLITE_MEMORY_PROMPT = (
     "(personal_list_saved_schedules)를 혼동하지 않는다."
 )
 
+# 도구 간 순서(워크플로)만 담는다. 개별 도구의 인자 규칙은 각 입력 스키마의
+# Field description이 지니고, tool 스키마를 통해 매 호출마다 모델에게 전달된다.
 WEEK03_TOOL_CALL_PROMPT = (
     "일정/할 일/알림을 저장해 달라는 자연어 요청은 다음 순서로 처리한다.\n"
     "1) extract_schedule_request(query=사용자 요청 원문)를 호출해 구조화한다.\n"
-    "2) 반환된 structured_request의 kind/title/date/start_time/end_time/members/priority/reason/original_text 값을 "
-    "save_structured_request 인자로 그대로 전달해 저장한다. 값을 임의로 바꾸거나 지어내지 않는다.\n"
-    "저장된 일정 조회는 personal_list_saved_schedules, 구조화 원본 기록 조회는 list_saved_requests/get_saved_request를 쓴다.\n"
-    "수정/삭제는 먼저 personal_list_saved_schedules로 후보와 schedule_id를 확인한 뒤, "
-    "personal_update_saved_schedule 또는 personal_delete_saved_schedules에 schedule_ids나 명시적인 필터를 넘긴다.\n"
-    "후보를 조회할 때 사용자가 날짜를 말하지 않았다면 date_from/date_to 필터를 걸지 말고 전체 목록에서 제목으로 후보를 찾는다. "
-    "'일정이 없다'고 답하기 전에 반드시 필터 없는 조회 결과를 확인한다.\n"
-    "조건 없는 전체 삭제는 사용자가 명시적으로 요청할 때만 delete_all=True로 수행한다."
+    "2) 반환된 structured_request의 필드 값을 save_structured_request 인자로 그대로 전달해 저장한다. "
+    "값을 임의로 바꾸거나 지어내지 않는다.\n"
+    "수정/삭제는 먼저 personal_list_saved_schedules로 후보와 schedule_id를 확인한 뒤 실행한다. "
+    "'일정이 없다'고 답하기 전에 반드시 필터 없는 조회 결과를 확인한다."
 )
 
 
@@ -288,49 +286,71 @@ def save_structured_request_payload(
 class SavedRequestListInput(BaseModel):
     """저장 요청 목록 조회 입력입니다."""
 
-    kind: RequestKind | None = None
-    date_from: str | None = None
-    date_to: str | None = None
+    kind: RequestKind | None = Field(
+        default=None, description="조회할 요청 종류. 지정하지 않으면 모든 종류를 조회한다."
+    )
+    date_from: str | None = Field(
+        default=None, description="YYYY-MM-DD 시작일 필터. 사용자가 날짜를 말하지 않았으면 비워 둔다."
+    )
+    date_to: str | None = Field(
+        default=None, description="YYYY-MM-DD 종료일 필터. 사용자가 날짜를 말하지 않았으면 비워 둔다."
+    )
 
 
 class SavedRequestGetInput(BaseModel):
     """저장 요청 단건 조회 입력입니다."""
 
-    request_id: str
+    request_id: str = Field(description="조회할 구조화 요청 ID(req_ 접두어). 목록 조회 결과에서 확인한 값을 쓴다.")
 
 
 class SavedScheduleListInput(BaseModel):
     """저장 일정 목록 조회 입력입니다."""
 
-    limit: int = Field(default=50, ge=1, le=200)
+    limit: int = Field(default=50, ge=1, le=200, description="최대 반환 개수")
     kind: RequestKind | None = Field(
         default=None,
         description="조회할 일정 종류. 지정하지 않으면 개인/그룹 모든 저장 일정을 조회한다.",
     )
-    date_from: str | None = None
-    date_to: str | None = None
+    date_from: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD 시작일 필터. 사용자가 날짜를 말하지 않았으면 비워 두고 전체 목록에서 제목으로 후보를 찾는다.",
+    )
+    date_to: str | None = Field(
+        default=None,
+        description="YYYY-MM-DD 종료일 필터. 사용자가 날짜를 말하지 않았으면 비워 둔다.",
+    )
 
 
 class SavedScheduleUpdateInput(BaseModel):
     """저장 일정 수정 입력입니다."""
 
-    schedule_id: str
-    title: str | None = None
-    date: str | None = None
-    start_time: str | None = None
-    end_time: str | None = None
-    attendees: list[str] | None = None
+    schedule_id: str = Field(description="수정할 일정 ID. personal_list_saved_schedules로 확인한 값을 쓴다.")
+    title: str | None = Field(default=None, description="새 제목. None이면 수정하지 않는다.")
+    date: str | None = Field(default=None, description="새 날짜(YYYY-MM-DD). None이면 수정하지 않는다.")
+    start_time: str | None = Field(default=None, description="새 시작 시각(HH:MM). None이면 수정하지 않는다.")
+    end_time: str | None = Field(default=None, description="새 종료 시각(HH:MM). None이면 수정하지 않는다.")
+    attendees: list[str] | None = Field(default=None, description="새 참석자 목록. None이면 수정하지 않는다.")
 
 
 class SavedScheduleDeleteInput(BaseModel):
     """저장 일정 삭제 입력입니다."""
 
-    schedule_ids: list[str] | None = None
-    date: str | None = None
-    title: str | None = None
-    start_time: str | None = None
-    time_unspecified: bool = False
-    delete_all: bool = False
+    schedule_ids: list[str] | None = Field(
+        default=None, description="삭제할 일정 ID 목록. personal_list_saved_schedules로 확인한 값을 쓴다."
+    )
+    date: str | None = Field(default=None, description="YYYY-MM-DD 날짜 필터")
+    title: str | None = Field(default=None, description="제목 부분 일치 필터")
+    start_time: str | None = Field(default=None, description="시작 시각(HH:MM) 필터")
+    time_unspecified: bool = Field(
+        default=False, description="시작 시각이 비어 있는(미정) 일정만 대상으로 한다."
+    )
+    delete_all: bool = Field(
+        default=False,
+        description=(
+            "저장 일정 전체 삭제. 사용자가 '전부 삭제'를 명시적으로 요청했을 때만 True로 보내고, "
+            "다른 필터와 함께 쓰지 않는다. 일부만 지우는 요청에는 필터만 보낸다."
+        ),
+    )
 
 
 def _delete_saved_schedules(
