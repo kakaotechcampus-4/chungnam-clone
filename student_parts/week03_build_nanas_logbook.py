@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from typing import Any
 
@@ -250,10 +251,60 @@ def tool_result(tool_name: str, *, ok: bool = True, **payload: Any) -> dict[str,
     return {"ok": ok, "tool_name": tool_name, **payload}
 
 
+def _content_schedule_id(payload: dict[str, Any]) -> str | None:
+    """일정 내용에서 유도한 안정적인 dedup 키를 만듭니다.
+
+    세 저장 경로(save_structured_request tool/helper, Week 1 호환 생성)가 같은 내용을
+    저장하면 같은 키가 나오도록, 내용 필드만 정규화해 해시합니다. 이 값을
+    source_schedule_id로 넘기면 fixed/app_store.py의 중복 방지 장치가 두 번째 저장을
+    already_exists로 막습니다.
+    """
+
+    def _norm(value: Any) -> str:
+        if value is None:
+            return ""
+        return " ".join(str(value).split()).strip().lower()
+
+    title = _norm(payload.get("title"))
+    date = _norm(payload.get("date"))
+    # 제목도 날짜도 없으면 내용이 비어 dedup 대상이 아니라고 보고 스킵합니다.
+    if title == "" and date == "":
+        return None
+
+    members_raw = payload.get("members") or []
+    members = sorted(m for m in (_norm(item) for item in members_raw) if m != "")
+
+    parts = [
+        _norm(payload.get("kind")),
+        title,
+        date,
+        _norm(payload.get("start_time")),
+        _norm(payload.get("end_time")),
+        " ".join(members),
+    ]
+    digest = hashlib.sha1("\x1f".join(parts).encode("utf-8")).hexdigest()[:16]
+    return f"sch_{digest}"
+
+
+def _ensure_content_dedup_key(payload: dict[str, Any]) -> dict[str, Any]:
+    """일정 종류 payload에 내용 기반 dedup 키를 source_schedule_id로 채웁니다.
+
+    personal_schedule/group_schedule이면 내용에서 유도한 키로 source_schedule_id를
+    덮어써서, 어느 저장 경로로 들어와도 같은 내용은 한 번만 저장되게 합니다.
+    """
+
+    if payload.get("kind") in {"personal_schedule", "group_schedule"}:
+        key = _content_schedule_id(payload)
+        if key is not None:
+            payload["source_schedule_id"] = key
+    return payload
+
+
 class SaveStructuredRequestInput(StructuredRequest):
     """SQLite 저장 직전에 검증하는 Week 3 입력 스키마입니다."""
 
     kind: RequestKind = Field(default="unknown", description="분류된 요청 종류")
+    # 저장 직전에 _ensure_content_dedup_key가 내용 기반 dedup 키로도 이 필드를 채워 중복 저장을 막는다.
     source_schedule_id: str | None = Field(default=None, description="Week 1 임시 일정에서 넘어온 원본 일정 ID")
 
     @model_validator(mode="before")
@@ -305,6 +356,7 @@ def save_structured_request_payload(
     save_input = _save_input_from(request)
     store = store or _store()
     payload = {key: value for key, value in save_input.model_dump().items() if value is not None}
+    payload = _ensure_content_dedup_key(payload)
     result = store.save_structured_request(payload)
     return tool_result("save_structured_request", ok=True, **result)
 
@@ -444,6 +496,7 @@ def personal_create_schedule(
     schedule = created["created_schedule"]
     save_input = structured_request_from_week01_schedule(schedule)
     payload = {key: value for key, value in save_input.model_dump().items() if value is not None}
+    payload = _ensure_content_dedup_key(payload)
     save_result = _store().save_structured_request(payload)
     return json_payload(
         tool_result(
@@ -484,6 +537,7 @@ def save_structured_request(
         "source_schedule_id": source_schedule_id,
     }
     payload = {key: value for key, value in payload.items() if value is not None}
+    payload = _ensure_content_dedup_key(payload)
     result = _store().save_structured_request(payload)
     return json_payload(tool_result("save_structured_request", ok=True, **result))
 

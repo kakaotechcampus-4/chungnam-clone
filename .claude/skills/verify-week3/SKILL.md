@@ -130,6 +130,59 @@ print('MAIN_ROUNDTRIP_OK')
 ```
 확인 포인트: 저장 반환에 `ok=True`+`tool_name`, list는 `rows`, get은 `row`(미존재 시 `None`, 예외 금지), `personal_list_saved_schedules`는 `filters`+`schedules`. **비어 있지 않은 실데이터로 왕복**이 성립해야 한다. (저장 결과 wrapping 키 이름은 가이드가 안 못박으므로 단언하지 않는다.)
 
+## 5b. 결정적 중복 저장 차단 (idempotency) (temp DB, 키 불필요)
+
+내용 기반 dedup 키(`_ensure_content_dedup_key` → `source_schedule_id`)가 세 저장 경로에서
+같은 내용을 한 번만 저장하는지 결정적으로 확인한다. LLM 없이 temp DB로만 돈다.
+```bash
+uv run python -X utf8 -c "
+import json, tempfile
+from pathlib import Path
+import fixed.app_store as store_mod
+import student_parts.week03_build_nanas_logbook as m
+for _n in ('sync_personal_schedule_to_shared','sync_group_schedule_to_shared','delete_personal_schedule_from_shared','delete_group_schedule_from_shared'):
+    setattr(store_mod, _n, (lambda *a, **k: {'ok': True, 'stub': True}))
+
+def fresh():
+    _tmp = Path(tempfile.mkdtemp()) / 'app.sqlite3'
+    m._store = lambda: store_mod.AppSQLiteStore(_tmp)
+
+def count():
+    return len(json.loads(m.personal_list_saved_schedules.invoke({}))['schedules'])
+
+# A: 같은 tool 2회 -> 두 번째는 already_exists, 일정 1건
+fresh()
+m.save_structured_request.invoke({'kind':'personal_schedule','title':'코칭','date':'2026-03-16','start_time':'10:00'})
+a2 = json.loads(m.save_structured_request.invoke({'kind':'personal_schedule','title':'코칭','date':'2026-03-16','start_time':'10:00'}))
+assert a2.get('already_exists') is True, f'A: 두 번째 저장이 already_exists 아님: {sorted(a2)}'
+assert count() == 1, f'A: 같은 tool 2회인데 일정이 {count()}건'
+print('A ok -> already_exists', a2.get('already_exists'), '| schedules', count())
+
+# B: Week1 호환 경로 2회 -> 일정 1건
+fresh()
+m.personal_create_schedule.invoke({'title':'코칭','date':'2026-03-16','start_time':'10:00'})
+m.personal_create_schedule.invoke({'title':'코칭','date':'2026-03-16','start_time':'10:00'})
+assert count() == 1, f'B: Week1 호환 2회인데 일정이 {count()}건'
+print('B ok -> schedules', count())
+
+# C: 교차 경로(save_structured_request -> personal_create_schedule, 같은 내용) -> 일정 1건
+fresh()
+m.save_structured_request.invoke({'kind':'personal_schedule','title':'코칭','date':'2026-03-16','start_time':'10:00'})
+m.personal_create_schedule.invoke({'title':'코칭','date':'2026-03-16','start_time':'10:00'})
+assert count() == 1, f'C: 교차 경로 같은 내용인데 일정이 {count()}건'
+print('C ok -> schedules', count())
+
+# D: 음성 대조 - 제목만 다르면 별개 -> 일정 2건
+fresh()
+m.save_structured_request.invoke({'kind':'personal_schedule','title':'코칭','date':'2026-03-16','start_time':'10:00'})
+m.save_structured_request.invoke({'kind':'personal_schedule','title':'회의','date':'2026-03-16','start_time':'10:00'})
+assert count() == 2, f'D: 제목이 다른데 과도하게 dedup됨(일정 {count()}건)'
+print('D ok -> schedules', count())
+print('IDEMPOTENCY_OK')
+"
+```
+확인 포인트: A/B/C는 같은 내용을 어느 경로로 저장하든 일정이 **정확히 1건**(A는 두 번째 반환 `already_exists=True`), D는 제목만 달라도 **2건**으로 남아 dedup이 과하지 않다.
+
 ## 6. 추가 — 삭제 안전규칙 + delete_all/필터 분기 (temp DB)
 ```bash
 uv run python -X utf8 -c "
