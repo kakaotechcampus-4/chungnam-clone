@@ -31,6 +31,8 @@ _WEEK03_AGENT: Any | None = None
 SQLITE_MEMORY_PROMPT = """
     [Week 3 영속 메모리 규칙]
     - 일정/할 일/알림은 임시 메모리가 아니라 SQLite 기록장에 저장되어, 앱을 다시 시작하거나 새 대화를 시작해도 그대로 남아 있도록 한다.
+    - 저장을 요청받으면 반드시 저장 도구를 호출해 결과(request_id)를 확인한 뒤 답하고,
+      도구 호출 없이 "저장했다"고 답하지 않는다.
     - "내 일정 보여줘"와 같은 일정 조회를 요청받으면, 반드시 조회 도구로 저장된 내용을 먼저 확인한 뒤 그 결과로 답한다.
 """
 
@@ -39,9 +41,8 @@ WEEK03_TOOL_CALL_PROMPT = """
     [Week 3 도구 사용 순서]
     - 저장: 먼저 `extract_schedule_request`로 자연어를 구조화한 뒤,
       그 결과 필드를 `save_structured_request`에 넘겨 저장한다.
-    - 조회: `personal_list_saved_schedules`(일정) / `list_saved_requests`(요청)로 조회한다.
-    - 삭제: 바로 지우지 말고 먼저 조회로 후보를 확인한 뒤,
-      `personal_delete_saved_schedules`에 정확한 id나 필터를 넘긴다.
+    - 조회: `personal_list_saved_schedules`(일정) / `list_saved_requests`(요청) / `get_saved_request`(단건)로 조회한다.
+    - 일정 수정·삭제는 이번 버전에서 아직 지원하지 않는다. 사용자가 수정/삭제를 요청하면 없는 기능을 지어내거나 다른 도구로 대신 처리하려 하지 말고, "아직 지원하지 않는 기능"이라고 정중히 안내한다.
 """
 
 
@@ -488,8 +489,6 @@ def week03_tools() -> list[Any]:
         list_saved_requests,
         get_saved_request,
         personal_list_saved_schedules,
-        personal_update_saved_schedule,
-        personal_delete_saved_schedules,
     ]
 
 
@@ -508,7 +507,9 @@ def week03_prompt_parts() -> list[str]:
         """
         [Week 2 → Week 3 연결]
         - Week 2 구조화(StructuredRequest) 결과를 최종 답변으로 끝내지 말고,
-          개인/그룹 일정이면 save_structured_request로 SQLite에 저장한 뒤 결과를 안내한다.
+          save_structured_request로 SQLite에 저장한 뒤 결과를 안내한다.
+        - 저장 도구는 kind(개인 일정/그룹 일정/할 일/알림/미분류)에 관계없이 하나이며,
+          kind에 따라 저장되는 테이블만 달라진다.
         """,
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
@@ -518,7 +519,7 @@ def week03_prompt_parts() -> list[str]:
         - 오늘 날짜는 {current_app_date_iso()} 이다. 상대 날짜는 이 날짜를 기준으로 계산한다.
         - tool 선택: 저장 → save_structured_request, 일정 조회 → personal_list_saved_schedules,
           요청 조회 → list_saved_requests / get_saved_request.
-        - Week 3 범위는 SQLite 저장·조회·수정·삭제까지다.
+        - Week 3 범위는 SQLite 저장·조회까지다. (수정·삭제는 아직 지원하지 않는다.)
         """
     ]
 
