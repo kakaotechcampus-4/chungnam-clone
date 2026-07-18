@@ -697,3 +697,85 @@ week02 프롬프트 누적분 포함).
   처음부터 끝까지 재실행 — 이슈 없이 전부 통과, 최종 `schedules` 행 수 0건 확인.
 - 이번 리팩토링으로 새로 도입한 리스크(프롬프트 압축으로 인한 신뢰성 저하, 삭제 가드 강화로 인한
   정상 시나리오 오탐)는 모두 실제 LLM 재실행으로 확인했으며, 회귀는 발견되지 않았다.
+
+---
+
+## [Week 2 코드] 개선 — "다음 주 + 요일" 문자열 하드코딩을 구조화 추출 + datetime 계산으로 일반화
+
+### 발견 경위 (리뷰 피드백)
+"토익" 오탐/"월에" 누락을 고친 정규식 방식에 대해 리뷰어가 다음 코멘트를 남김: 코드에서 날짜 계산
+자체를 해결하려던 접근은 좋으나, 지금은 "다음 주" 문자열 리터럴만 하드코딩돼 있어 "차주"/"차차주"/
+"다다음주"/"N주 후" 같은 표현엔 오작동하거나 아예 동작하지 않는다. 문자열 파싱 대신 (1)캘린더 tool을
+LLM에게 쥐어주고 판단하게 하거나 (2)자연어를 구조화 파라미터로 넘기고 datetime으로 계산하는 방법을
+고려해보라는 제안.
+
+### 원인 — 사실 2주차 때(2026-07-13) 이미 한 번 발견해 "의도적으로 미해결"로 보류해 뒀던 한계
+`plan.md` 히스토리(git 커밋 a928f5d)에 남아있던 기록: `_NEXT_WEEK_WEEKDAY_PATTERN`은 "다음 주" 리터럴만
+매칭했고, 더 근본적으로 `fixed/runtime_clock.py`의 `next_weekday_date()`/`next_weekday_iso()` 자체가
+weeks_ahead(주 오프셋) 파라미터 없이 "무조건 다음 한 주"만 계산하도록 고정돼 있어 regex를 아무리
+다듬어도 "차차주"는 계산할 방법이 없었다. 이 한계는 bridge(`extract_structured_request`)뿐 아니라
+메인 agent가 쓰는 tool(`resolve_next_week_weekday_date`)에도 동일하게 있다고 이미 기록돼 있었다.
+당시엔 "`fixed/runtime_clock.py`를 확장해야 하는데 학생이 안 건드리는 고정 인프라라 보류"라고
+판단했었는데, 다시 확인해보니 **weeks_ahead 오프셋은 `fixed/`를 전혀 안 건드리고도
+`current_app_date()` + 표준 라이브러리 `timedelta`만으로 `student_parts/week02` 안에서 계산 가능**해서
+그 전제부터 다시 봤다.
+
+### 조치 — 리뷰어의 두 제안을 각각 맞는 자리에 적용
+1. **날짜 계산 일반화(공통)**: `_relative_weekday_iso(weekday, weeks_ahead=1)`을 새로 추가했다.
+   `this_monday = current_app_date() - timedelta(days=current_app_date().weekday())` 다음
+   `timedelta(weeks=weeks_ahead, days=weekday)`를 더하는 방식으로, `weeks_ahead=1`일 때 기존
+   `next_weekday_date()`와 수학적으로 동일한 값을 내면서 0(이번 주)/2(차차주·다다음주)/N(N주 후)/음수
+   (지난 주)까지 전부 처리한다. `fixed/runtime_clock.py`는 손대지 않았다.
+2. **bridge 경로(제안 2: 구조화 파라미터 + datetime)**: `_weekday_alias_to_regex_fragment`/
+   `_NEXT_WEEK_WEEKDAY_PATTERN`/`_next_week_weekday_hints`(문자열 리터럴 정규식)를 전부 삭제하고,
+   `RelativeWeekdayMention`/`RelativeWeekdayMentions` Pydantic 스키마 + `_extract_relative_weekday_hints`
+   로 교체했다. LLM에게는 "이번 주"/"다음 주"/"차주"/"차차주"/"다다음주"/"N주 후" 같은 표현의 **의미만**
+   `weeks_ahead`(정수)와 `weekday`(mon~sun)로 구조화하게 시키고, 실제 날짜 계산은
+   `_relative_weekday_iso`로 코드가 결정적으로 수행한다. `"주"` 글자가 아예 없는 문장에는 이 구조화
+   호출 자체를 생략하는 값싼 사전 게이트를 뒀다(불필요한 LLM 호출 절약). `import re`도 더 이상 안
+   쓰여서 제거했다.
+3. **tool 경로(제안 1: 캘린더 tool을 쥐어주기, 이미 있던 것을 확장)**: `resolve_next_week_weekday_date`
+   → `resolve_relative_weekday_date(weekday, weeks_ahead=1)`로 개명·확장했다. 이름에 "next_week"가
+   박혀 있으면 이제 의미가 안 맞아서(지난 리뷰의 네이밍 원칙과 같은 이유) 이름도 바꿨다. 기본값 1이라
+   기존 "다음 주만" 쓰던 호출은 그대로 호환된다. `week02_tools()`/`week02_prompt_parts()`의 관련 지시문도
+   새 이름과 weeks_ahead 설명으로 갱신했다. Week3는 이 tool을 직접 참조하지 않아(week02 내부 tool
+   목록에만 등록) 영향 없음을 확인했다.
+
+### 검증
+**정적(회귀, LLM 불필요)**: `_relative_weekday_iso(weekday, weeks_ahead=1)`이 기존
+`next_weekday_iso(weekday)`와 **7개 요일 전부 정확히 동일한 값**을 냄을 확인. weeks_ahead 0/2/3이
+1 기준으로 정확히 -7/+7/+14일 차이가 남을 3개 요일 샘플로 확인(대수적 불변식).
+
+**정적(게이트)**: `chat_model`을 예외 발생 스텁으로 바꾼 상태에서 `"주"`가 없는 문장(`"내일 오전 10시에
+헬스장에서 PT 받기"`)을 `_extract_relative_weekday_hints`에 넣어 실제로 예외 없이 `[]`를 반환함을
+확인 — LLM 호출 자체가 생략됨을 증명.
+
+**라이브 E2E(실제 LLM)** — 리뷰가 명시한 표현 6종을 전부 확인, **6/6 통과**:
+| 입력 | weeks_ahead | 결과 날짜 |
+|---|---|---|
+| "다음 주 화요일 오후 3시에 회의"(회귀) | 1 | 2026-07-21 |
+| "이번 주 금요일에 약속 있어" | 0 | 2026-07-17 |
+| "차주 월요일에 보자"(다음주 동의어) | 1 | 2026-07-20 |
+| "차차주 수요일에 병원 예약" | 2 | 2026-07-29 |
+| "다다음주 목요일에 미팅 잡아줘"(차차주 동의어) | 2 | 2026-07-30 |
+| "3주 후 금요일에 발표 있어" | 3 | 2026-08-07 |
+
+**전체 `extract_structured_request()` E2E**(힌트뿐 아니라 최종 `date` 필드까지):
+- "차차주 금요일 오후 2시에 팀 회의 잡아줘" → `date=2026-07-31`(수식으로 재검증: 정확).
+- "3주 후 화요일에 치과 예약해줘" → `date=2026-08-04`(정확).
+- **"다음 주 월에 보자"**(지난 세션에서 한 글자 별칭을 정규식 힌트 후보에서 아예 제외해야 했던,
+  바로 그 한계 케이스) → `date=2026-07-20`(정확한 다음 주 월요일)로 **정상적으로 채워짐** — 정규식이
+  아니라 의미 기반 구조화 추출이라 조사 결합 여부와 무관하게 인식된다. **이번 리팩토링으로 원래
+  문제였던 한 글자 별칭 오탐/누락 이슈까지 부수적으로 해결됨.**
+
+**tool 경로 E2E**: `resolve_relative_weekday_date.invoke({"weekday": "화요일"})`(weeks_ahead 생략) →
+기존과 동일하게 weeks_ahead=1로 동작(회귀 없음). `weeks_ahead=2` 명시 호출도 정확. 잘못된 요일 입력은
+여전히 `ok=False`로 명확히 방어. 전체 week02 agent(`run_active_week_agent(2, ...)`)로 "차차주 금요일
+오후 5시에 민수랑 회의 잡아줘" 실행 → trace에서 `resolve_relative_weekday_date(weekday="금요일",
+weeks_ahead=2)` → `date=2026-07-31`이 정확히 호출되고 `personal_create_schedule`/최종
+`StructuredRequestBatch`까지 올바르게 이어짐을 확인.
+
+**교차 파일 스모크 테스트**: Week3의 `extract_schedule_request`(week02 재사용)로 "다음 주 화요일 오후
+3시에 스터디 잡아줘" 호출 → `date=2026-07-21` 정확, 회귀 없음 확인.
+
+`python -m py_compile` 통과.
