@@ -383,18 +383,35 @@ def _delete_saved_schedules(
     #    취급해야 한다. bool(None)도 bool([])도 False라서 두 경우를 한 번에 걸러내며,
     #    any() 안의 다른 값들과 분리해 "리스트는 내용물이 있어야 조건으로 인정"이라는
     #    의도를 코드에서 바로 읽을 수 있게 했다.
-    has_condition = bool(schedule_ids) or any([date, title, start_time, time_unspecified, delete_all])
-    if not has_condition:
+    partial_conditions = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
+    if not (partial_conditions or delete_all):
         return tool_result(
             "personal_delete_saved_schedules",
             ok=False,
+            status="rejected",
             error="삭제 조건이 없습니다. schedule_ids 또는 날짜/제목 같은 명시 조건이 필요합니다.",
             deleted_count=0,
             filters=filters,
             deleted=[],
         )
 
-    # ② 전체 삭제는 delete_all=True라는 "명시적 의사표시"가 있을 때만 별도 경로로 실행한다.
+    # ② 멘토님 리뷰 반영: delete_all=True와 개별 조건이 "함께" 들어오면
+    #    전체 삭제 의도인지 조건 삭제 의도인지 알 수 없는 충돌 입력이다.
+    #    전체 삭제는 영향 범위가 가장 큰 동작이므로, 함께 온 조건을 임의로 무시하고
+    #    실행하기보다 모호한 요청으로 거부하고 의도를 다시 확인하게 한다.
+    if delete_all and partial_conditions:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            status="rejected",
+            error="delete_all과 개별 조건(schedule_ids/날짜/제목 등)이 함께 들어왔습니다. "
+            "전체 삭제 의도면 delete_all만, 조건 삭제 의도면 개별 조건만 지정해 다시 호출하세요.",
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+        )
+
+    # ③ 전체 삭제는 delete_all=True라는 "명시적 의사표시"가 있을 때만 별도 경로로 실행한다.
     #    나머지는 명시 필터에 맞는 일정만 골라 지운다. (공유 저장소 복사본 정리는 store 담당)
     if delete_all:
         deleted = store.delete_all_schedules()
@@ -407,7 +424,7 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
-    # ③ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지 반환한다.
+    # ④ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지 반환한다.
     #
     #    멘토님 리뷰 반영: 조건은 있었지만 매칭이 0건인 경우(예: 존재하지 않는 schedule_id),
     #    ok=True + deleted_count=0만으로는 LLM이 "삭제 성공"으로 오해할 수 있다.
