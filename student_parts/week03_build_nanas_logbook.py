@@ -27,11 +27,30 @@ from student_parts.week02_structure_natural_language_requests import (
 
 _WEEK03_AGENT: Any | None = None
 
-# TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = ""
+SQLITE_MEMORY_PROMPT = (
+    "Week 3부터 Nana는 앱 SQLite DB에 기록을 남긴다. "
+    "personal_create_schedule과 save_structured_request로 저장한 일정/할 일/알림은 "
+    "현재 대화가 끝나거나 앱을 재시작해도, 새 대화를 열어도 그대로 남아 있다. "
+    "따라서 사용자가 이전에 저장했다고 말하는 일정이나 '내 일정 보여줘', '저번에 등록한 거 뭐였지' 같은 질문을 받으면, "
+    "지금 이 대화의 메시지 기록만으로 답하려 하지 말고 반드시 personal_list_saved_schedules 또는 "
+    "list_saved_requests/get_saved_request tool을 호출해 SQLite에서 실제 값을 조회한 뒤 답한다. "
+    "지금 대화가 방금 시작돼 이전 내용이 안 보인다는 이유로 조회를 건너뛰거나 모른다고 답하지 않는다."
+)
 
-# TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = ""
+WEEK03_TOOL_CALL_PROMPT = (
+    "Week 3 tool은 다음 순서로 호출한다. "
+    "1) 사용자가 일정/할 일/알림을 새로 등록해 달라고 하면, 먼저 extract_schedule_request(query=사용자 발화)를 호출해 "
+    "자연어를 StructuredRequest로 구조화한다. "
+    "2) 구조화된 kind/title/date/start_time/end_time/members/priority/reason/original_text 값을 그대로 "
+    "save_structured_request 인자로 넘겨 SQLite에 저장한다. 구조화 결과를 임의로 바꾸거나 요약해서 저장하지 않는다. "
+    "3) Week 1과 동일하게 '지금 바로' 개인 일정 형태로 답해야 하는 요청에는 personal_create_schedule을 쓴다. "
+    "이 tool은 내부적으로 SQLite 저장까지 함께 수행하므로 save_structured_request를 또 호출할 필요는 없다. "
+    "4) 저장된 일정/요청을 보여 달라는 요청에는 personal_list_saved_schedules 또는 list_saved_requests/get_saved_request로 "
+    "조회하고, 조회 없이 추측으로 답하지 않는다. "
+    "5) 일정을 수정하거나 삭제해 달라는 요청은 먼저 personal_list_saved_schedules로 대상 일정과 schedule_id를 확인한 뒤에만 "
+    "personal_update_saved_schedule 또는 personal_delete_saved_schedules에 확인된 schedule_id(또는 명확한 필터)를 전달한다. "
+    "후보 확인 없이 곧바로 삭제하거나 수정하지 않는다."
+)
 
 
 # [3주차 수강생 구현 가이드]
