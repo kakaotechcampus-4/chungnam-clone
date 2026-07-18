@@ -124,6 +124,7 @@ def run_unit(cases: list[dict], tier_filter: str, tmp_db: Path) -> None:
             personal_list_saved_schedules,
             personal_delete_saved_schedules,
             personal_update_saved_schedule,
+            personal_create_schedule,
         )
     except Exception as e:
         print(f"  ⚠️  week03 import 실패 ({e}) — unit 테스트 건너뜀")
@@ -137,6 +138,7 @@ def run_unit(cases: list[dict], tier_filter: str, tmp_db: Path) -> None:
         "personal_list_saved_schedules": personal_list_saved_schedules,
         "personal_delete_saved_schedules": personal_delete_saved_schedules,
         "personal_update_saved_schedule": personal_update_saved_schedule,
+        "personal_create_schedule": personal_create_schedule,
     }
 
     for c in cases:

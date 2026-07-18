@@ -28,11 +28,10 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = """[Week 3 영속 메모리 규칙 — Week 1 지시보다 우선]
+SQLITE_MEMORY_PROMPT = """[Week 3 영속 메모리 규칙]
 - 저장된 일정/할 일/알림은 앱 DB(SQLite)에 기록되어 새 대화에서도 유지됩니다.
 - 대화 중 기억에 없어도 DB에는 이전 대화에서 저장한 일정이 남아 있을 수 있습니다.
-- 일정 조회에는 Week 1의 personal_list_schedules 대신 반드시 personal_list_saved_schedules(SQLite)를 사용해.
-- DB를 조회하기 전에 절대 "일정이 없습니다"라고 답하지 마세요.
+- 일정 조회 요청에는 반드시 personal_list_saved_schedules를 호출해 DB에서 가져와야 합니다.
 """
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
@@ -542,8 +541,11 @@ def personal_delete_saved_schedules(
 def week03_tools() -> list[Any]:
     """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
 
+    # personal_list_schedules(임시 메모리)는 personal_list_saved_schedules(SQLite)로 대체되므로 제거
     base_tools = [
-        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item for item in week01_tools()
+        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item
+        for item in week01_tools()
+        if _tool_name(item) != "personal_list_schedules"
     ]
     return [
         *base_tools,
