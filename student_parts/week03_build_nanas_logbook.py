@@ -269,10 +269,24 @@ class SaveStructuredRequestInput(StructuredRequest):
     @model_validator(mode="before")
     @classmethod
     def unwrap_legacy_payload(cls, value: Any) -> Any:
-        """예전 trace의 payload wrapper만 짧게 풀고 실제 검증은 필드 스키마에 맡깁니다."""
+        """예전 trace의 payload wrapper뿐 아니라 StructuredRequest 인스턴스/JSON 문자열까지 정규화합니다."""
 
-        # dict가 아닌 입력(str/None/list/int 등)은 여기서 풀 수 없다. 억지로 dict로 바꾸려 하지 말고
-        # 그대로 통과시켜, 이후 필드 스키마 검증이 명확한 타입 오류로 실패하게 한다(조용히 삼키지 않는다).
+        # 이미 완성된 StructuredRequest(그 서브클래스인 SaveStructuredRequestInput 포함) 인스턴스면
+        # dict로 풀어서 그대로 통과시킨다 — 아래 언랩/필드 검증 로직과 같은 경로를 타게 한다.
+        if isinstance(value, StructuredRequest):
+            value = value.model_dump()
+        elif isinstance(value, str):
+            # JSON 문자열이면 먼저 파싱을 시도한다. 실패하거나 dict가 아니면 원본을 그대로 반환해
+            # 이후 필드 검증이 명확한 타입 오류를 내게 한다(조용히 삼키지 않는다) — 자연어 문자열을
+            # 구조화하는 일은 이 tool이 아니라 _save_input_from의 몫이다.
+            try:
+                parsed = json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                return value
+            value = parsed
+
+        # dict가 아닌 입력(None/list/int 등)은 여기서 풀 수 없다. 억지로 dict로 바꾸려 하지 말고
+        # 그대로 통과시켜, 이후 필드 스키마 검증이 명확한 타입 오류로 실패하게 한다.
         if not isinstance(value, dict):
             return value
         # 예전 trace/테스트는 {"payload": {...}} 또는 {"structured_request": {...}} 형태로
@@ -439,14 +453,22 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
             return None
         return text
 
+    title = schedule.get("title") or "제목 없음"
+    date = schedule.get("date")
+    start_time = _normalize_time(schedule.get("start_time"))
+    # original_text는 원문 텍스트 보존 용도라, 내부 구현(함수명)을 언급하는 대신
+    # 실제 일정 내용을 그대로 서술하는 자연스러운 문장으로 채운다.
+    when = " ".join(part for part in (date, start_time) if part)
+    original_text = f"{when}에 {title}" if when else title
+
     return SaveStructuredRequestInput(
         kind="personal_schedule",
         title=schedule.get("title"),
-        date=schedule.get("date"),
-        start_time=_normalize_time(schedule.get("start_time")),
+        date=date,
+        start_time=start_time,
         end_time=_normalize_time(schedule.get("end_time")),
         members=list(schedule.get("attendees") or []),
-        original_text=f"Week 1 personal_create_schedule 결과(id={schedule.get('id')})에서 변환됨",
+        original_text=original_text,
         source_schedule_id=schedule.get("id"),
     )
 
@@ -476,12 +498,16 @@ def personal_create_schedule(
     # source_schedule_id에 Week 1 임시 일정 id를 실어 보내므로, 같은 일정을 다시 저장해도
     # AppSQLiteStore가 already_exists로 조기 반환해 구조화 요청/일정 row가 중복 생성되지 않는다.
     sqlite_save = _store().save_structured_request(save_input.model_dump(exclude_none=True))
+    # 다른 모든 tool과 동일하게 이 파일의 공통 반환 헬퍼(tool_result)를 명시적으로 거쳐
+    # ok/tool_name 규격을 일관되게 유지한다(Week1 tool의 반환 dict를 그대로 스프레드하지 않는다).
     return json_payload(
-        {
-            **created_result,
-            "structured_request": save_input.model_dump(),
-            "sqlite_save": sqlite_save,
-        }
+        tool_result(
+            "personal_create_schedule",
+            ok=True,
+            created_schedule=created_result["created_schedule"],
+            structured_request=save_input.model_dump(),
+            sqlite_save=sqlite_save,
+        )
     )
 
 

@@ -624,3 +624,34 @@ start_time/time_unspecified 중 최소 2개를 함께 지정해야 한다"로 �
 
 압축 전후 길이: `WEEK03_TOOL_CALL_PROMPT` 2,686자, 전체 시스템 프롬프트 5,369자(참고용 측정치 —
 week02 프롬프트 누적분 포함).
+
+### R2 — 입력 가드 및 반환 규격
+
+**리뷰 피드백 요지**: `unwrap_legacy_payload`가 `StructuredRequest` 인스턴스와 JSON 문자열까지
+받아주도록 확장하고, `personal_create_schedule`의 최종 반환을 공통 헬퍼 `tool_result`로 통일하며,
+호환 레이어의 `original_text` 하드코딩 문구를 다듬는다.
+
+**조치**:
+1. `SaveStructuredRequestInput.unwrap_legacy_payload`에 두 분기를 추가했다:
+   - `isinstance(value, StructuredRequest)`(서브클래스인 `SaveStructuredRequestInput` 자신도 포함)면
+     `.model_dump()`로 dict화한 뒤 기존 언랩 로직에 이어서 태운다.
+   - `isinstance(value, str)`이면 `json.loads`를 시도해 성공하면 그 결과를 이어서 처리하고, 실패하면
+     원본 문자열을 그대로 반환해(조용히 삼키지 않고) 이후 필드 검증이 명확한 타입 오류를 내게 한다.
+   - 기존 `{"payload": {...}}`/`{"structured_request": {...}}` 언랩 로직은 그대로 유지.
+2. `personal_create_schedule`의 반환을 `{**created_result, ...}` 스프레드 대신
+   `tool_result("personal_create_schedule", ok=True, created_schedule=..., structured_request=...,
+   sqlite_save=...)`로 명시적으로 재구성해, 이 파일의 다른 모든 tool과 동일한 방식으로 반환 규격을
+   통과하게 했다.
+3. `structured_request_from_week01_schedule`의 `original_text`를
+   `f"Week 1 personal_create_schedule 결과(id=...)에서 변환됨"`(내부 함수명 노출) 대신
+   `f"{date} {start_time}에 {title}"` 형태로 일정 내용 자체를 서술하도록 바꿨다.
+
+**검증(정적, 임시 격리 DB)**:
+- `StructuredRequest`/`SaveStructuredRequestInput` 인스턴스를 `model_validate()`에 직접 넣어도 정상
+  통과 확인(전에는 dict가 아니므로 그대로 필드 검증에 부딪혔을 상황).
+- JSON 문자열(`'{"kind": "personal_schedule", ...}'`)을 직접 `model_validate()`에 넣어도 정상 통과 확인.
+- 기존 `{"payload": {...}}` wrapper 언랩은 회귀 없이 그대로 동작 확인.
+- JSON도 dict도 아닌 순수 자연어 문자열은 여전히 `ValidationError`로 명확히 실패(방어 유지 확인).
+- `personal_create_schedule.invoke(...)` 반환 JSON 최상단이 정확히 `{"ok", "tool_name",
+  "created_schedule", "structured_request", "sqlite_save"}` 형태임을 확인.
+- 생성된 `original_text`에 `"personal_create_schedule"` 같은 내부 함수명이 더 이상 노출되지 않음을 확인.
