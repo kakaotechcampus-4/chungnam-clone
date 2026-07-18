@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import textwrap
 from typing import Any
 
 from langchain.agents import create_agent
@@ -24,29 +25,28 @@ from student_parts.week02_structure_natural_language_requests import (
     week02_prompt_parts,
 )
 
-
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = """
+SQLITE_MEMORY_PROMPT = textwrap.dedent("""
     너는 이제 Week 1처럼 대화 안에서만 기억하는 임시 메모리를 쓰지 않아.
     저장된 일정/할 일/알림은 앱의 SQLite DB에 남아 있으며,
     대화가 새로 시작되거나 앱이 재시작되어도 그대로 유지돼야 해.
     사용자가 '내 일정 뭐 있어?', '알림 보여줘', '할 일 뭐 있어?', '아까 저장한 거 뭐였지?' 처럼
     기존 일정/할 일/알림의 존재나 내용을 묻는 말이면(꼭 '저장된'이라는 단어가 없어도),
     네 기억이나 이전 turn의 대화 내용에 의존하지 말고
-    반드시 personal_list_saved_schedules 나 list_saved_requests / get_saved_request 로
-    DB를 직접 조회한 뒤 답하도록.
-"""
+    반드시 조회 tool로 DB를 직접 확인한 뒤 답하도록. 일정인지 할 일/알림인지에 따라
+    어떤 tool을 써야 하는지는 아래 tool 선택 기준을 따라라.
+""").strip()
 
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = """
+WEEK03_TOOL_CALL_PROMPT = textwrap.dedent("""
     일정/할 일/알림을 저장해야 하는 자연어 요청이 들어오면
     먼저 extract_schedule_request 를 호출해 구조화한 뒤,
     그 결과의 structured_request 필드 값을 그대로 save_structured_request 의 인자로 전달해라.
     구조화 없이 자연어를 바로 save_structured_request 에 넘기지 마라.
-"""
+""").strip()
 
 
 # [3주차 수강생 구현 가이드]
@@ -410,8 +410,8 @@ def personal_list_saved_schedules(
     kind = kind if kind is not None else "personal_schedule"
 
     schedules = _store().list_schedules(
-        limit=limit, 
-        kind=kind, 
+        limit=limit,
+        kind=kind,
         date_from=date_from,
         date_to=date_to
     )
@@ -509,8 +509,12 @@ def week03_prompt_parts() -> list[str]:
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
         "일정/할 일/알림을 새로 만들 때는 extract_schedule_request 로 구조화한 뒤 save_structured_request 로 저장해라. "
-        "저장된 내용을 조회할 때는 personal_list_saved_schedules를 사용해라. "
+        "저장된 개인 일정을 조회할 때는 personal_list_saved_schedules를 사용해라. "
+        "personal_list_saved_schedules는 일정만 찾고 할 일/알림은 찾지 못하니, "
+        "할 일이나 알림을 조회할 때는 list_saved_requests(kind=\"todo\" 또는 \"reminder\")를 사용해라. "
+        "무엇을 조회해야 할지 애매하면 kind 없이 list_saved_requests를 호출해 전체를 확인해라. "
         "너는 이번 주차에서 RAG 검색이나 외부 멤버와의 일정 조율까지는 하지 않는다.",
+
     ]
 
 
