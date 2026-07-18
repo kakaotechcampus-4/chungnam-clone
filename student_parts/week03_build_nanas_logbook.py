@@ -32,8 +32,7 @@ SQLITE_MEMORY_PROMPT = (
     "일정/할 일/알림은 대화가 끝나거나 새 대화가 시작돼도 SQLite에 저장된 내용이 그대로 유지되니, "
     "사용자가 예전에 저장한 내용을 물어보면 추측하지 말고 personal_list_saved_schedules, "
     "list_saved_requests, get_saved_request 같은 조회 tool로 실제 저장된 값을 확인한 뒤 답해. "
-    "personal_list_schedules와 personal_delete_schedule은 Week 1의 대화 전용 임시 메모리용 tool이라 "
-    "여기서는 쓰지 마. 일정 조회는 personal_list_saved_schedules, 삭제는 personal_delete_saved_schedules를 써."
+    "일정 조회는 personal_list_saved_schedules, 삭제는 personal_delete_saved_schedules를 써."
 )
 
 WEEK03_TOOL_CALL_PROMPT = (
@@ -479,11 +478,21 @@ def personal_delete_saved_schedules(
     ...
 
 
+_WEEK01_TEMP_MEMORY_TOOL_NAMES = {"personal_list_schedules", "personal_delete_schedule"}
+
+
 def week03_tools() -> list[Any]:
-    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
+    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다.
+
+    personal_list_schedules/personal_delete_schedule은 Week 1의 대화 전용 임시 메모리용 tool이라
+    Week 3 목록에서 아예 제외합니다. prompt로 "쓰지 마"라고 지시하는 것보다 목록에서 빼는 편이
+    LLM이 잘못된 tool을 고를 여지를 없애 더 결정론적입니다.
+    """
 
     base_tools = [
-        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item for item in week01_tools()
+        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item
+        for item in week01_tools()
+        if _tool_name(item) not in _WEEK01_TEMP_MEMORY_TOOL_NAMES
     ]
     return [
         *base_tools,
