@@ -250,10 +250,17 @@ class SaveStructuredRequestInput(StructuredRequest):
             return value.model_dump()
         # ② 예전 trace 봉투를 벗긴다: {"structured_request": {...}} / {"payload": {...}} 형태면
         #    내용물만 꺼낸다. ok/tool_name 같은 통신용 키는 여기서 자연스럽게 버려진다.
+        #
+        #    멘토님 리뷰 반영 — 봉투가 여러 개거나 비어 있을 때의 신뢰 기준:
+        #    1) structured_request(현행 형식)를 payload(구형)보다 우선한다.
+        #    2) 빈 봉투({})는 정보가 없으므로 신뢰하지 않고 다음 후보로 넘어간다.
+        #       예: {"structured_request": {}, "payload": {"kind": "todo", ...}} → payload 사용.
+        #       (빈 dict를 그대로 반환하면 모든 필드가 기본값으로 채워져
+        #        kind="unknown" row가 조용히 저장되는 데이터 유실이 생긴다)
         if isinstance(value, dict):
             for wrapper_key in ("structured_request", "payload"):
                 inner = value.get(wrapper_key)
-                if isinstance(inner, dict):
+                if isinstance(inner, dict) and inner:
                     return inner
         # ③ 그 외는 손대지 않고 그대로 필드 스키마 검증에 넘긴다.
         return value
