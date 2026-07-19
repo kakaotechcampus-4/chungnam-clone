@@ -29,9 +29,9 @@ _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
 SQLITE_MEMORY_PROMPT = (
-    "너는 이제 Week 1의 대화 임시 메모리 대신 앱 SQLite DB에 남는 기록장을 사용한다. "
-    "구조화된 일정/할 일/알림은 save_structured_request로 저장하면 새 대화를 열거나 앱을 다시 시작해도 유지된다. "
-    "사용자가 예전에 저장한 일정을 물어보면 추측하지 말고 "
+    "구조화된 일정/할 일/알림은 save_structured_request로 저장한다. "
+    "저장된 기록은 새 대화를 열거나 앱을 다시 시작해도 유지된다. "
+    "사용자가 예전에 저장한 일정/요청을 물어보면 추측하지 말고 "
     "list_saved_requests / personal_list_saved_schedules / get_saved_request로 SQLite를 직접 조회한다."
 )
 
@@ -250,21 +250,19 @@ def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dic
     if isinstance(value, SaveStructuredRequestInput):
         return value
     if isinstance(value, StructuredRequest):
-        return SaveStructuredRequestInput.model_validate(value.model_dump())
-    if isinstance(value, dict):
-        return SaveStructuredRequestInput.model_validate(value)
-    if isinstance(value, str):
+        data = value.model_dump()
+    elif isinstance(value, dict):
+        data = value
+    elif isinstance(value, str):
         text = value.strip()
         try:
-            data = json.loads(text)
+            parsed = json.loads(text)
         except (json.JSONDecodeError, TypeError):
-            data = None
-        if isinstance(data, dict):
-            return SaveStructuredRequestInput.model_validate(data)
-        structured = extract_structured_request(text)
-        return SaveStructuredRequestInput.model_validate(structured.model_dump())
-    raise RuntimeError(f"저장 입력으로 변환할 수 없는 값입니다: {type(value)!r}")
-
+            parsed = None
+        data = parsed if isinstance(parsed, dict) else extract_structured_request(text).model_dump()
+    else:
+        raise RuntimeError(f"저장 입력으로 변환할 수 없는 값입니다: {type(value)!r}")
+    return SaveStructuredRequestInput.model_validate(data)
 
 def save_structured_request_payload(
     request: SaveStructuredRequestInput | StructuredRequest | dict[str, Any] | str,
@@ -342,12 +340,15 @@ def _delete_saved_schedules(
     has_filter = any([schedule_ids, date, title, start_time, time_unspecified])
     if not delete_all and not has_filter:
         return tool_result(
-            "personal_delete_saved_schedules",
-            ok=False,
+            "personal_delete_saved_schedules", ok=False,
             error="삭제 조건이 없습니다. schedule_ids 또는 date/title/start_time/delete_all 중 하나를 지정하세요.",
-            deleted_count=0,
-            filters={},
-            deleted=[],
+            deleted_count=0, filters={}, deleted=[],
+        )
+    if delete_all and has_filter:
+        return tool_result(
+            "personal_delete_saved_schedules", ok=False,
+            error="delete_all과 다른 필터(schedule_ids/date/title/start_time)를 동시에 지정할 수 없습니다. 하나만 선택하세요.",
+            deleted_count=0, filters={}, deleted=[],
         )
     if delete_all:
         deleted = store.delete_all_schedules()
