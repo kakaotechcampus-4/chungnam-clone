@@ -27,6 +27,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from pydantic import ValidationError
+
 # 이 파일은 tests/ 안에 있으므로, repo 루트를 import 경로에 직접 추가한다.
 # (student_parts/fixed 모듈을 찾기 위함 — 노트북의 find_repo_root와 같은 목적)
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -132,6 +134,7 @@ def stage3_additional_assignments() -> None:
     print("⑨ 삭제 — schedule_ids 명시 삭제와 결과 3종 세트")
     deleted = json.loads(personal_delete_saved_schedules.invoke({"schedule_ids": [schedule_id]}))
     assert deleted["ok"] is True and deleted["deleted_count"] == 1
+    assert deleted["status"] == "deleted"  # 실제 삭제됐음을 status가 명시해야 한다
     assert deleted["filters"]["schedule_ids"] == [schedule_id]
     remaining = json.loads(personal_list_saved_schedules.invoke({}))["schedules"]
     assert all(row["schedule_id"] != schedule_id for row in remaining)
@@ -151,6 +154,87 @@ def stage3_additional_assignments() -> None:
     dual_id = next(row["id"] for row in created["sqlite_save"]["saved_rows"] if row["table"] == "schedules")
     json.loads(personal_delete_saved_schedules.invoke({"schedule_ids": [dual_id]}))
     print("  이중 기록 + 멱등성(already_exists) + 정리 통과")
+
+
+def stage4_edge_cases() -> None:
+    """멘토님 리뷰 반영: LLM이 실수로 만들 수 있는 위험 입력을 일부러 넣어 본다.
+
+    정상 흐름 테스트가 "의도대로 동작하는가"를 본다면,
+    edge case 테스트는 "잘못된 입력에도 안전한가"를 본다.
+    (DB에 아무 흔적도 남기지 않는 입력들이라 다른 stage에 영향이 없다)
+    """
+
+    print("=" * 64)
+    print("⑪ 충돌 입력 — delete_all=True와 schedule_ids가 함께 오면 거부되는가")
+    conflict = json.loads(personal_delete_saved_schedules.invoke(
+        {"delete_all": True, "schedule_ids": ["sch_아무거나"]}
+    ))
+    assert conflict["ok"] is False and conflict["status"] == "rejected"
+    assert conflict["deleted_count"] == 0
+    print("  모호한 요청 거부 확인 (전체 오삭제 사고 차단)")
+
+    print("⑫ 매칭 0건 — 존재하지 않는 schedule_id 삭제가 '성공'으로 오해되지 않는가")
+    no_match = json.loads(personal_delete_saved_schedules.invoke({"schedule_ids": ["sch_존재하지않음"]}))
+    # ok=True(tool 실행은 성공)지만, status와 message가 "대상 없음"을 명시해야 한다.
+    assert no_match["ok"] is True and no_match["status"] == "no_match"
+    assert no_match["deleted_count"] == 0 and "message" in no_match
+    print("  status=no_match + 안내 message 통과")
+
+    print("⑬ wrapper 충돌 — 빈 structured_request와 값이 든 payload가 함께 오면")
+    fallback = _save_input_from({"structured_request": {}, "payload": {"kind": "todo", "title": f"{MARKER} 폴백"}})
+    assert fallback.kind == "todo" and fallback.title == f"{MARKER} 폴백"
+    both = _save_input_from({
+        "structured_request": {"kind": "reminder", "title": f"{MARKER} 우선"},
+        "payload": {"kind": "todo", "title": f"{MARKER} 후순위"},
+    })
+    # 둘 다 값이 있으면 현행 형식(structured_request)을 우선한다.
+    assert both.kind == "reminder" and both.title == f"{MARKER} 우선"
+    print("  빈 봉투 폴백 + structured_request 우선 통과")
+
+    print("⑭ 잘못된 kind — Literal 방패가 저장 입구에서도 작동하는가")
+    try:
+        _save_input_from({"kind": "파티", "title": f"{MARKER} 불량"})
+        raise AssertionError("잘못된 kind가 검증을 통과하면 안 된다")
+    except ValidationError:
+        pass  # kind는 RequestKind Literal 5종만 허용 — DB에 불량 kind가 못 들어간다
+    print("  kind='파티' → ValidationError로 거부 통과")
+
+    print("⑮ 지원하지 않는 입력 타입 — 조용히 통과시키지 않는가 (fail fast)")
+    try:
+        _save_input_from(12345)
+        raise AssertionError("숫자 입력이 통과하면 안 된다")
+    except RuntimeError:
+        pass  # 명단(객체/dict/문자열) 밖 타입은 경계에서 즉시 실패해야 한다
+    print("  숫자 입력 → RuntimeError 통과")
+
+    print("⑯ 둘 다 빈 봉투 — 안전 분류(unknown)로 수렴하는가")
+    empty_both = _save_input_from({"structured_request": {}, "payload": {}})
+    # 벗길 내용물이 없으면 바깥 dict가 검증돼 kind 기본값 unknown이 된다.
+    # unknown은 저장돼도 영수증(structured_requests)에만 남으므로 서랍 오염이 없다.
+    assert empty_both.kind == "unknown"
+    print("  빈 봉투 2개 → kind=unknown 수렴 통과")
+
+    print("⑰ 스키마 범위 밖 인자 — args_schema 검문소가 함수 실행 전에 막는가")
+    for bad_limit in (0, 999):  # SavedScheduleListInput은 ge=1, le=200
+        try:
+            personal_list_saved_schedules.invoke({"limit": bad_limit})
+            raise AssertionError(f"limit={bad_limit}가 검증을 통과하면 안 된다")
+        except Exception as error:  # noqa: BLE001 — langchain이 검증 오류를 감쌀 수 있어 넓게 잡는다
+            assert not isinstance(error, AssertionError), error
+    print("  limit=0/999 → 함수 본문 실행 전 거부 통과")
+
+    print("⑱ 수정 필드 전부 None — update가 no-op으로 안전한가")
+    saved = save_structured_request_payload(
+        {"kind": "personal_schedule", "title": f"{MARKER} 노옵", "date": "2026-07-22", "start_time": "08:00"}
+    )
+    noop_id = next(row["id"] for row in saved["saved_rows"] if row["table"] == "schedules")
+    noop = json.loads(personal_update_saved_schedule.invoke({"schedule_id": noop_id}))
+    # None은 "수정하지 않음"이므로 아무 값도 바뀌지 않은 채 성공해야 한다.
+    assert noop["ok"] is True
+    assert noop["updated_schedule"]["title"] == f"{MARKER} 노옵"
+    assert noop["updated_schedule"]["start_time"] == "08:00"
+    json.loads(personal_delete_saved_schedules.invoke({"schedule_ids": [noop_id]}))
+    print("  전부 None → 값 불변 no-op + 정리 통과")
 
 
 def stage2_survival_check() -> None:
@@ -192,6 +276,7 @@ if __name__ == "__main__":
     try:
         stage1_save_and_query()
         stage3_additional_assignments()
+        stage4_edge_cases()
         # 자기 자신을 새 파이썬 프로세스로 실행한다 — 메모리가 완전히 초기화되므로
         # 앱을 껐다 켠 것과 같은 조건에서 SQLite 영속성을 검증할 수 있다.
         result = subprocess.run([sys.executable, __file__, "--stage2"], cwd=REPO_ROOT)
