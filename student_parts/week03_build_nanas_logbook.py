@@ -28,10 +28,41 @@ from student_parts.week02_structure_natural_language_requests import (
 _WEEK03_AGENT: Any | None = None
 
 # TODO: 새 대화에서도 SQLite 일정/할 일/알림을 조회할 수 있도록 Week 3 영속 메모리 규칙을 작성하세요.
-SQLITE_MEMORY_PROMPT = ""
+SQLITE_MEMORY_PROMPT = """
+save_structured_request로 저장된 일정/할 일/알림은 SQLite 앱 DB에 남아 있어서
+새 대화를 열거나 앱을 재시작해도 그대로 조회할 수 있다.
+반면 Week 1의 personal_list_schedules는 현재 대화가 끝나면 사라지는 임시 메모리이므로,
+"저장된 일정", "예전에 말한 일정" 등 지속적인 기록을 묻는 질문에는
+list_saved_requests, get_saved_request, personal_list_saved_schedules 같은
+SQLite 조회 tool로 실제 저장된 값을 확인한 뒤 답한다.
+"""
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
-WEEK03_TOOL_CALL_PROMPT = ""
+WEEK03_TOOL_CALL_PROMPT = """
+저장과 조회는 다음 순서를 따른다.
+
+1. 저장:
+   - personal_schedule/group_schedule/todo/reminder 판단이 필요한 모든 저장 요청은
+     save_structured_request를 직접 호출하기 전에 반드시 extract_schedule_request를 먼저 호출해서
+     structured_request를 얻는다.
+   - extract_schedule_request 없이 kind/title/date 등을 스스로 추론해서
+     save_structured_request를 바로 채워 호출하지 않는다.
+   - extract_schedule_request 결과의 structured_request 필드(kind/title/date/start_time/end_time/
+     members/priority/reason/original_text)를 그대로 save_structured_request 인자로 전달해 저장한다.
+   - 자연어 원문이나 extract_schedule_request의 ok/tool_name/base_date 같은 wrapper 값은
+     save_structured_request에 그대로 넣지 않는다.
+   - extract_schedule_request 결과의 kind가 personal_schedule/group_schedule/todo/reminder 중
+     하나로 판단됐다면(unknown이 아니라면), "~일정이 있어", "~하기로 했어"처럼 명령형이 아닌
+     진술문이어도 반드시 이어서 save_structured_request를 호출해 저장까지 완료한다.
+     구조화만 하고 저장을 생략한 채 대화로만 답하지 않는다.   
+
+2. 조회:
+   - 저장된 일정 목록 조회는 personal_list_saved_schedules를 사용한다.
+   - 저장된 요청 원본(할 일/알림 포함)을 목록/단건으로 확인할 때는
+     list_saved_requests / get_saved_request를 사용한다.
+   - Week 1의 personal_list_schedules는 현재 대화에서만 유효한 임시 조회이므로
+     "저장된", "예전", "이전 대화" 관련 조회에는 사용하지 않는다.
+"""
 
 
 # [3주차 수강생 구현 가이드]
@@ -374,7 +405,11 @@ def list_saved_requests( # "이번 주에 내가 만든 할 일/알림/일정 �
 
     # TODO: kind/date_from/date_to 필터로 저장 요청을 조회하고 rows를 JSON 문자열로 반환하세요.
     #인자 그대로 넘겨서 조회한 결과를 result로 가져오기
-    result = _store().list_saved_requests(kind, date_from, date_to)
+    result = _store().list_saved_requests(
+        kind=kind,
+        date_from=date_from,
+        date_to=date_to
+    )
 
     return json_payload(tool_result(list_saved_requests.name, rows = result))
 
@@ -384,7 +419,7 @@ def get_saved_request(request_id: str) -> str: # 여러 요청 중 하나를 조
     """request_id로 구조화 요청 행 하나를 조회합니다."""
 
     # TODO: request_id로 단건 조회하고, 결과가 없을 때도 row=None을 유지해 JSON 문자열로 반환하세요.
-    row = _store().get_saved_request(request_id)
+    row = _store().get_saved_request(request_id=request_id)
     return json_payload(tool_result(get_saved_request.name, row = row))
 
 
@@ -400,7 +435,12 @@ def personal_list_saved_schedules( # 원본 전체가 아닌 schedules 테이블
     # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
     # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
     kind = kind or "personal_schedule"
-    schedules = _store().list_schedules(limit, kind, date_from, date_to)
+    schedules = _store().list_schedules(
+        limit=limit,
+        kind=kind, 
+        date_from=date_from,
+        date_to=date_to
+    )
 
     return json_payload(
         tool_result(
@@ -490,6 +530,17 @@ def week03_prompt_parts() -> list[str]:
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
         # TODO: 현재 날짜, Week 3 tool 선택 기준, 이번 주차의 범위를 설명하는 agent 지시를 추가하세요.
+        f"오늘 날짜는 {current_app_date_iso()}이며, list_saved_requests/personal_list_saved_schedules의 ",
+        f"date_from/date_to도 이 날짜를 기준으로 상대 날짜를 변환해 채운다.",
+        "이번 주차(Week 3)부터 저장이 필요한 요청은 Week 1의 임시 tool이 아니라 ",
+        f"Week 3 SQLite 기반 tool({save_structured_request.name}, {list_saved_requests.name}, {get_saved_request.name}, {personal_list_saved_schedules.name})을 우선 사용한다.",
+        "이번 주차에서는 저장된 일정의 수정/삭제, RAG 기반 검색, 외부 인원과의 실제 일정 조율은 다루지 않는다.",
+        "너는 Week3 agent이며, 사용자에게 보여주는 최종 답변은 항상 자연스러운 한국어 문장이다. ",
+        "kind/title/date/start_time/end_time/members/priority/reason/original_text 같은 필드나 ",
+        "JSON 형식을 최종 답변에 그대로 노출하지 않는다. 일정/할 일/알림 분류나 구조화가 필요하면 ",
+        f"{extract_schedule_request.name} tool을 호출해서 확인하고, 그 결과를 바탕으로 자연어로 답한다. ",
+        "인사말이나 일정과 무관한 잡담에는 tool을 호출하지 않고 자연스럽게 대화로만 응답한다.",
+        
     ]
 
 
