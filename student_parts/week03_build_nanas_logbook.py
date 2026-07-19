@@ -30,8 +30,9 @@ _WEEK03_AGENT: Any | None = None
 SQLITE_MEMORY_PROMPT = (
     "Week 3부터 Nana는 대화가 끝나면 사라지는 임시 메모리 대신 앱 SQLite DB에 남는 '기록장'을 갖습니다. "
     "구조화된 요청과 일정은 save_structured_request로 저장하면 새 대화를 열거나 앱을 다시 시작해도 남아 있습니다. "
-    "사용자가 예전에 저장한 일정·할 일·알림을 묻거나 조회를 요청하면, 새로 만들지 말고 "
-    "personal_list_saved_schedules, list_saved_requests, get_saved_request로 SQLite에 이미 저장된 기록을 조회하세요."
+    "사용자가 예전에 저장한 기록을 묻거나 조회를 요청하면, 새로 만들지 말고 SQLite에 이미 저장된 기록을 조회하세요: "
+    "personal_schedule/group_schedule(일정)은 personal_list_saved_schedules로 조회하고, "
+    "todo(할 일)·reminder(알림)를 포함한 구조화 요청 원본은 list_saved_requests(kind 필터) 또는 get_saved_request로 조회합니다."
 )
 
 WEEK03_TOOL_CALL_PROMPT = (
@@ -39,10 +40,13 @@ WEEK03_TOOL_CALL_PROMPT = (
     "1) extract_schedule_request(query=사용자 요청)로 자연어를 구조화합니다. "
     "2) 반환된 structured_request의 kind/title/date/start_time/end_time/members/priority/reason/original_text 값을 "
     "그대로 save_structured_request 인자로 전달해 SQLite에 저장합니다. "
-    "조회 요청 처리 순서: personal_list_saved_schedules(저장된 일정 목록) 또는 "
-    "list_saved_requests/get_saved_request(구조화 요청 원본)를 kind/date_from/date_to/request_id 필터와 함께 호출합니다. "
-    "일정을 수정하거나 삭제해야 한다면, 먼저 personal_list_saved_schedules로 대상 schedule_id를 확인한 뒤 "
-    "personal_update_saved_schedule 또는 personal_delete_saved_schedules를 호출하세요."
+    "personal_create_schedule은 SQLite에 저장되지 않는 Week 1 임시 메모리용 도구이므로 "
+    "새 일정을 저장할 때는 사용하지 말고 반드시 extract_schedule_request → save_structured_request 경로로만 처리하세요. "
+    "조회 요청 처리 순서: 일정(personal_schedule/group_schedule) 조회는 personal_list_saved_schedules를, "
+    "할 일·알림을 포함한 구조화 요청 원본 조회는 list_saved_requests(kind/date_from/date_to 필터) 또는 "
+    "get_saved_request(request_id)를 사용합니다. "
+    "일정 수정·삭제 도구는 이번 주차 범위에 아직 없으니, 사용자가 수정·삭제를 요청하면 "
+    "지원하지 않는다고 안내하세요."
 )
 
 
@@ -453,20 +457,20 @@ def personal_delete_saved_schedules(
 
 
 def week03_tools() -> list[Any]:
-    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회/삭제 도구를 조립합니다."""
+    """Week 1 도구, Week 2 구조화 helper, SQLite 저장/조회 도구를 조립합니다.
 
-    base_tools = [
-        personal_create_schedule if _tool_name(item) == "personal_create_schedule" else item for item in week01_tools()
-    ]
+    personal_create_schedule(Week 1 호환 이중 기록), personal_update_saved_schedule,
+    personal_delete_saved_schedules는 이번 메인과제 범위에서는 아직 구현되지 않았으므로
+    노출하지 않는다. 미구현 상태로 노출하면 agent가 호출했을 때 None을 반환해 답변이 깨진다.
+    """
+
     return [
-        *base_tools,
+        *week01_tools(),
         extract_schedule_request,
         save_structured_request,
         list_saved_requests,
         get_saved_request,
         personal_list_saved_schedules,
-        personal_update_saved_schedule,
-        personal_delete_saved_schedules,
     ]
 
 
@@ -489,10 +493,11 @@ def week03_prompt_parts() -> list[str]:
         WEEK03_TOOL_CALL_PROMPT,
         (
             f"현재 앱 기준일은 {current_app_date_iso()} 입니다. "
-            "tool 선택 기준: 새 요청은 extract_schedule_request → save_structured_request 순서로, "
-            "이미 저장된 기록 조회는 personal_list_saved_schedules/list_saved_requests/get_saved_request로, "
-            "수정·삭제는 personal_update_saved_schedule/personal_delete_saved_schedules로 처리합니다. "
-            "이번 주차 범위는 개인 SQLite 기록장까지이며, 외부 공유 일정 조율이나 RAG 검색은 다음 주차의 몫입니다."
+            "tool 선택 기준: 새 요청 저장은 extract_schedule_request → save_structured_request 순서로만 처리하고 "
+            "personal_create_schedule로 빠지지 마세요. "
+            "이미 저장된 기록 조회는 personal_list_saved_schedules(일정) 또는 "
+            "list_saved_requests/get_saved_request(할 일·알림 포함 원본)로 처리합니다. "
+            "이번 주차 범위는 저장·조회까지이며, 수정·삭제·외부 공유 일정 조율·RAG 검색은 다음 주차의 몫입니다."
         ),
     ]
 
