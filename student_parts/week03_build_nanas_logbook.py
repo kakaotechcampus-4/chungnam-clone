@@ -35,13 +35,8 @@ SQLITE_MEMORY_PROMPT = (
 )
 
 # Week 3 tool 호출 순서 규칙: 구조화 → 저장 → 조회/수정/삭제.
-#
-# [마지막 줄 "조건 없는 삭제 금지"를 프롬프트에 넣는 이유 — 심층 방어(defense in depth)]
-#   같은 규칙을 삭제 tool 코드(_delete_saved_schedules)에서도 한 번 더 막는다.
-#   - 프롬프트 = LLM이 애초에 조건 없는 삭제 호출을 만들지 않게 하는 1차 방어
-#   - 코드 guard = 그래도 그런 호출이 오면 거부하는 2차 방어
-#   프롬프트만 믿으면 LLM이 흔들릴 때 전체 삭제 사고가 나고,
-#   코드 guard만 있으면 사용자가 불필요한 에러 응답을 자주 보게 된다. 둘 다 필요하다.
+# 마지막 줄 "조건 없는 삭제 금지"는 _delete_saved_schedules의 guard와 이중으로 막는다
+# (프롬프트 1차 + 코드 2차 심층 방어).
 WEEK03_TOOL_CALL_PROMPT = (
     "자연어 저장 요청은 먼저 extract_schedule_request로 구조화한 뒤, "
     "그 결과의 structured_request 필드 값들을 save_structured_request 인자로 전달해 저장한다. "
@@ -50,9 +45,7 @@ WEEK03_TOOL_CALL_PROMPT = (
     "수정은 personal_update_saved_schedule, 삭제는 personal_delete_saved_schedules를 쓰며, "
     "schedule_id를 모르면 먼저 personal_list_saved_schedules로 후보를 조회해 확인한다. "
     "삭제는 schedule_ids나 명시적인 날짜/제목 조건 없이 호출하지 않는다. "
-    # 시나리오 검증 중 발견한 도구 혼동 방지 규칙:
-    # 모델이 이름이 비슷한 Week 1 인메모리 tool(personal_list_schedules)을 집어
-    # "일정 없음"으로 오답한 사례가 있어, 두 저장소의 구분을 명시한다.
+    # 이름이 비슷한 Week 1 인메모리 tool과의 혼동 방지 규칙 (두 저장소는 결과가 다르다).
     "주의: personal_list_schedules와 personal_delete_schedule은 현재 대화 전용 임시 메모리만 보는 "
     "Week 1 tool이라 SQLite 기록장과 결과가 다르다. "
     "저장된 일정의 조회와 수정/삭제 후보 확인에는 반드시 personal_list_saved_schedules를 쓴다."
@@ -250,13 +243,8 @@ class SaveStructuredRequestInput(StructuredRequest):
             return value.model_dump()
         # ② 예전 trace 봉투를 벗긴다: {"structured_request": {...}} / {"payload": {...}} 형태면
         #    내용물만 꺼낸다. ok/tool_name 같은 통신용 키는 여기서 자연스럽게 버려진다.
-        #
-        #    멘토님 리뷰 반영 — 봉투가 여러 개거나 비어 있을 때의 신뢰 기준:
-        #    1) structured_request(현행 형식)를 payload(구형)보다 우선한다.
-        #    2) 빈 봉투({})는 정보가 없으므로 신뢰하지 않고 다음 후보로 넘어간다.
-        #       예: {"structured_request": {}, "payload": {"kind": "todo", ...}} → payload 사용.
-        #       (빈 dict를 그대로 반환하면 모든 필드가 기본값으로 채워져
-        #        kind="unknown" row가 조용히 저장되는 데이터 유실이 생긴다)
+        #    신뢰 기준: structured_request(현행)를 payload(구형)보다 우선하고,
+        #    빈 봉투({})는 정보가 없으므로 건너뛰고 다음 후보로 넘어간다.
         if isinstance(value, dict):
             for wrapper_key in ("structured_request", "payload"):
                 inner = value.get(wrapper_key)
@@ -289,7 +277,7 @@ def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dic
             return SaveStructuredRequestInput.model_validate(decoded)
         return SaveStructuredRequestInput.model_validate(extract_structured_request(value).model_dump())
 
-    # ④ 그 외 타입은 조용히 통과시키지 않는다 (2주차 _coerce와 같은 fail fast).
+    # ④ 그 외 타입은 조용히 통과시키지 않는다 (fail fast).
     raise RuntimeError(f"저장 입력으로 변환할 수 없는 타입입니다: {type(value).__name__}")
 
 # save_structured_request_payload   ← 3층: 정규화된 입력을 실제로 저장
@@ -382,14 +370,8 @@ def _delete_saved_schedules(
         "delete_all": delete_all,
     }
 
-    # ① 심층 방어 2차(코드 guard): 삭제 조건이 하나도 없으면 거부한다.
-    #    프롬프트(1차)가 뚫려도 여기서 전체 오삭제 사고를 막는다.
-    #
-    #    schedule_ids만 bool()로 따로 감싼 이유:
-    #    None(인자 안 옴)과 빈 리스트 [](인자는 왔지만 ID가 0개) 둘 다 "조건 없음"으로
-    #    취급해야 한다. bool(None)도 bool([])도 False라서 두 경우를 한 번에 걸러내며,
-    #    any() 안의 다른 값들과 분리해 "리스트는 내용물이 있어야 조건으로 인정"이라는
-    #    의도를 코드에서 바로 읽을 수 있게 했다.
+    # ① 삭제 조건이 하나도 없으면 거부한다(프롬프트 규칙이 뚫려도 여기서 오삭제를 막는 2차 guard).
+    #    schedule_ids는 None과 빈 리스트 모두 "조건 없음"으로 취급한다.
     partial_conditions = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
     if not (partial_conditions or delete_all):
         return tool_result(
@@ -402,10 +384,8 @@ def _delete_saved_schedules(
             deleted=[],
         )
 
-    # ② 멘토님 리뷰 반영: delete_all=True와 개별 조건이 "함께" 들어오면
-    #    전체 삭제 의도인지 조건 삭제 의도인지 알 수 없는 충돌 입력이다.
-    #    전체 삭제는 영향 범위가 가장 큰 동작이므로, 함께 온 조건을 임의로 무시하고
-    #    실행하기보다 모호한 요청으로 거부하고 의도를 다시 확인하게 한다.
+    # ② delete_all과 개별 조건이 "함께" 오면 의도가 섞인 충돌 입력이다.
+    #    전체 삭제는 영향이 가장 크므로 조건을 임의로 무시하지 않고 거부해 의도를 재확인시킨다.
     if delete_all and partial_conditions:
         return tool_result(
             "personal_delete_saved_schedules",
@@ -432,11 +412,8 @@ def _delete_saved_schedules(
         )
 
     # ④ 무엇을 근거로(filters) 몇 건이(deleted_count) 정확히 뭐가(deleted) 지워졌는지 반환한다.
-    #
-    #    멘토님 리뷰 반영: 조건은 있었지만 매칭이 0건인 경우(예: 존재하지 않는 schedule_id),
-    #    ok=True + deleted_count=0만으로는 LLM이 "삭제 성공"으로 오해할 수 있다.
-    #    ok는 "tool이 정상 실행됐는가"만 말하게 두고, 실제 삭제 결과는
-    #    status 필드("deleted"/"no_match")가 명시적으로 말하게 역할을 분리한다.
+    #    ok는 "tool 실행 성공"만 말하고, 실제 결과는 status("deleted"/"no_match")가 말한다 —
+    #    매칭 0건을 LLM이 "삭제 성공"으로 오해하지 않게 하기 위한 역할 분리.
     status = "deleted" if deleted else "no_match"
     payload: dict[str, Any] = {
         "status": status,
@@ -453,11 +430,9 @@ def _delete_saved_schedules(
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
-    # Week 1 dict와 Week 3 스키마의 어휘 차이를 매핑한다:
-    #   attendees → members            (Week 2부터 넓어진 이름)
-    #   id        → source_schedule_id (store의 중복 저장 방지 열쇠 — 같은 임시 일정을
-    #                                    두 번 변환해도 SQLite에는 한 번만 저장된다)
-    # end_time의 Week 1 기본값 "미정"은 자리표시 문자열이므로 None으로 정규화한다(규칙 ⑤와 일관).
+    # Week 1 dict와 Week 3 스키마의 필드명을 매핑한다:
+    #   attendees → members, id → source_schedule_id(store의 중복 저장 방지 키).
+    # end_time의 Week 1 기본값 "미정"은 자리표시 문자열이므로 None으로 정규화한다.
     end_time = schedule.get("end_time")
     return SaveStructuredRequestInput(
         kind="personal_schedule",
@@ -471,17 +446,9 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
     )
 
 
-# [@tool 데코레이터의 역할 — 함수를 LLM용 "부스"로 바꾸는 장치]
-#   ① 간판(명함) 생성: 함수명 + docstring + 인자 스키마를 JSON Schema로 변환해
-#      매 LLM 호출마다 동봉한다. docstring은 사람용 문서가 아니라 LLM이 tool을
-#      고르는 근거가 되는 프롬프트의 일부다.
-#   ② 검문소: 모델이 보낸 tool_call 인자를 args_schema(Pydantic)로 함수 실행 "전"에
-#      검증한다. 불량 인자는 함수 본문에 닿지 못하고 에러로 모델에게 돌아가 재시도된다.
-#      (SaveStructuredRequestInput의 unwrap_legacy_payload도 이 검문 단계에서 자동 실행)
-#   ③ 실행 대리인: 데코레이터를 거친 함수는 StructuredTool 객체가 된다. agent 루프가
-#      tool_call 이름으로 이 객체를 찾아 .invoke(인자)로 실행하고, 반환 문자열을
-#      같은 id의 tool_result로 포장해 모델에게 돌려준다.
-#      → 그래서 테스트에서도 일반 호출이 아니라 .invoke({...})를 쓴다.
+# @tool: 함수를 LangChain StructuredTool로 감싼다 — 이름/docstring/args_schema가
+# LLM에게 전달되는 도구 명세가 되고, 인자는 함수 실행 "전"에 Pydantic으로 검증되며,
+# agent 루프가 tool_call 이름을 찾아 .invoke()로 실행해 결과를 tool_result로 되돌린다.
 @tool("personal_create_schedule")
 def personal_create_schedule(
     title: str,
@@ -560,13 +527,8 @@ def save_structured_request(
     result = _store().save_structured_request(payload)
 
     # ④ ok/tool_name 껍데기에 store 결과(request_id/kind/saved_rows/shared_sync)를 합쳐
-    #    JSON 문자열로 반환한다. LLM은 이 결과를 보고 저장 성공 답변을 만든다.
-    #
-    #    [shared_sync는 어디서 오나 — 우리가 만든 값이 아니다]
-    #    fixed/app_store.py의 save_structured_request가 일정(kind=personal/group_schedule)을
-    #    저장할 때, 외부 "공유 저장소"에도 내 busy-time 사본을 자동 복사하고 그 결과를
-    #    shared_sync로 돌려준다. Week 5-6에서 카나가 여러 사람의 일정을 조율할 때
-    #    서로의 바쁜 시간을 보기 위한 밑작업이며, 이 tool은 **result로 그대로 통과시킬 뿐이다.
+    #    JSON 문자열로 반환한다. shared_sync는 store가 외부 공유 저장소에 일정 사본을
+    #    동기화한 결과로, 이 tool은 그대로 통과시킨다.
     return json_payload(tool_result("save_structured_request", **result))
 
 
@@ -752,13 +714,8 @@ def week03_prompt_parts() -> list[str]:
     return [
         *week02_prompt_parts(),
         # Week 2 구조화 결과 → Week 3 저장 입력 연결 규칙.
-        #
-        # ["래퍼 키를 넘기지 않는다"가 중요한 이유]
-        #   extract_schedule_request의 반환은 {ok, tool_name, base_date, structured_request:{...}} 봉투 형태다.
-        #   LLM이 이 봉투째로 save_structured_request에 넘기면, 저장 tool이 받은 인자가 통째로
-        #   DB의 원본 감사 로그(structured_requests.raw_json)에 박제되므로
-        #   ok/tool_name 같은 "통신용 메타데이터"가 일정 데이터에 섞여 버린다.
-        #   저장할 것은 봉투가 아니라 내용물(structured_request 안의 필드들)뿐이다.
+        # 래퍼(ok/tool_name/base_date)째 저장하면 통신용 키가 DB 원본 로그(raw_json)에
+        # 섞이므로, 내용물(structured_request 필드)만 전달하게 지시한다.
         (
             "Week 2의 구조화 결과는 이제 최종 답변이 아니라 저장 입력이다. "
             "extract_schedule_request 결과 JSON의 structured_request 안에 있는 필드 값들만 "
