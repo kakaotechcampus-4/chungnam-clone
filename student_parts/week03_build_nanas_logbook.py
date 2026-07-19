@@ -423,7 +423,8 @@ def personal_list_saved_schedules(
     return json_payload(tool_result(
         "personal_list_saved_schedules",
         ok=True,
-        filters={"kind": effective_kind, "date_from": date_from, "date_to": date_to},
+        filters={"kind": effective_kind, "date_from": date_from, "date_to": date_to,"limit": limit}, #1차 피드백 limit추가
+        
         schedules=schedules,
     ))
 
@@ -507,9 +508,11 @@ def week03_prompt_parts() -> list[str]:
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
         (
-            f"오늘 날짜는 {current_app_date_iso()}입니다. "
-            "일정 저장 요청이 오면 extract_schedule_request → save_structured_request 순서로 호출하세요"
-            "일정 조회는 personal_list_saved_schedules 삭제는 반드시 조회 후 personal_delete_saved_schedules를 사용하세요"
+            "일정 저장 순서: extract_schedule_request → save_structured_request. "
+            "개인/그룹 일정 조회: personal_list_saved_schedules. "
+            "할 일/알림/전체 요청 조회: list_saved_requests에 kind 전달. "
+            "request_id로 단건 확인: get_saved_request. "
+            "일정 삭제 순서: personal_list_saved_schedules로 후보 확인 → personal_delete_saved_schedules."  #1차 pr 피드백 조회규칙 세분화해보기
         ),
     ]
 
