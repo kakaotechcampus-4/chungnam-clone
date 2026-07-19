@@ -326,8 +326,12 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
     return SaveStructuredRequestInput(
         title=schedule["title"],
         date=schedule["date"],
-        start_time=schedule["start_time"],
-        end_time=schedule["end_time"],
+        # Q. ""와 "미정" 2가지에 대한 None 처리(정규화)를 해야하는 이유?
+        # A. 빈문자열로 처리한 건 빈문자열만 None처리를, end_time의 경우 "미정"의 경우에만 None처리를 해야한다는 오해가 있었다.
+        # 하지만, 타입 선언의 경우 허용 범위를 정할 뿐, 값을 채우는 주체가 LLM이기 때문에 실제로 어떤 텍스트를 입력받을지는 모르는 것이다. (위에 오해한 내용대로 무조건 start_time에는 ""만, end_time에는 미정만 온다는 보장이 X)
+        # 필드 타입을 선언할 때 str | None이라고 선언했던 것을 떠올려서 ""와 "미정" 모두 필터 대상으로 삼고 이 경우에 해당하는 경우 None으로 처리(정규화)하도록 하여 일관된 형태로 DB에 저장되도록 한다. 
+        start_time=None if schedule["start_time"] in ("", "미정") else schedule["start_time"],
+        end_time=None if schedule["end_time"] in ("", "미정") else schedule["end_time"],
         members=schedule["attendees"],
         source_schedule_id=schedule["id"],
         kind="personal_schedule",
@@ -346,24 +350,28 @@ def personal_create_schedule(
 
     # TODO: Week 1 임시 일정 tool을 호출한 뒤 결과를 StructuredRequest로 바꿔 SQLite에도 저장하세요.
     # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
-    # MY: Week1의 tool을 호출 -> structured_request_from_week01_schedule
+    # MY: Week1의 tool을 호출 -> JSON 문자열 형태의 일정을 받는다.
     created_schedule = week01_personal_create_schedule.invoke({
         "title":title,
         "date":date,
         "start_time":start_time,
         "end_time":end_time,
         "attendees":attendees,
-    })    
-    # 결과를 Structured Request로 바꾼다 -> ?
-    created = json.loads({"ok":True, "tool_name":"personal_create_schedule", "created_schedule": created_schedule})
+    })
+    # JSON 문자열 -> dict 형태로 복원
+    created = json.loads(created_schedule)
+    # created_schedule라는 키로 created에서 일정 부분을 꺼낸다.
     schedule_dict = created["created_schedule"]
-    # SQLite DB에  저장 -> saved_structured_request?
+    # 꺼낸 dict 형태의 일정을 번역 함수에 삽입
     translated = structured_request_from_week01_schedule(schedule_dict)
-    # created 결과 부분에서 request와 sqlive_save를 합쳐 JSON 문자열로 반환한다는 건 잘 모르겠음 -> 마지막은 json_payload tool을 쓰는거 같은데
+    # model_dump() -> 일반 dict로 변환, 그 변환된 dict를 DB에 저장
     sqlite_save = _store().save_structured_request(translated.model_dump())
-    
+    # structured_request에는 dict 형태의 일정 데이터, sqlite_save에는 store가 돌려준 저장 결과가 들어감
+    # Q. structured_request vs sqlite_save 차이?
+    # A. 사용자가 저장해달라고 요청한 내용과 실제로 LLM이 DB에 저장한 결과의 차이
     created["structured_request"] = translated.model_dump()
     created["sqlite_save"] = sqlite_save
+    # json_payload를 통과하면서 dict인 created가 JSON 형태로 반환됨
     return json_payload(created)
 
 @tool(args_schema=SaveStructuredRequestInput)
