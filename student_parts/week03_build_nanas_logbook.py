@@ -347,7 +347,15 @@ def _delete_saved_schedules(
 
     has_condition = delete_all or any([schedule_ids, date, title, start_time, time_unspecified])
     if not has_condition:
-        return {"deleted_count": 0, "filters": filters, "deleted": []}
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            delete_all=delete_all,
+            error="삭제 조건이 없습니다. schedule_ids, date, title, start_time, time_unspecified, delete_all 중 하나 이상을 지정해주세요.",
+        )
 
     if delete_all:
         deleted = store.delete_all_schedules()
@@ -360,22 +368,34 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
-    return {"deleted_count": len(deleted), "filters": filters, "deleted": deleted}
+    return tool_result(
+        "personal_delete_saved_schedules",
+        ok=True,
+        deleted_count=len(deleted),
+        filters=filters,
+        deleted=deleted,
+        delete_all=delete_all,
+    )
 
 
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
 
     attendees = schedule.get("attendees")
+    title = schedule.get("title")
+    date = schedule.get("date")
+    start_time = schedule.get("start_time")
 
     return SaveStructuredRequestInput(
         kind="personal_schedule",
-        title=schedule.get("title"),
-        date=schedule.get("date"),
-        start_time=schedule.get("start_time"),
+        title=title,
+        date=date,
+        start_time=start_time,
         end_time=schedule.get("end_time"),
         members=attendees if attendees is not None else [],
         source_schedule_id=schedule.get("id"),
+        original_text=f"{title} {date} {start_time}",
+        reason="Week 1 호환 경로(personal_create_schedule)로 생성됨",
     )
 
 
@@ -401,10 +421,12 @@ def personal_create_schedule(
 
     save_input = structured_request_from_week01_schedule(created_schedule)
     save_payload = save_input.model_dump()
-    sqlite_save = _store().save_structured_request(save_payload)
+    store_result = _store().save_structured_request(save_payload)
+    sqlite_save = tool_result("save_structured_request", **store_result)
 
     return json_payload(tool_result(
         "personal_create_schedule",
+        created_schedule=created_schedule,
         structured_request=save_payload,
         sqlite_save=sqlite_save,
     ))
@@ -542,7 +564,12 @@ def personal_update_saved_schedule(
     )
 
     if result is None:
-        return json_payload(tool_result("personal_update_saved_schedule", ok=False))
+        return json_payload(tool_result(
+            "personal_update_saved_schedule",
+            ok=False,
+            schedule_id=schedule_id,
+            error=f"schedule_id={schedule_id}에 해당하는 일정을 찾지 못했습니다.",
+        ))
 
     return json_payload(tool_result(
         "personal_update_saved_schedule",
@@ -572,7 +599,7 @@ def personal_delete_saved_schedules(
         time_unspecified=time_unspecified,
         delete_all=delete_all,
     )
-    return json_payload(tool_result("personal_delete_saved_schedules", **result))
+    return json_payload(result)
 
 
 def week03_tools() -> list[Any]:
