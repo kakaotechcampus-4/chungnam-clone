@@ -252,6 +252,20 @@ class SaveStructuredRequestInput(StructuredRequest):
         siblings = {k: v for k, v in value.items() if k not in ("payload", "structured_request")}
         return {**inner, **siblings}
 
+    @model_validator(mode="after")
+    def _promote_group_kind_when_members(self) -> "SaveStructuredRequestInput":
+        """참석자가 있으면 kind를 group_schedule로 승격합니다.
+
+        참석자가 있는데 personal_schedule로 저장되면 외부 공유 저장소에 "나"만 동기화되고
+        나머지 참석자의 busy time이 빠진다. 모든 저장 경로(save_structured_request의
+        args_schema 검증, structured_request_from_week01_schedule의 직접 생성,
+        _save_input_from의 model_validate)가 이 모델을 거치므로 규칙을 여기 한 곳에만 둔다.
+        """
+
+        if self.kind == "personal_schedule" and self.members:
+            self.kind = "group_schedule"
+        return self
+
 
 def _save_input_from(value: SaveStructuredRequestInput | StructuredRequest | dict[str, Any] | str) -> SaveStructuredRequestInput:
     """저장 입력을 SaveStructuredRequestInput 하나로 모읍니다."""
@@ -431,15 +445,15 @@ def structured_request_from_week01_schedule(
 ) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다.
 
-    참석자가 있으면 group_schedule로 분류해야 외부 공유 저장소에도 참석자별로 동기화된다.
-    kind를 무조건 personal_schedule로 고정하면 참석자가 있어도 "나"만 동기화되어 버린다.
+    kind는 항상 personal_schedule로 넘긴다. 참석자가 있으면 group_schedule로 승격하는 규칙은
+    SaveStructuredRequestInput의 after-validator가 모든 저장 경로에서 한 번만 적용한다.
     original_text는 Week 1 schedule dict엔 없는 값이라 호출자가 사용자의 원래 문장을
     별도로 넘겨줘야 SQLite 감사 기록에 남는다.
     """
 
     attendees = schedule.get("attendees") or []
     return SaveStructuredRequestInput(
-        kind="group_schedule" if attendees else "personal_schedule",
+        kind="personal_schedule",
         title=schedule.get("title"),
         date=schedule.get("date"),
         start_time=schedule.get("start_time"),
@@ -517,14 +531,10 @@ def save_structured_request(
 
     자연어 입력을 구조화하려면 extract_schedule_request를 먼저 호출해 그 결과를
     이 tool 인자로 그대로 전달하세요.
-    kind가 personal_schedule인데 members가 있으면 group_schedule로 교정합니다.
-    참석자가 있는데도 personal_schedule로 저장되면 외부 공유 저장소에 "나"만
-    동기화되고 나머지 참석자의 busy time은 빠지기 때문입니다(personal_create_schedule
-    경로의 structured_request_from_week01_schedule과 동일한 안전장치).
+    kind가 personal_schedule인데 members가 있으면 group_schedule로 교정하는 규칙은
+    args_schema(SaveStructuredRequestInput)의 after-validator가 이미 적용한 값이
+    들어오므로 여기서 다시 확인하지 않습니다.
     """
-
-    if kind == "personal_schedule" and members:
-        kind = "group_schedule"
 
     payload = {
         "kind": kind,
