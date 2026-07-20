@@ -175,4 +175,9 @@ def route_pending_response(
         ]
     )
 
-    return PendingRoute.model_validate(result)
+    validated = PendingRoute.model_validate(result)
+    print("\n========== ROUTER ==========")
+    print(json.dumps(router_input, ensure_ascii=False, indent=2))
+    print("decision:", validated.decision)
+    print("============================\n")
+    return validated

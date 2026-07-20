@@ -47,8 +47,35 @@ latest_user_message가 이전 assistant의 확인 질문에 대한 답변인지 
 현재 pending 작업의 실행을 허용하거나,
 해당 작업을 실행·진행·확정하도록 요구하는 발화다.
 
+예시:
+- previous_assistant_message: "이 작업을 진행할까요?"
+  latest_user_message: "진행해"
+  decision: execute
+
+- previous_assistant_message: "일정을 변경해도 될까요?"
+  latest_user_message: "ㅇㅇ"
+  decision: execute
+
+- previous_assistant_message: "이 일정을 삭제할까요?"
+  latest_user_message: "해봐"
+  decision: execute
+
+
 2. cancel
 현재 pending 작업을 실행하지 않도록 거절하거나 취소하는 발화다.
+
+예시:
+- previous_assistant_message: "이 작업을 진행할까요?"
+  latest_user_message: "하지 마"
+  decision: cancel
+
+- previous_assistant_message: "일정을 변경해도 될까요?"
+  latest_user_message: "아니"
+  decision: cancel
+
+- previous_assistant_message: "이 일정을 삭제할까요?"
+  latest_user_message: "취소해"
+  decision: cancel
 
 3. other
 현재 pending 작업의 실행 여부와 관계없는 발화다.
