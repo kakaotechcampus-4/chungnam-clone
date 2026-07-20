@@ -25,6 +25,12 @@ def pop_pending_action() -> dict[str, Any] | None:
     conversation_id = current_session_scope()
     return PENDING_ACTIONS.pop(conversation_id, None)
 
+def peek_pending_action() -> dict[str, Any] | None:
+    """현재 대화의 pending action을 조회합니다."""
+
+    conversation_id = current_session_scope()
+    return PENDING_ACTIONS.get(conversation_id)
+
 
 @tool
 def confirm_pending_schedule_action(confirm: bool) -> str:

@@ -1,0 +1,44 @@
+Week 3 Pending Router Batch Test
+======================================================================
+created_at : 2026-07-21T00:13:58.178320+09:00
+model : openai/gpt-4.1-mini
+repeat : 3
+cases : 30
+attempts : 90
+
+[SUMMARY]
+passed : 88
+failed : 2
+accuracy : 97.78%
+stable cases : 29/30
+flaky cases : 1
+pending not cleared : 0
+confirmation repeat risk : 0
+latency(ms) : avg=1033.26, p50=935.77, p95=1259.29
+
+[BY DECISION]
+execute : 30/30 (100.00%)
+cancel : 30/30 (100.00%)
+other : 28/30 (93.33%)
+
+[FAILURES]
+----------------------------------------------------------------------
+id : delete-other-04
+attempt : 1
+action : delete
+user : 새로운 일정 하나 만들고 싶어
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
+----------------------------------------------------------------------
+id : delete-other-04
+attempt : 3
+action : delete
+user : 새로운 일정 하나 만들고 싶어
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
