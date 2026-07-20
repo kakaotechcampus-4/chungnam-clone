@@ -236,12 +236,23 @@ class SaveStructuredRequestInput(StructuredRequest):
         """예전 trace의 payload wrapper만 짧게 풀고 실제 검증은 필드 스키마에 맡깁니다."""
 
         # TODO: StructuredRequest와 예전 payload/structured_request wrapper를 저장 입력 형태로 정규화하세요.
-        if isinstance(value, dict):
+        if isinstance(value, BaseModel):
+            value = value.model_dump()
             # 예전 trace/테스트에서 payload나 structured_request로 한 번 더 감싸진 경우 벗겨낸다.
-            if "structured_request" in value and isinstance(value["structured_request"], dict):
-                return value["structured_request"]
-            if "payload" in value and isinstance(value["payload"], dict):
-                return value["payload"]
+        if isinstance(value, dict):
+        # 예전 trace/테스트에서 payload나 structured_request로 한 번 더 감싸진 경우 벗겨낸다.
+            inner = value.get("structured_request")
+            if isinstance(inner, BaseModel):
+                inner = inner.model_dump()
+            if isinstance(inner, dict):
+                return inner
+
+            payload = value.get("payload")
+            if isinstance(payload, BaseModel):
+                payload = payload.model_dump()
+            if isinstance(payload, dict):
+                return payload
+
         return value
 
 
@@ -342,8 +353,6 @@ def _delete_saved_schedules(
 ) -> dict[str, Any]:
     """삭제 guard와 DB 호출을 한 곳에 둡니다."""
 
-    # TODO: 삭제 조건이 없으면 거부하고, delete_all 또는 명시 필터에 맞는 store 메서드를 호출하세요.
-    # TODO: deleted_count, filters, deleted가 포함된 tool 결과 dict를 반환하세요.
     filters = {
         "schedule_ids": schedule_ids,
         "date": date,
@@ -353,16 +362,26 @@ def _delete_saved_schedules(
         "delete_all": delete_all,
     }
 
-    # 안전장치: 조건이 하나도 없으면 삭제하지 않는다 (전체 삭제 사고 방지)
-    has_filter = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
-    if not delete_all and not has_filter:
-        return {
-            "ok": False,
-            "tool_name": "personal_delete_saved_schedules",
-            "deleted_count": 0,
-            "filters": filters,
-            "deleted": [],
-        }
+    # 삭제 안전 기준:
+    # - delete_all=True이면 전체 삭제 허용
+    # - schedule_ids 또는 date가 있으면 대상이 특정 날짜/ID로 좁혀지므로 허용
+    # - start_time, title, time_unspecified만 단독으로 오면 거부한다.
+    #   (예: "5시 이후 삭제" → 모든 날짜의 5시 일정이 지워지는 사고 방지)
+    strong_filter = bool(schedule_ids) or bool(date)
+
+    if not delete_all and not strong_filter:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            reason=(
+                "삭제하려면 일정 ID(schedule_ids)나 날짜(date)가 필요합니다. "
+                "시간이나 제목만으로는 여러 날짜의 일정이 한꺼번에 삭제될 수 있어 삭제하지 않습니다. "
+                "먼저 personal_list_saved_schedules로 후보를 확인한 뒤 정확한 일정을 지정해 주세요."
+            ),
+        )
 
     if delete_all:
         deleted = store.delete_all_schedules()
@@ -375,14 +394,12 @@ def _delete_saved_schedules(
             time_unspecified=time_unspecified,
         )
 
-    return {
-        "ok": True,
-        "tool_name": "personal_delete_saved_schedules",
-        "deleted_count": len(deleted),
-        "filters": filters,
-        "deleted": deleted,
-    }
-
+    return tool_result(
+        "personal_delete_saved_schedules",
+        deleted_count=len(deleted),
+        filters=filters,
+        deleted=deleted,
+    )
 
 def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStructuredRequestInput:
     """Week 1 임시 일정 dict를 Week 3 저장 입력으로 변환합니다."""
@@ -507,18 +524,32 @@ def personal_list_saved_schedules(
 ) -> str:
     """앱 DB에 저장된 일정 목록을 날짜/종류 필터로 반환합니다. Nana가 조회/수정/삭제 후보를 볼 때 사용합니다."""
 
-    # TODO: 기본 kind를 personal_schedule로 정하고 날짜/종류/limit 필터로 저장 일정을 조회하세요.
-    # TODO: filters와 schedules를 포함한 JSON 문자열을 반환하세요.
     SCHEDULE_KINDS = {"personal_schedule", "group_schedule"}
-    effective_kind = kind if kind in SCHEDULE_KINDS else "personal_schedule"
-    
-    filters = {"kind": effective_kind, "date_from": date_from, "date_to": date_to, "limit": limit}
 
+    # 이 tool은 schedules 테이블(일정)만 조회한다.
+    # todo/reminder는 이 tool의 대상이 아니므로, 강제 변환하지 않고 안내한다.
+    if kind is not None and kind not in SCHEDULE_KINDS:
+        return json_payload(
+            tool_result(
+                "personal_list_saved_schedules",
+                ok=False,
+                filters={"kind": kind, "date_from": date_from, "date_to": date_to, "limit": limit},
+                schedules=[],
+                reason=(
+                    f"'{kind}'는 이 도구가 조회하지 않는 종류입니다. "
+                    "이 도구는 일정(personal_schedule, group_schedule)만 조회합니다. "
+                    "할 일(todo)이나 알림(reminder)은 list_saved_requests에 kind를 지정해서 조회하세요."
+                ),
+            )
+        )
+
+    # kind가 없으면 개인 일정을 기본으로 조회
+    effective_kind = kind or "personal_schedule"
+    filters = {"kind": effective_kind, "date_from": date_from, "date_to": date_to, "limit": limit}
     schedules = _store().list_schedules(
         kind=effective_kind, date_from=date_from, date_to=date_to, limit=limit
     )
     return json_payload(tool_result("personal_list_saved_schedules", filters=filters, schedules=schedules))
-
 def delete_saved_schedules_dict(
     schedule_ids: list[str] | None = None,
     date: str | None = None,
