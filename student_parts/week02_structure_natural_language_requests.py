@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any, Literal
-
+import json
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
@@ -139,31 +139,48 @@ class StructuredRequestBatch(BaseModel):
     requests: list[StructuredRequest] = Field(default_factory=list, description="구조화된 요청 목록")
     base_date: str = Field(default_factory=current_app_date_iso, description="상대 날짜 기준일 YYYY-MM-DD")
 
-#default와 default_factory 차이.
-#1. default: 해당 값으로 고정.
-#   수정 가능한 객체(list, dict 등)에 default를 설정하면 모든 인스턴스가 같은 객체를 공유함.
-#2. default_factory: 호출할 때 마다 새로운 객체가 생성됨.
-#   수정 가능한 객체(list, dict 등)에 default_factory를 사용해야 함.
-
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
-    """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
+    """LangChain structured output 결과를 StructuredRequest 객체로 검증하고 정규화합니다."""
 
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    raise RuntimeError(f"value가 StructuredRequest나 dict가 아닙니다. 현재 타입: {type(value).__name__}")
+    
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
-    """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
+    """자연어 요청 텍스트를 LLM 구조화 출력(with_structured_output)을 통해 StructuredRequest 객체 형태로 추출합니다."""
+    Structured_model = chat_model().with_structured_output(
+        schema=StructuredRequest,
+        method="function_calling"
+    )
+    result = Structured_model.invoke(
+        [
+            {"role": "system", "content": week02_system_prompt()},
+            {"role": "user", "content": text}
+        ]
+    )
 
-    ...
+    return _coerce_structured_request(result)
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
+    """사용자의 자연어 일정/할 일/알림 요청을 구조화된 데이터(JSON)로 변환해주는 도구입니다."""
 
-    ...
-
+    structured_request = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True,
+            "tool_name": "extract_schedule_request",
+            "base_date": current_app_date_iso(),
+            "structured_request": structured_request.model_dump()
+        },
+        ensure_ascii=False
+    )
 
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
