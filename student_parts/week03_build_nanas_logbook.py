@@ -281,8 +281,8 @@ def save_structured_request_payload(
     active_store = store or _store()
     store_result = active_store.save_structured_request(clean_payload)
     return tool_result(
-        "save_structured_request", 
-        ok=True, 
+        "save_structured_request",
+        ok=True,
         **store_result,
     )
 
@@ -324,12 +324,15 @@ class SavedScheduleUpdateInput(BaseModel):
 class SavedScheduleDeleteInput(BaseModel):
     """저장 일정 삭제 입력입니다."""
 
-    schedule_ids: list[str] | None = None
-    date: str | None = None
-    title: str | None = None
-    start_time: str | None = None
-    time_unspecified: bool = False
-    delete_all: bool = False
+    schedule_ids: list[str] | None = Field(default=None, description="삭제할 저장 일정 ID 목록")
+    date: str | None = Field(default=None, description="삭제 필터: 일정 날짜")
+    title: str | None = Field(default=None, description="삭제 필터: 일정 제목")
+    start_time: str | None = Field(default=None, description="삭제 필터: 시작 시간")
+    time_unspecified: bool = Field(default=False, description="시간 미지정 일정만 필터링할지 여부")
+    delete_all: bool = Field(
+        default=False,
+        description="저장된 모든 일정을 삭제합니다. 사용자가 '전체 삭제'처럼 명시적으로 요청했을 때만 True로 설정하세요.",
+    )
 
 
 def _delete_saved_schedules(
@@ -354,10 +357,10 @@ def _delete_saved_schedules(
     }
 
     has_condition = (
-        delete_all 
-        or bool(schedule_ids) 
+        delete_all
+        or bool(schedule_ids)
         or any([date, title, start_time, time_unspecified])
-    )   
+    )
 
     if not has_condition:
         return tool_result(
@@ -389,6 +392,14 @@ def _delete_saved_schedules(
     ]
 
     if not deleted:
+        if delete_all:
+            return tool_result(
+                "personal_delete_saved_schedules",
+                ok=True,
+                deleted_count=0,
+                filters=filters,
+                deleted=[],
+            )
         return tool_result(
             "personal_delete_saved_schedules",
             ok=False,
@@ -418,7 +429,7 @@ def structured_request_from_week01_schedule(schedule: dict[str, Any]) -> SaveStr
         end_time=schedule.get("end_time"),
         members=schedule.get("attendees") or [],
         source_schedule_id=schedule.get("id"),
-        original_text= " ".join(
+        original_text=" ".join(
             filter(
                 None,
                 [
@@ -443,7 +454,7 @@ def personal_create_schedule(
     """Nana의 개인 일정을 생성하고 Week 3+ 앱 SQLite DB에도 저장합니다."""
 
     created_result = json.loads(
-        week01_personal_create_schedule.invoke(   
+        week01_personal_create_schedule.invoke(
             {
                 "title": title,
                 "date": date,
@@ -460,7 +471,7 @@ def personal_create_schedule(
     created_schedule = created_result.get("created_schedule", {})
 
     save_input = structured_request_from_week01_schedule(created_schedule)
-    
+
     sqlite_save = save_structured_request_payload(save_input)
 
     result_payload = tool_result(
@@ -578,7 +589,7 @@ def personal_list_saved_schedules(
 
     schedules = store.list_schedules(
         limit=limit,
-        kind= resolved_kind,
+        kind=resolved_kind,
         date_from=date_from,
         date_to=date_to,
     )
@@ -669,7 +680,7 @@ def personal_delete_saved_schedules(
     time_unspecified: bool = False,
     delete_all: bool = False,
 ) -> str:
-    """Nana가 고른 일정 ID나 날짜/제목/시간 필터로 저장 일정을 삭제합니다."""
+    """Nana가 고른 일정 ID나 날짜/제목/시간 필터로 저장 일정을 삭제합니다. delete_all=True면 저장된 모든 일정을 삭제합니다."""
 
     result_payload = _delete_saved_schedules(
         store=_store(),
@@ -737,7 +748,7 @@ def build_week03_agent() -> object:
         _WEEK03_AGENT = create_agent(
             model=chat_model(),
             tools=week03_tools(),
-            system_prompt=week03_system_prompt(), 
+            system_prompt=week03_system_prompt(),
         )
     return _WEEK03_AGENT
 
