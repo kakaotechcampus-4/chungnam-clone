@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-import re
+from datetime import timedelta
 from typing import Any, Literal
 
 from langchain.agents import create_agent
@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
-from fixed.runtime_clock import current_app_date_iso, next_weekday_iso
+from fixed.runtime_clock import current_app_date, current_app_date_iso
 from student_parts.week01_wake_up_nana import join_system_prompt, week01_prompt_parts, week01_tools
 
 
@@ -230,28 +230,88 @@ def _coerce_structured_request(value: Any) -> StructuredRequest:
     raise RuntimeError(f"예상치 못한 structured output 타입입니다: {type(value)!r}")
 
 
-_NEXT_WEEK_WEEKDAY_PATTERN = re.compile(
-    r"다음\s*주\s*("
-    + "|".join(re.escape(alias) for alias in sorted(_WEEKDAY_ALIASES, key=len, reverse=True))
-    + r")",
-    re.IGNORECASE,
-)
+def _relative_weekday_iso(weekday: int, weeks_ahead: int = 1) -> str:
+    """기준일이 속한 주를 0으로 볼 때 weeks_ahead주 뒤, 해당 weekday(월=0~일=6)의 날짜를 계산합니다.
 
-
-def _next_week_weekday_hints(text: str) -> list[str]:
-    """'다음 주 + 요일' 표현을 미리 정확한 날짜로 계산해 LLM에 줄 힌트 목록을 만듭니다.
-
-    extract_structured_request는 tool을 바인딩하지 않으므로(스펙상 with_structured_output만
-    단독 사용), 모델이 resolve_next_week_weekday_date를 호출할 방법이 없다. 그래서 같은 계산을
-    파이썬 코드로 미리 해서 프롬프트에 값으로 주입한다.
+    fixed/runtime_clock.py의 next_weekday_date()/next_weekday_iso()는 weeks_ahead가 항상 1(다음 주)로
+    고정돼 있어 "이번 주"/"차차주"/"다다음주"/"N주 후" 같은 표현을 계산할 방법이 없다. fixed/ 파일은
+    학생이 직접 수정하지 않는 고정 인프라이므로, 같은 계산을 표준 라이브러리 datetime만으로 여기
+    student_parts 쪽에 일반화해 둔다. weeks_ahead=1일 때는 next_weekday_date()와 완전히 동일한 값을 낸다.
     """
 
+    this_monday = current_app_date() - timedelta(days=current_app_date().weekday())
+    target_date = this_monday + timedelta(weeks=weeks_ahead, days=weekday)
+    return target_date.isoformat()
+
+
+class RelativeWeekdayMention(BaseModel):
+    """'(이번/다음/차/차차/다다음/N)주 + 요일' 표현 하나를 주차 오프셋과 요일로 정규화한 것입니다."""
+
+    weeks_ahead: int = Field(
+        description=(
+            "기준일이 속한 주를 0으로 볼 때 몇 주 뒤인지. 이번 주=0, 다음 주/차주=1, "
+            "다다음 주/차차주=2, 'N주 후'=N으로 정규화한다. 과거를 가리키면 음수도 허용한다."
+        )
+    )
+    weekday: Literal["mon", "tue", "wed", "thu", "fri", "sat", "sun"] = Field(
+        description="언급된 요일을 영문 3글자 약어로 정규화한다."
+    )
+    matched_text: str = Field(
+        default="",
+        description="원문에서 이 표현에 해당하는 부분(예: '차차주 화요일'). 정확히 몰라도 괜찮다.",
+    )
+
+
+class RelativeWeekdayMentions(BaseModel):
+    """한 문장에서 찾은 '주 오프셋 + 요일' 표현 전부를 담습니다."""
+
+    mentions: list[RelativeWeekdayMention] = Field(
+        default_factory=list,
+        description="찾은 표현이 없으면 빈 리스트로 둔다.",
+    )
+
+
+def _extract_relative_weekday_hints(text: str) -> list[str]:
+    """'이번 주/다음 주/차주/차차주/다다음주/N주 후 + 요일' 표현을 찾아 이미 계산된 날짜 힌트로 만듭니다.
+
+    문자열 리터럴을 정규식으로 매칭하는 대신(예전 방식은 "다음 주" 리터럴만 인식하고 "차주"/"차차주"/
+    "다다음주"/"N주 후"는 아예 인식하지 못했다), LLM에게는 표현의 의미(며칠 뒤 무슨 요일인지)만
+    구조화하게 시키고 실제 날짜 계산은 코드가 결정적으로 수행한다. extract_structured_request는
+    tool을 바인딩하지 않으므로(스펙상 with_structured_output만 단독 사용) 이 구조화도 별도의
+    with_structured_output 호출로 처리한다.
+    """
+
+    if "주" not in text:
+        # "주" 글자 자체가 없으면 이런 표현이 있을 수 없으므로, 굳이 LLM을 한 번 더 부르지 않는다.
+        return []
+
+    structured_llm = chat_model().with_structured_output(RelativeWeekdayMentions, method="function_calling")
+    result = structured_llm.invoke(
+        [
+            (
+                "system",
+                "문장에서 '이번 주'/'다음 주'/'차주'/'차차주'/'다다음주'/'N주 후'처럼 주 단위 상대 "
+                "시점과 요일이 함께 언급된 표현을 전부 찾아라. 각 표현을 weeks_ahead(정수)와 "
+                "weekday(mon~sun)로 정규화만 하고, 실제 날짜 계산은 하지 마라. 이런 표현이 없으면 "
+                "mentions를 빈 리스트로 반환해라.",
+            ),
+            ("human", text),
+        ]
+    )
+    if isinstance(result, RelativeWeekdayMentions):
+        mentions = result.mentions
+    elif isinstance(result, dict):
+        mentions = RelativeWeekdayMentions.model_validate(result).mentions
+    else:
+        mentions = []
+
     hints = []
-    for match in _NEXT_WEEK_WEEKDAY_PATTERN.finditer(text):
-        index = _WEEKDAY_ALIASES.get(match.group(1).lower())
+    for mention in mentions:
+        index = _WEEKDAY_ALIASES.get(mention.weekday)
         if index is None:
             continue
-        hints.append(f"'{match.group(0)}' → {next_weekday_iso(index)}")
+        label = mention.matched_text or f"{mention.weeks_ahead}주 뒤 {mention.weekday}"
+        hints.append(f"'{label}' → {_relative_weekday_iso(index, mention.weeks_ahead)}")
     return hints
 
 
@@ -260,11 +320,11 @@ def extract_structured_request(text: str) -> StructuredRequest:
 
     structured_llm = chat_model().with_structured_output(StructuredRequest, method="function_calling")
     system_parts = list(week02_prompt_parts())
-    hints = _next_week_weekday_hints(text)
+    hints = _extract_relative_weekday_hints(text)
     if hints:
         system_parts.append(
-            "다음 '다음 주 + 요일' 표현은 이미 정확한 날짜로 계산되어 있으니 직접 산수하지 말고 "
-            "그대로 date 필드에 사용한다: " + "; ".join(hints)
+            "다음 '주 단위 상대 날짜 + 요일' 표현은 이미 정확한 날짜로 계산되어 있으니 직접 산수하지 "
+            "말고 그대로 date 필드에 사용한다: " + "; ".join(hints)
         )
     result = structured_llm.invoke(
         [
@@ -290,15 +350,19 @@ def extract_schedule_request(query: str) -> str:
 
 
 @tool
-def resolve_next_week_weekday_date(weekday: str) -> str:
-    """'다음 주 화요일'처럼 '다음 주 + 요일' 형태의 상대 날짜를 정확한 YYYY-MM-DD로 계산합니다."""
+def resolve_relative_weekday_date(weekday: str, weeks_ahead: int = 1) -> str:
+    """'차차주 화요일'처럼 '(이번/다음/차/차차/다다음/N)주 + 요일' 형태의 상대 날짜를 YYYY-MM-DD로 계산합니다.
+
+    weeks_ahead는 기준일이 속한 주를 0으로 볼 때 몇 주 뒤인지를 나타낸다. 이번 주=0, 다음 주/차주=1
+    (생략 시 기본값), 다다음 주/차차주=2, 'N주 후'=N으로 넘긴다.
+    """
 
     index = _WEEKDAY_ALIASES.get(weekday.strip().lower())
     if index is None:
         return json.dumps(
             {
                 "ok": False,
-                "tool_name": "resolve_next_week_weekday_date",
+                "tool_name": "resolve_relative_weekday_date",
                 "error": f"알 수 없는 요일 표현입니다: {weekday!r}",
             },
             ensure_ascii=False,
@@ -306,18 +370,19 @@ def resolve_next_week_weekday_date(weekday: str) -> str:
     return json.dumps(
         {
             "ok": True,
-            "tool_name": "resolve_next_week_weekday_date",
+            "tool_name": "resolve_relative_weekday_date",
             "weekday": weekday,
-            "date": next_weekday_iso(index),
+            "weeks_ahead": weeks_ahead,
+            "date": _relative_weekday_iso(index, weeks_ahead),
         },
         ensure_ascii=False,
     )
 
 
 def week02_tools() -> list[Any]:
-    """Week 2 agent에 Week 1 도구와 '다음 주 요일' 날짜 계산 도구를 노출합니다."""
+    """Week 2 agent에 Week 1 도구와 '주 단위 상대 날짜' 계산 도구를 노출합니다."""
 
-    return [*week01_tools(), resolve_next_week_weekday_date]
+    return [*week01_tools(), resolve_relative_weekday_date]
 
 
 def week02_system_prompt() -> str:
@@ -344,10 +409,11 @@ def week02_prompt_parts() -> list[str]:
             "'오늘', '내일', '다음 주 화요일' 같은 상대 날짜는 이 기준일로 해석한다."
         ),
         (
-            "'다음 주 화요일'처럼 '다음 주 + 요일' 형태의 상대 날짜가 나오면 직접 날짜 산수를 하지 말고 "
-            "resolve_next_week_weekday_date tool을 호출해 정확한 YYYY-MM-DD 날짜를 받은 뒤, "
-            "그 값을 StructuredRequest의 date 필드나 personal_create_schedule 같은 다른 tool 호출의 "
-            "날짜 인자로 사용한다."
+            "'다음 주 화요일'/'차차주 금요일'/'3주 후 월요일'처럼 '주 단위 상대 날짜 + 요일' 형태의 "
+            "표현이 나오면 직접 날짜 산수를 하지 말고 resolve_relative_weekday_date tool을 호출해 "
+            "정확한 YYYY-MM-DD 날짜를 받은 뒤, 그 값을 StructuredRequest의 date 필드나 "
+            "personal_create_schedule 같은 다른 tool 호출의 날짜 인자로 사용한다. weeks_ahead는 "
+            "이번 주=0, 다음 주/차주=1(생략 시 기본값), 다다음 주/차차주=2, 'N주 후'=N으로 계산해 넘긴다."
         ),
         (
             "사용자의 한국어 자연어 요청을 StructuredRequest 필드로 구조화한다. "

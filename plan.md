@@ -1,219 +1,141 @@
-# Week 02 구현 계획 — 자연어 요청 구조화
+# Week 03 구현 계획 — 나나의 기록장 (SQLite 영속 저장)
 
-## 목표
-자연어 요청(또는 Week1 tool JSON)을 `StructuredRequestBatch`로 변환하는 LangChain agent를 완성한다.
-데이터 저장은 하지 않고, 구조화된 Batch 객체 반환만 목적이다.
+> 이전 Week 02 계획(메인과제 + 심화 bridge + 버그 수정 로그)은 git 히스토리에 보존되어 있다
+> (`git log -- plan.md` 또는 이전 커밋 참조). 이 문서는 Week 03 계획으로 전면 교체되었다.
 
-## 구현 대상 (파일: `student_parts/week02_structure_natural_language_requests.py`)
+---
 
-### 1. `StructuredRequest` 스키마
-CLAUDE.md의 Hard constraint 규격 그대로 구현. 모든 필드에 한국어 `description` 부착.
+## Context — 왜 이 작업을 하는가
 
-| 필드 | 타입 | 기본값 |
+- **목표**: Week 2가 만든 `StructuredRequest`를 Pydantic 입력 스키마로 검증 → `AppSQLiteStore`(SQLite)에 **저장**하고, 저장된 요청/일정을 **조회/수정/삭제**하는 세로 슬라이스를 완성한다. 이 단계부터 나나는 Week 1의 임시 메모리 대신 **앱 DB에 남는 "기록장"**(영속 메모리)을 갖는다.
+- **핵심 사실**: 대상 파일 `student_parts/week03_build_nanas_logbook.py`는 **이미 481줄 스캐폴드**다. 모든 시그니처·Pydantic 스키마·`@tool(args_schema=...)` 배선·`week03_tools()`·에이전트 구조가 존재하고, **함수 본문(`...`)과 프롬프트 상수 2개만 비어 있다.** 따라서 이 과제는 "설계"가 아니라 **"이미 존재하는 store 메서드에 배선하는 본문 채우기"**다.
+- **DB 계층은 이미 완성**: `fixed/app_store.py`의 `AppSQLiteStore`가 테이블 생성·FK 순서·shared_sync·삭제 안전 가드를 전부 구현해 둠. 우리 tool들은 **얇은 입구**로서 store 메서드를 호출하고 JSON을 반환할 뿐이다.
+
+---
+
+## 1. 대상 파일 파싱 결과 (`[3주차 수강생 구현 가이드]` + TODO)
+
+### 핵심 흐름 (가이드 명시)
+```
+사용자 자연어 → extract_schedule_request(구조화) → save_structured_request(SQLite 저장)
+             → list_saved_requests / get_saved_request / personal_list_saved_schedules(조회)
+             → personal_update_saved_schedule / personal_delete_saved_schedules(수정/삭제)
+```
+
+### 구현 대상 함수 (티어별) — 23개 TODO 요약
+| 티어 | 함수 | 핵심 TODO 요지 |
 |---|---|---|
-| kind | `RequestKind` (Literal) | — (필수) |
-| title | `str \| None` | None |
-| date | `str \| None` | None (확실할 때만 YYYY-MM-DD) |
-| start_time | `str \| None` | None (확실할 때만 HH:MM) |
-| end_time | `str \| None` | None (확실할 때만 HH:MM) |
-| members | `list[str]` | `default_factory=list` |
-| priority | `str \| None` | None |
-| reason | `str \| None` | None |
-| original_text | `str` | "" |
+| 공통 | `SQLITE_MEMORY_PROMPT` (L31) | 새 대화/재시작에도 SQLite 조회 가능한 영속 메모리 규칙 |
+| 공통 | `WEEK03_TOOL_CALL_PROMPT` (L34) | 구조화→저장→조회/수정/삭제 tool 호출 순서 규칙 |
+| **메인** | `save_structured_request` @tool (L344-345) | 검증된 인자 → 저장 dict(None 제외) → store 저장, ok/tool_name JSON 반환 |
+| **메인** | `list_saved_requests` @tool (L357) | kind/date_from/date_to 필터 조회, `rows` 반환 |
+| **메인** | `get_saved_request` @tool (L365) | request_id 단건, 없으면 `row=None` |
+| **메인** | `personal_list_saved_schedules` @tool (L378-379) | 기본 kind=personal_schedule, `filters`+`schedules` 반환 |
+| 심화 | `SaveStructuredRequestInput.unwrap_legacy_payload` (L223) | 레거시 payload/structured_request wrapper 정규화 (`model_validator(mode="before")`) |
+| 심화 | `_save_input_from` (L230) | dict/JSON/자연어/StructuredRequest → 단일 입력 스키마 |
+| 심화 | `save_structured_request_payload` (L241) | tool 없이 직접 저장 helper |
+| 심화 | `_delete_saved_schedules` (L302-303) | 조건 없으면 거부, `deleted_count/filters/deleted` 반환 |
+| 심화 | `structured_request_from_week01_schedule` (L310) | Week1 attendees/id → members/source_schedule_id |
+| 심화 | `personal_create_schedule` @tool (L324-325) | Week1 임시 생성 + SQLite 이중 저장 |
+| 심화 | `delete_saved_schedules_dict` (L394) | app_store→store 매핑 helper |
+| 심화 | `personal_update_saved_schedule` @tool (L409-410) | None 아닌 필드만 update, `updated_schedule/shared_sync` |
+| 심화 | `personal_delete_saved_schedules` @tool (L425) | `_delete_saved_schedules` 위임 |
+| 공통 | `week03_prompt_parts` (L458, L461) | Week1/2 프롬프트 위에 누적 |
+| 공통 | `build_week03_agent` (L472) | `create_agent`로 생성 **+ 싱글톤 대입(현재 미대입 버그)** |
 
-- 가이드 주석은 title도 `str | None`(기본 None)을 요구하므로 이를 따른다.
-  (CLAUDE.md 표에는 title이 str로 되어 있으나, 파일 내 구현 TODO 지시가 더 구체적이라 우선.)
+### 반환 규칙 (하드)
+- 모든 `@tool`은 **JSON 문자열** 반환 → 반드시 `json_payload()`(ensure_ascii=False) 경유.
+- 기본 `ok`/`tool_name` 포함, 조회=`rows`/`row`, 삭제=`deleted_count`/`filters`/`deleted`.
 
-### 2. `StructuredRequestBatch` 스키마
-- `requests: list[StructuredRequest]` — `default_factory=list`. 요청이 하나여도 list 유지.
-- `base_date: str` — `default_factory=current_app_date_iso`. 상대 날짜 해석 기준일.
-- 두 필드 모두 한국어 description 부착.
-
-### 3. `week02_tools()`
-- `week01_tools()`를 그대로 반환 (Week1 자산 누적 상속).
-
-### 4. `week02_prompt_parts()`
-- `week01_prompt_parts()` 위에 append:
-  - Week2 구조화 agent 역할 + 현재 날짜(`current_app_date_iso()`) 기준 명시
-  - 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화
-  - 모르는 값 억지 생성 금지 → None / 빈 리스트
-  - Week1 tool JSON을 받은 경우 tool 재호출 없이 payload(created_schedule) 읽어 구조화
-  - Week2에서는 SQLite 저장 / RAG / 외부 멤버 일정 조율 하지 않음 명시
-
-### 5. `week02_system_prompt()`
-- `join_system_prompt(...)`로 `week02_prompt_parts()` + 최종 답변 규칙 결합:
-  - 최종 답변은 `StructuredRequestBatch` 형식
-  - 요청이 하나여도 requests 목록에 담기
-  - personal_create_schedule 결과 JSON의 created_schedule 읽어 필드 채우기
-
-### 6. `build_week02_agent()` + 실행기 엔트리 포인트 연결
-- `CONFIG.has_openai_key` 없으면 `RuntimeError("PROXY_TOKEN이 .env에 필요합니다.")`
-- 전역 `_WEEK02_AGENT` 재사용, 없을 때만 생성
-- `create_agent(model=chat_model(), tools=week02_tools(), response_format=StructuredRequestBatch, system_prompt=week02_system_prompt())`
-- **엔트리 포인트 확인**: 런타임 실행기(`run.sh`)가 호출하는 표준 함수는 `build_week_agent()`이다.
-  현재 파일 하단(178~181행)에 `build_week_agent()`가 이미 `return build_week02_agent()`로 구현되어 있으므로,
-  이 연결이 그대로 유지되는지 확인한다(신규 구현 아님, 수정하지 않음). 구현한 agent가 실행기로 정상 노출되는지 보장.
-
-## 건드리지 않는 것 (메인과제 당시 기준)
-- ~~예약 함수(`_coerce_structured_request`, `extract_structured_request`, `extract_schedule_request`)는 이후 회차용이므로 `...` 유지.~~ → 아래 "심화 과제" 섹션에서 구현.
-- Week1 파일은 수정하지 않음.
-
-## 검증
-### 정적 테스트
-1. `python -c "import ..."` 로 문법/import 확인
-2. 스키마 인스턴스화 및 필드 description 존재 확인
-3. (키 없으면) build 시 RuntimeError 확인
-
-### 통합(E2E) 테스트 — 가이드 명시 시나리오
-4. `./run.sh --week2` 실행 후 `"다음 주 화요일 오후 3시에 철수랑 회의 잡아줘"` 입력 →
-   최종 답변이 `StructuredRequestBatch` 형식의 `structured_response`로 파싱되는지 확인.
-   - 기대: `requests`에 `StructuredRequest` 1건(kind=`personal_schedule` 또는 `group_schedule`,
-     date=다음 주 화요일 YYYY-MM-DD, start_time=`15:00`, members에 "철수"), `base_date`=기준일.
-   - 제약: 이 단계는 실제 LLM 호출이라 `.env`의 `PROXY_TOKEN`이 필요하다.
-     키가 없는 환경에서는 실행 절차만 명시하고, 실제 통과 확인은 사용자 실행에 맡긴다.
+### 절대 지킬 것 (claude.md Hard constraint)
+1. **Pydantic 재생성 금지** — tool 본문에서 args_schema가 이미 검증했으므로 클래스를 다시 만들지 않는다.
+2. **래퍼 저장 금지** — `ok`/`tool_name`/`base_date`를 `payload_json`(raw_json)에 넣지 않는다.
+3. **삭제 안전 가드** — 필터 전부 비면 삭제 거부.
+4. **조회 실패 대응** — 단건 `row=None`, 목록 `rows=[]`, 예외 금지.
+5. **유니코드 보존** — `json_payload`로 직렬화.
+6. **프롬프트 누적** — Week1/2 위에 append (덮어쓰기 금지).
+7. **Pydantic V2 문법** — `model_validator(mode="before")`, `model_dump()`.
 
 ---
 
-## 심화 과제 — 구조화 Bridge 함수 구현 (2026-07-11 시작)
+## 2. 개발 마일스톤 (일반 과제 + 심화 과제 유기적 결합)
 
-### Context
-메인과제는 완료·커밋(`052d167`)됨. 오늘 강사 base code 동기화로 같은 파일에 심화 과제 TODO 3개가 추가됨.
-이 함수들은 **에이전트 전체 루프를 돌리지 않고** 자연어/JSON을 단일 `StructuredRequest`로 강제 변환해
-Week 3+ 저장 tool(`fixed/app_store.py:281 save_structured_request`)로 넘기는 bridge 역할만 한다.
-`save_structured_request(payload)`가 읽는 키(`kind/title/date/start_time/end_time/members/priority/reason`)는
-`StructuredRequest.model_dump()`와 정확히 일치 — 그대로 넘기면 다운스트림이 바로 소비 가능.
+### M0 — 프롬프트 + 에이전트 부트스트랩 (공통) · *가장 먼저*
+`./run.sh --week3`가 뜨게 만드는 선행 조건. 현재 `build_week03_agent`가 싱글톤을 대입하지 않아 `None`을 반환하는 버그를 여기서 잡는다.
+- `SQLITE_MEMORY_PROMPT`: Week3는 임시 메모리 대신 SQLite 기록장을 사용, 새 대화/재시작에도 조회 tool로 확인하라는 한국어 규칙.
+- `WEEK03_TOOL_CALL_PROMPT`: (1) `extract_schedule_request` 구조화 → (2) 결과 필드를 `save_structured_request`에 그대로 전달 → (3) 조회는 list/get/personal_list → (4) 수정/삭제 전 목록으로 후보 확인 → (5) 조건 없는 삭제 금지.
+- `week03_prompt_parts()`: 두 TODO 슬롯에 브릿지 지시 + `current_app_date_iso()` 기준일/tool 선택 기준/주차 범위 지시 추가. `week02_prompt_parts()` 항목 유지.
+- `build_week03_agent()`: `_WEEK03_AGENT = create_agent(model=chat_model(), tools=week03_tools(), system_prompt=week03_system_prompt())` 대입 후 반환. (Week3는 `response_format` 없음 — 배치 스키마가 아니라 tool JSON/자유 답변 반환.)
+- **검증**: `import` 성공, `week03_system_prompt()` 비어있지 않고 Week1/2 텍스트 포함, `./run.sh --week3` 기동.
 
-### 대상 파일 (단일, 신규 import 불필요)
-`student_parts/week02_structure_natural_language_requests.py` — 스텁 3개(L212 `_coerce_structured_request`,
-L221 `extract_structured_request`, L230 `extract_schedule_request`)만 채운다.
+### M1 — 메인 저장→조회 세로 슬라이스 (메인과제, 독립 채점 가능)
+`save_structured_request`, `list_saved_requests`, `get_saved_request`, `personal_list_saved_schedules`.
+- `save_structured_request`: 함수 인자로 `save_dict` 조립 → **None 값 drop**(단 `kind`, `original_text=""`는 유지) → `_store().save_structured_request(save_dict)` → `json_payload(tool_result("save_structured_request", ok=True, **result))`. result에는 `request_id/kind/saved_rows/shared_sync` 포함. **Pydantic 재생성·래퍼 저장 금지.**
+- `list_saved_requests`: `_store().list_saved_requests(kind, date_from, date_to)` → `rows`(없으면 `[]`).
+- `get_saved_request`: `_store().get_saved_request(request_id)` → `row`(없으면 `None`, `ok=True` 유지).
+- `personal_list_saved_schedules`: `kind = kind or "personal_schedule"`, `_store().list_schedules(limit, kind, date_from, date_to)` → `filters`+`schedules`.
+- **검증(E2E)**: "내일 10시 개인 코칭 저장해줘" → trace에 `extract_schedule_request`→`save_structured_request`, `saved_rows`에 schedules row. "내 일정 보여줘" → `personal_list_saved_schedules` 노출. 앱 재시작/새 대화에도 유지 → **메인과제 완료**.
 
-### 구현
-1. **`_coerce_structured_request(value)`**: `StructuredRequest`면 그대로, `dict`면 `model_validate(...)`,
-   그 외 타입은 `RuntimeError`.
-2. **`extract_structured_request(text)`**: `create_agent` 사용 금지. 오직
-   `chat_model().with_structured_output(StructuredRequest, method="function_calling")`만 사용.
-   메시지는 `[("system", join_system_prompt(week02_prompt_parts())), ("human", text)]` 튜플 리스트로 전달
-   (Message 객체 대비 추가 import 불필요, 동작 동일). 결과를 `_coerce_structured_request(...)`로 정규화.
-3. **`extract_schedule_request(query)`** (기존 `@tool`): `extract_structured_request(query)` 호출 →
-   `{"ok": True, "tool_name": "extract_schedule_request", "base_date": current_app_date_iso(),
-   "structured_request": structured.model_dump()}` → `json.dumps(..., ensure_ascii=False)`.
+### M2 — 수정 + 삭제 (심화)
+`_delete_saved_schedules`, `personal_update_saved_schedule`, `personal_delete_saved_schedules`, `delete_saved_schedules_dict`.
+- `_delete_saved_schedules`: 조건 없음(모든 필터 falsy, `schedule_ids=[]` 포함)이고 `delete_all=False`면 **`ok=False, error=..., deleted_count=0`**. `delete_all`→`store.delete_all_schedules()`, 아니면 `store.delete_schedules_by_filter(...)`. `deleted_count/filters/deleted` dict 반환.
+- `personal_update_saved_schedule`: `_store().update_schedule(...)` 그대로 전달(None=변경 안 함, store가 처리). `None`이면 `ok=False`, 아니면 `updated_schedule=result["schedule"]`+`shared_sync=result["shared_sync"]`.
+- `personal_delete_saved_schedules`: `_delete_saved_schedules(store=_store(), ...)` 위임 후 `json_payload`.
+- `delete_saved_schedules_dict`: `app_store or _store()` 매핑 → `_delete_saved_schedules`(dict 반환, 테스트/직접 호출용).
+- **검증(E2E)**: 목록에서 `schedule_id` 확보 → "14시로 바꿔줘" 업데이트(`updated_schedule.start_time` 변경+`shared_sync`) → "삭제해줘" `deleted_count=1` → 재조회 시 사라짐. 조건 없는 삭제는 `ok=False`.
 
-### 건드리지 않는 것
-- 메인과제 코드(스키마, `week02_tools`/`week02_system_prompt`/`week02_prompt_parts`, `build_week02_agent`).
-- Week1 파일, `fixed/` 파일.
+### M3 — Week 1 호환 이중 기록 + 레거시 정규화 (심화)
+`structured_request_from_week01_schedule`, `personal_create_schedule`(호환), `unwrap_legacy_payload`, `_save_input_from`, `save_structured_request_payload`.
+- `structured_request_from_week01_schedule`: Week1 dict → `SaveStructuredRequestInput(kind="personal_schedule", ..., members=attendees or [], source_schedule_id=schedule["id"])`. `"미정"`/빈 시간 → `None` 정규화. (builder helper이므로 모델 직접 생성 허용.)
+- `personal_create_schedule`(@tool, week03_tools에서 Week1 tool 대체): `week01_personal_create_schedule.invoke({...})` → `json.loads` → `structured_request_from_week01_schedule` → `save_structured_request(sr.model_dump(exclude_none=True))` → `created`+`structured_request`+`sqlite_save` 반환. `source_schedule_id`로 재저장 멱등.
+- `unwrap_legacy_payload`(`model_validator(mode="before")` classmethod): dict에 `payload`/`structured_request` 래퍼 있으면 한 겹 풀고, 아니면 **passthrough**(평평한 dict는 그대로 → 정상 경로 안 깨짐).
+- `_save_input_from`: `SaveStructuredRequestInput`→그대로 / `StructuredRequest`→`model_validate(model_dump())` / `dict`→`model_validate` / `str`→`json.loads` 시도(dict면 검증, 실패=자연어→`extract_structured_request` 후 검증).
+- `save_structured_request_payload`: `_save_input_from` → `(store or _store()).save_structured_request(inp.model_dump(exclude_none=True))`.
+- **검증**: 읽기전용 스크립트로 자연어/평평한 dict/`{"payload":{...}}`/`StructuredRequest` 모두 `request_id` 반환, 동일 Week1 id 재생성 시 `already_exists`.
 
-### 검증
-- **정적** (LLM 키 불필요, `chat_model()` 미호출 경로만): import/와이어링 확인,
-  `_coerce_structured_request`에 dict/동일 객체/잘못된 타입(`None`,`123`,`"x"`,`[]`) 입력 시 각각 기대 동작·`RuntimeError` 확인.
-- **라이브 E2E** (`.env`의 `PROXY_TOKEN` 필요): `extract_schedule_request.invoke({"query": "내일 오후 3시에 철수랑 회의 잡아줘"})` →
-  결과 JSON에 `ok/tool_name/base_date/structured_request`(9개 필드, `kind`는 RequestKind 값) 확인.
-  키 없는 환경에서는 정적 검증만 수행.
-
----
-
-## 버그 수정 — "다음 주 X요일" 날짜 계산 오류 (2026-07-11)
-
-### 발견 경위
-`./run.sh --week2` 라이브 E2E에서 "내일 오전 10시에 헬스장... 그리고 다음 주 화요일 오후 3시에 영희랑 개발자 미팅"을 입력.
-base_date `2026-07-11`(토요일) 기준 "다음 주 화요일"의 정답은 `2026-07-14`인데, agent가 `2026-07-21`(한 주 밀림)로
-계산해 `personal_create_schedule` tool 호출과 최종 `structured_response` 양쪽에 오답이 전파됨.
-
-### 원인
-week02는 week01의 prompt(`week01_prompt_parts()`)를 그대로 상속하는데, 거기서 이미 "기준 날짜 기반으로 직접 계산해서
-tool을 호출하라"고 지시함. `fixed/runtime_clock.py`에 정확한 계산용 `next_weekday_iso()` 헬퍼가 있었지만
-week01 데모 시드에서만 쓰였고, LLM에는 노출되지 않아 LLM이 산수를 직접 해야 했음(실수 발생).
-
-### 조치 (메인과제 코드 수정 — 사용자 승인 후 진행)
-- `week02_structure_natural_language_requests.py`에 `next_weekday_iso` import 추가.
-- 신규 tool `resolve_next_week_weekday_date(weekday: str)` 추가: 한국어(화/화요일)·영어(tue/tuesday) 요일 표현을
-  `_WEEKDAY_ALIASES`로 정규화해 `next_weekday_iso(index)` 호출, `{ok, tool_name, weekday, date}` JSON 반환.
-  알 수 없는 요일이면 `{ok: false, error}`.
-- `week02_tools()` = `[*week01_tools(), resolve_next_week_weekday_date]`로 갱신.
-- `week02_prompt_parts()`에 "'다음 주 + 요일'은 직접 계산하지 말고 이 tool을 호출해 받은 날짜를 쓴다" 지시 추가.
-
-### 검증
-- 정적: `resolve_next_week_weekday_date.invoke({"weekday": "화요일"})` / `"화"` → `2026-07-14` 확인, 잘못된 요일 입력 → `ok: false` 확인.
-- 라이브 E2E: 위 재현 시나리오를 `build_week02_agent()`로 재실행 → `개발자 미팅` date가 `2026-07-14`로 정정됨 확인.
+**순서**: M0(부트스트랩) → M1(메인) → M2(수정/삭제) → M3(호환/레거시). M0가 모든 in-app 검증을 언락, M1이 메인 과제 독립 완료, M2·M3는 M0 스캐폴딩+M1 데이터 위에서 가산.
 
 ---
 
-## 버그 수정 — 한 메시지 내 이종(異種) 요청 혼합 시 일부 누락 (2026-07-11)
+## 3. 기술적 예외 상황 + 극복 전략
 
-### 발견 경위
-"오늘 저녁 9시에 철수랑 마케팅 미팅 잡고, 내일 아침 8시에 영양제 먹기 알림 등록해줘. 이번 주 금요일까지 독후감 제출하는
-할 일도 추가해줘." 라이브 테스트에서 `personal_create_schedule`이 마케팅 미팅/영양제 먹기 알림 2건에 대해 정확히
-호출됐음에도, 최종 `structured_response.requests`에는 `todo`(독후감 제출) 1건만 남고 나머지 2건이 누락됨.
-**세션 내 여러 turn 누적이 원인이라는 가설은 기각** — 완전히 독립된 새 세션의 단일 turn에서도 동일하게 재현되어,
-"한 메시지 안에 이종(personal_schedule/reminder/todo 등)의 요청이 섞였을 때" 모델이 tool로 이미 처리한 요청을
-최종 구조화 목록에서 재수록하지 않는 prompt-following 문제로 특정됨. 반면 동종(personal_schedule 2건) 혼합
-케이스("헬스장+개발자 미팅")는 항상 정상 동작.
-
-### 조치 (2단계, 모두 `week02_prompt_parts()`에 추가)
-1. 1차: "tool 호출 여부와 무관하게 감지된 모든 요청을 requests에 빠짐없이 포함하라"는 규칙 문장만 추가.
-   → 재현 시나리오 3회 실행 중 2회 정상, 1회 여전히 누락(개선됐으나 비결정적).
-2. 2차: 위 규칙 바로 뒤에 **동일 재현 시나리오를 그대로 사용한 구체적 few-shot 예시** 추가
-   (마케팅 미팅=personal_schedule, 영양제 먹기 알림=reminder, 독후감 제출=todo, 총 3건이 모두 들어가야
-   정답이라고 명시하고, "tool로 처리했다고 2건을 빼면 틀린 답"이라고 명시적으로 오답 예시까지 제시).
-   → 재현 시나리오 5회 연속 실행 모두 3건 전부 정상 포함, kind 분류도 예시와 동일하게 정확.
-
-### 참고
-- 프록시 모델이 tool-calling 기반 구조화 출력을 완벽히 결정론적으로 따르지 못하는 한계가 있어(기존
-  `build_week02_agent()`의 ToolStrategy 관련 주석 참고), 프롬프트 보강만으로 100% 결정론을 보장하긴 어려울 수
-  있음. 다만 구체적 few-shot 예시 추가 후 표본상(5/5) 안정화됨을 확인.
-- "이번 주 금요일"(이미 지난 요일)은 여전히 LLM이 자유 계산(2026-07-17, 사실상 "다음 주 금요일"과 동일)하며,
-  `resolve_next_week_weekday_date`처럼 결정론적 tool로 옮기지는 않음 — 별도 요구 전까지 현행 유지.
-
-### 검증
-- 라이브 E2E: 재현 문장을 `build_week02_agent()`로 5회 연속 실행 → 매번 3건(personal_schedule/reminder/todo) 모두
-  포함, "헬스장+개발자 미팅"(동종 2건) 시나리오 3회 재실행으로 회귀 없음 확인.
+- **(a) Pydantic V2 호환** — `unwrap_legacy_payload`는 `mode="before"`+`@classmethod`+**passthrough 기본**(일반 경로 안 깨짐). `SaveStructuredRequestInput`은 `StructuredRequest` 상속(필드 재정의 최소). store 페이로드는 `model_dump(exclude_none=True)`로 None 제거, 호출자 에코는 `model_dump()`. **tool 본문에서 모델 생성 금지**, builder helper에서만 생성.
+- **(b) SQLite FK 제약** — `schedules.request_id` → `structured_requests.request_id` FK. 부모→자식 삽입 순서와 트랜잭션은 **store가 단일 `with self.connect()` 안에서 소유**. 우리는 평평한 dict 하나만 넘기고 `schedules`를 직접 쓰지 않는다. 중간 실패는 원자적 롤백.
+- **(c) 싱글톤 미대입 버그** — 현재 `build_week03_agent`의 `if _WEEK03_AGENT is None:` 블록이 `...`뿐이라 `None` 반환→러너 크래시. M0에서 `global _WEEK03_AGENT` 대입으로 해결.
+- **(d) 삭제 전체 안전 가드** — store는 필터 없으면 `[]`(="0건 삭제, ok")를 주지만, `_delete_saved_schedules`가 **명시적으로 `ok=False` 거부**해야 모호한 "지워줘"가 조용히 성공/전삭으로 읽히지 않음. 전체 삭제는 `delete_all=True`만.
+- **(e) 멱등성(`source_schedule_id`)** — 호환 `personal_create_schedule`의 이중 기록은 Week1 `id`를 `source_schedule_id`로 실어 store가 기존 row 감지 시 `already_exists:True` 조기 반환(중복 방지). 매핑 누락 시 멱등성 깨짐.
+- **(f) `shared_sync` 보존** — save/update가 반환하는 `shared_sync`(dict|None)를 tool 출력에 **그대로 노출**(합성·삭제 금지). Week5/6가 외부 복사본에 의존. `already_exists`/`delete_all` 경로는 `None`이 정상.
+- **(g) None 제외** — save dict 조립 후 None drop(단 `kind`, `original_text=""` 유지)해 `raw_json`에 `null` 오염 방지. 모델 소스는 `model_dump(exclude_none=True)`.
+- **(h) 입력 분기(`_save_input_from`)** — 검사 순서 `SaveStructuredRequestInput`→`StructuredRequest`→`dict`→`str`. `str`은 `try: json.loads`; dict면 구조화 입력, 실패/비-dict면 자연어→`extract_structured_request`(LLM 호출은 이 분기에서만, dict/JSON 경로에선 호출 금지). JSON이 list/scalar면 자연어/무효 취급.
 
 ---
 
-## 버그 수정 — bridge(`extract_structured_request`)의 "다음 주 + 요일" 재발 위험 (2026-07-13)
+## 4. 검증 계획
 
-### 발견 경위
-Claude Code와 코드 리뷰 중 `extract_structured_request` 내부의
-`chat_model().with_structured_output(StructuredRequest, method="function_calling")` 호출을 점검하다가,
-이 호출에는 어떤 tool도 바인딩되어 있지 않다는 사실을 확인함. 그런데 이 호출의 system 메시지
-(`join_system_prompt(week02_prompt_parts())`)에는 위 "다음 주 X요일 날짜 계산 오류 (2026-07-11)" 조치에서
-추가한 "다음 주 + 요일이 나오면 `resolve_next_week_weekday_date` tool을 호출하라"는 지시가 그대로 포함되어 있음.
+**정적 (읽기전용)**
+- `python -c "import student_parts.week03_build_nanas_logbook"` — 컴파일/문법/데코레이터/미정의명 점검.
+- `python -c "from student_parts.week03_build_nanas_logbook import week03_system_prompt; print(week03_system_prompt())"` — 두 프롬프트 비어있지 않고 누적 확인.
+- `week03_tools()`가 이름 교체된 `personal_create_schedule` + Week3 tool 7종을 예외 없이 반환.
 
-### 원인
-- `extract_structured_request`는 심화 과제 하드 제약(CLAUDE.md)상 "create_agent 루프를 새로 만들지 않고
-  with_structured_output만 단독 사용"해야 하므로, 애초에 tool을 바인딩할 수 없는 구조임.
-- `week02_prompt_parts()`는 메인 agent(`build_week02_agent()`)와 bridge(`extract_structured_request`)가
-  공유하는 함수라서, 메인 agent에만 유효한 "tool을 호출하라"는 지시가 tool이 없는 bridge 호출에도 그대로 주입됨.
-- 결과적으로 bridge 경로에서는 모델이 실행할 수 없는 tool을 지시받은 채로 남아, 결국 직접 날짜 산수를 하게 됨 —
-  2026-07-11에 메인 agent에서 고쳤던 것과 같은 종류의 "다음 주 + 요일" 오계산이 bridge 경로에서는
-  그대로 재발할 수 있는 상태였음.
+**E2E (`./run.sh --week3`, 가이드 발화 그대로)**
+1. "내일 10시 개인 코칭 저장해줘" → `extract_schedule_request`→`save_structured_request`, `saved_rows`에 schedules row + `request_id`.
+2. "내 일정 보여줘" → `personal_list_saved_schedules`에 노출 + `schedule_id`.
+3. 앱 재시작/새 대화 → 동일 일정 유지(**영속성 = 메인과제 완료**).
+4. (심화) "코칭 14시로 바꿔줘" → `personal_update_saved_schedule` `start_time` 변경+`shared_sync`.
+5. (심화) "그 일정 삭제해줘" → `personal_delete_saved_schedules` `deleted_count=1`, 재조회 시 소멸.
+6. (가드) 조건 없는 삭제 → `ok=False`.
+7. (레거시) 자연어/dict/`{"payload":{...}}`/`StructuredRequest` 저장 모두 `request_id`, 동일 id 재생성 `already_exists`.
 
-### 조치 (`student_parts/week02_structure_natural_language_requests.py` 수정)
-- `_NEXT_WEEK_WEEKDAY_PATTERN` regex와 `_next_week_weekday_hints(text)` 헬퍼를 추가. 기존
-  `_WEEKDAY_ALIASES` dict와 `next_weekday_iso()`(`resolve_next_week_weekday_date`가 쓰는 것과 동일한 헬퍼)를
-  그대로 재사용해 "다음 주 + 요일" 표현을 텍스트에서 찾아 정확한 날짜를 파이썬 코드로 미리 계산.
-- `extract_structured_request(text)`가 `with_structured_output`을 호출하기 전에, 위 헬퍼로 찾은 힌트가
-  있으면 `week02_prompt_parts()` 결과 리스트에 "이 표현은 이미 정확히 계산되어 있으니 그대로 date 필드에
-  써라"는 문장을 append한 뒤 `join_system_prompt(...)`으로 결합해 system 메시지로 사용. 힌트가 없으면 기존과
-  동일하게 `join_system_prompt(week02_prompt_parts())` 그대로 사용됨(하위 호환).
-- 이 방식은 tool을 새로 바인딩하거나 agent loop를 도입하지 않는 순수 문자열 전처리 + 프롬프트 주입이라,
-  "with_structured_output만 단독 사용" 하드 제약을 그대로 지킴.
+---
 
-### 알려진 한계 (의도적으로 미해결, 2026-07-13 사용자 확인 후 보류)
-- regex는 "다음 주 + 요일" 리터럴만 매칭한다. "2주 후 금요일", "3주 후 금요일", "다다음주 화요일" 등은
-  매칭 대상이 아니다.
-- 더 근본적으로 `fixed/runtime_clock.py`의 `next_weekday_date()`/`next_weekday_iso()` 자체가 "다음 주"로
-  1주 고정되어 있고 주차 오프셋 파라미터가 없어서, 설사 regex를 확장해도 계산해 줄 방법이 없다.
-- 이 한계는 bridge뿐 아니라 메인 agent가 쓰는 `resolve_next_week_weekday_date` tool에도 동일하게 있다
-  (새로 생긴 결함이 아니라 기존 구현 전체에 있던 사각지대). 확장하려면 `next_weekday_date`/`next_weekday_iso`에
-  `weeks_ahead` 같은 파라미터를 추가하고 tool·regex 양쪽을 함께 넓혀야 하며, 이번 범위에서는 보류하기로 함.
-- 참고로 `extract_structured_request`의 system 메시지가 힌트가 있을 때 `join_system_prompt(week02_prompt_parts())`
-  결과에 문장을 하나 더 append하게 되어, 심화 과제 규격 문구("system 메시지는 join_system_prompt(week02_prompt_parts())를
-  사용")를 문자 그대로 보면 힌트가 있는 경우엔 그 위에 얹은 확장이다. tool 바인딩·agent loop가 아니므로 하드
-  제약 위반은 아니라고 판단했다.
+## 5. 산출물 · 작업 규약
 
-### 검증
-- 정적: regex를 독립적으로 테스트해 "다음 주 화요일", "다음주화요일"(공백 없음), "다음 주 월요일과 다음 주
-  금요일"(한 문장 2건) 모두 전체 요일 토큰("화요일" 등, "화"로 잘리지 않음)으로 정확히 매칭되고, "오늘 저녁
-  회의"처럼 패턴이 없는 문장에서는 매칭이 없음을 확인.
-- 라이브 E2E는 수행하지 않음(`.env`의 `PROXY_TOKEN` 필요, 이번 세션에서는 미실행) — 기존 관례와 동일하게
-  라이브 검증은 실행 환경이 있는 사용자 몫으로 남긴다.
+- **plan.md**: (이 문서) 승인된 최종 계획.
+- **dev-log.md**: claude.md 개발 원칙 #6/#7에 따라 단계 종료 시마다 체크리스트 `[x]` 갱신 + 발생한 모든 에러/해결 흐름 기록.
+- **편집 대상**: `student_parts/week03_build_nanas_logbook.py` 단 하나. `fixed/**`, `week01`, `week02`, `run.sh`는 손대지 않는다(주변 Pydantic V2 스타일 100% 모방).
+
+---
+
+## 편집할 핵심 파일
+- `student_parts/week03_build_nanas_logbook.py` — 유일한 구현 대상(본문 채우기).
+- (읽기 참조) `fixed/app_store.py`, `student_parts/week02_structure_natural_language_requests.py`, `student_parts/week01_wake_up_nana.py`, `fixed/config.py`, `fixed/llm.py`.
