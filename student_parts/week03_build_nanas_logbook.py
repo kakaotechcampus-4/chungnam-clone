@@ -327,27 +327,30 @@ def _delete_saved_schedules(
         "delete_all": delete_all,
     }
 
-    if delete_all:
-        deleted = store.delete_all_schedules()
+    has_condition = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
 
-    else:
-        has_condition = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
-        if not has_condition:
-            return tool_result(
-                "personal_delete_saved_schedules",
-                ok=False,
-                deleted_count=0,
-                filters=filters,
-                deleted=[],
-                error="삭제 조건이 없습니다. schedule_ids/날짜/제목/시간 중 하나를 지정하거나 delete_all=True를 쓰세요.",
-            )
-
+    if has_condition:
+        # delete_all=True가 같이 들어와도 개별 조건이 있으면 항상 개별 조건을 우선한다.
+        # 전체 삭제(delete_all)는 개별 조건이 전혀 없을 때만 실행된다.
         deleted = store.delete_schedules_by_filter(
             schedule_ids=schedule_ids,
             date=date,
             title=title,
             start_time=start_time,
             time_unspecified=time_unspecified,
+        )
+
+    elif delete_all:
+        deleted = store.delete_all_schedules()
+
+    else:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="삭제 조건이 없습니다. schedule_ids/날짜/제목/시간 중 하나를 지정하거나 delete_all=True를 쓰세요.",
         )
 
     return tool_result(
