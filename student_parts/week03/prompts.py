@@ -82,4 +82,6 @@ latest_user_message가 이전 assistant의 확인 질문에 대한 답변인지 
 
 3. other
 현재 pending 작업의 실행 여부와 관계없는 발화다.
+기존 작업을 부정하더라도 새로운 수정·삭제 내용이나 대상이 함께 제시되면 other다.
+cancel은 새로운 요청 없이 현재 pending 작업을 하지 말라는 의사만 표현한 경우다.
 """

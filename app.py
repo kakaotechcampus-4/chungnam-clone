@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 import sys
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +14,15 @@ import gradio as gr
 
 from fixed.config import CONFIG, STATIC_DIR
 from fixed.agent_runtime import AgentRuntime
+
+logging.basicConfig(
+    level=logging.WARNING,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
+
+logging.getLogger(
+    "student_parts.week03.router"
+).setLevel(logging.DEBUG)
 
 
 runtime = AgentRuntime()

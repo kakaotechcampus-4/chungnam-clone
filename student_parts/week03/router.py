@@ -13,6 +13,9 @@ from student_parts.week03.prompts import (
     PENDING_ROUTER_PROMPT,
 )
 from langchain_core.messages import AIMessage
+import logging
+
+logger = logging.getLogger(__name__)
 
 class PendingRoute(BaseModel):
     decision: Literal[
@@ -176,8 +179,18 @@ def route_pending_response(
     )
 
     validated = PendingRoute.model_validate(result)
-    print("\n========== ROUTER ==========")
-    print(json.dumps(router_input, ensure_ascii=False, indent=2))
-    print("decision:", validated.decision)
-    print("============================\n")
+    logger.info(
+        "pending route classified: action=%s decision=%s",
+        pending.get("action"),
+        validated.decision,
+    )
+    logger.debug(
+        "pending route input: %s",
+        json.dumps(
+            router_input,
+            ensure_ascii=False,
+            default=str,
+        ),
+    )
+
     return validated

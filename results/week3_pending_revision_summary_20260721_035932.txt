@@ -1,0 +1,86 @@
+Week 3 Pending Revision Integration Test
+======================================================================
+created_at : 2026-07-21T03:59:32.745263+09:00
+model : openai/gpt-4.1-mini
+repeat : 1
+cases : 20
+attempts : 20
+
+[SUMMARY]
+passed : 16
+failed : 4
+accuracy : 80.00%
+turns : 54/62
+revision pending recreated : 18/22
+tool-free confirmation risk : 4
+pending not cleared after execute : 4
+stable cases : 16/20
+flaky cases : 0
+latency(ms) : avg=12033.05, p50=11760.43, p95=14558.21
+
+[FAILURES]
+----------------------------------------------------------------------
+id : revise-update-duplicate-title-01
+attempt : 1
+turn 2 user : 아니다 8월 10일 회의를 고객 회의로 바꿔줘
+router : ['cancel']
+tools : []
+error : router expected='other' actual='cancel'
+error : tools expected_order=['personal_list_saved_schedules', 'personal_update_saved_schedule'] actual=[]
+error : pending이 생성되지 않았습니다.
+error : 정정 턴에서 수정/삭제 Tool 호출과 새 pending 생성이 완료되지 않았습니다.
+turn 3 user : 해줘
+router : []
+tools : ['personal_list_saved_schedules', 'personal_update_saved_schedule']
+error : router expected='execute' actual=None
+error : db[second].title expected='고객 회의' actual='회의'
+error : execute 이후 pending이 제거되지 않았습니다.
+----------------------------------------------------------------------
+id : revise-delete-date-01
+attempt : 1
+turn 2 user : 아니다 8월 15일 회의를 지워줘
+router : ['cancel']
+tools : []
+error : router expected='other' actual='cancel'
+error : tools expected_order=['personal_list_saved_schedules', 'personal_delete_saved_schedules'] actual=[]
+error : pending이 생성되지 않았습니다.
+error : 정정 턴에서 수정/삭제 Tool 호출과 새 pending 생성이 완료되지 않았습니다.
+turn 3 user : ㅇㅇ
+router : []
+tools : ['personal_list_saved_schedules', 'personal_delete_saved_schedules']
+error : router expected='execute' actual=None
+error : db[second] 일정이 삭제되지 않았습니다.
+error : remaining aliases expected=['first'] actual=['first', 'second']
+error : execute 이후 pending이 제거되지 않았습니다.
+----------------------------------------------------------------------
+id : revise-update-to-delete-01
+attempt : 1
+turn 2 user : 아니다 변경하지 말고 그 일정을 삭제해줘
+router : ['cancel']
+tools : []
+error : router expected='other' actual='cancel'
+error : tools expected_order=['personal_list_saved_schedules', 'personal_delete_saved_schedules'] actual=[]
+error : pending이 생성되지 않았습니다.
+error : 정정 턴에서 수정/삭제 Tool 호출과 새 pending 생성이 완료되지 않았습니다.
+turn 3 user : 진행해
+router : []
+tools : ['personal_list_saved_schedules', 'personal_delete_saved_schedules']
+error : router expected='execute' actual=None
+error : db[target] 일정이 삭제되지 않았습니다.
+error : execute 이후 pending이 제거되지 않았습니다.
+----------------------------------------------------------------------
+id : revise-delete-to-update-01
+attempt : 1
+turn 2 user : 아니다 삭제하지 말고 도서관 가기로 바꿔줘
+router : ['cancel']
+tools : []
+error : router expected='other' actual='cancel'
+error : tools expected_order=['personal_list_saved_schedules', 'personal_update_saved_schedule'] actual=[]
+error : pending이 생성되지 않았습니다.
+error : 정정 턴에서 수정/삭제 Tool 호출과 새 pending 생성이 완료되지 않았습니다.
+turn 3 user : ㅇㅇ
+router : []
+tools : ['personal_list_saved_schedules', 'personal_update_saved_schedule']
+error : router expected='execute' actual=None
+error : db[target].title expected='도서관 가기' actual='학교 가기'
+error : execute 이후 pending이 제거되지 않았습니다.
