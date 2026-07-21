@@ -1,0 +1,74 @@
+Week 3 Pending Router Batch Test
+======================================================================
+created_at : 2026-07-21T00:55:36.726357+09:00
+model : openai/gpt-4.1-mini
+repeat : 1
+cases : 90
+attempts : 90
+
+[SUMMARY]
+passed : 85
+failed : 5
+accuracy : 94.44%
+stable cases : 85/90
+flaky cases : 0
+pending not cleared : 0
+confirmation repeat risk : 0
+latency(ms) : avg=980.20, p50=923.76, p95=1214.98
+
+[BY DECISION]
+execute : 30/30 (100.00%)
+cancel : 30/30 (100.00%)
+other : 25/30 (83.33%)
+
+[FAILURES]
+----------------------------------------------------------------------
+id : update-other-12
+attempt : 1
+action : update
+user : 내 일정은 전부 삭제해줘
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
+----------------------------------------------------------------------
+id : update-other-13
+attempt : 1
+action : update
+user : 내일 철수랑 회의 일정 잡아줘
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
+----------------------------------------------------------------------
+id : update-other-15
+attempt : 1
+action : update
+user : 그건 하지 말고 7월 25일 치과가기 제목을 바꿔줘
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
+----------------------------------------------------------------------
+id : delete-other-04
+attempt : 1
+action : delete
+user : 새로운 일정 하나 만들고 싶어
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None
+----------------------------------------------------------------------
+id : delete-other-13
+attempt : 1
+action : delete
+user : 그건 하지 말고 내 일정부터 보여줘
+expected : other
+actual : cancel
+pending_cleared : True
+error_type : None
+error : None

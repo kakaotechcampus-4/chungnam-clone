@@ -1,0 +1,22 @@
+Week 3 Pending Revision Integration Test
+======================================================================
+created_at : 2026-07-21T04:07:06.137403+09:00
+model : openai/gpt-4.1-mini
+repeat : 1
+cases : 20
+attempts : 20
+
+[SUMMARY]
+passed : 20
+failed : 0
+accuracy : 100.00%
+turns : 62/62
+revision pending recreated : 22/22
+tool-free confirmation risk : 0
+pending not cleared after execute : 0
+stable cases : 20/20
+flaky cases : 0
+latency(ms) : avg=12399.32, p50=11825.79, p95=16227.73
+
+[FAILURES]
+없음
