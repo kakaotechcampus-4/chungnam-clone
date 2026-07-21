@@ -6,7 +6,7 @@ from typing import Any, Literal
 from langchain.agents import create_agent
 from langchain.agents.structured_output import ToolStrategy
 from langchain.tools import tool
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from fixed.config import CONFIG
 from fixed.llm import chat_model
@@ -137,18 +137,51 @@ class StructuredRequestBatch(BaseModel):
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
     """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
-
+    
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            return StructuredRequest(kind="unknown", original_text=value)
+    if isinstance(value, dict):
+        try:
+            return StructuredRequest.model_validate(value)
+        except ValidationError:
+            return StructuredRequest(kind="unknown", original_text=str(value))
+    return StructuredRequest(kind="unknown", original_text=str(value))
+            
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
     """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
-
-
+    structured_llm = chat_model().with_structured_output(StructuredRequest)
+    result = structured_llm.invoke(
+        [("system",
+          join_system_prompt([
+              *week02_prompt_parts(),
+              "사용자 요청 한 건을 StructuredRequest 하나로 구조화한다.",
+              
+          ]),
+          ),
+         ("human",text),
+        ]
+    )
+    return _coerce_structured_request(result)
 
 @tool
 def extract_schedule_request(query: str) -> str:
     """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
-
+    structured = extract_structured_request(query)
+    return json.dumps(
+        {
+            "ok": True, "tool_name": "extract_schedule_request",
+            "structured_request": structured.model_dump(),
+            "base_date": current_app_date_iso(),
+        },
+        ensure_ascii=False,
+    )
 
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
