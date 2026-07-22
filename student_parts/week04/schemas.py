@@ -1,4 +1,4 @@
-from __future__ import annotations
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -53,3 +53,13 @@ class SearchConversationMessagesInput(BaseModel):
 
 class LoadConversationContextInput(BaseModel):
     conversation_id: str = Field(min_length=1)
+
+class MemoryRoute(BaseModel):
+    """기억 검색 출처와 검색어입니다."""
+
+    source: Literal[
+        "structured",
+        "conversation",
+        "reference",
+    ]
+    search_query: str = Field(min_length=1)

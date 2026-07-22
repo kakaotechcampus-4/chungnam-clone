@@ -40,7 +40,7 @@ from student_parts.week04.stores import (
 from student_parts.week04.state import Week04AgentState
 from student_parts.week04.conversation_context import (load_conversation_context,)
 from student_parts.week04.middleware import (ConversationContextToolMiddleware,)
-
+from student_parts.week04.memory import retrieve_memory
 
 _WEEK04_AGENT: Any | None = None
 
@@ -204,14 +204,12 @@ _WEEK04_AGENT: Any | None = None
 
 
 def week04_tools() -> list[Any]:
-    """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
+    """3주차 도구에 4주차 통합 기억 검색 도구를 누적합니다."""
 
     return [
         *week03_tools(),
         add_personal_reference,
-        search_personal_references,
-        search_saved_requests,
-        search_conversation_messages,
+        retrieve_memory,
         load_conversation_context,
     ]
 
