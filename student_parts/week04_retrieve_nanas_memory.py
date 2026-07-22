@@ -309,8 +309,22 @@ def search_conversation_messages_dict(
 ) -> dict[str, Any]:
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
-    # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    exclude = current_session_scope() if conversation_id is None else None
+    hits = conversation_rag_store.search(
+        query=query,
+        top_k=top_k,
+        exclude_conversation_id=exclude,
+        conversation_id=conversation_id,
+    )
+    context = conversation_rag_store.context_from_hits(hits)
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": context,
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync,
+    }
 
 
 def search_conversation_message_rows(
@@ -322,8 +336,13 @@ def search_conversation_message_rows(
 ) -> list[dict[str, Any]]:
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
-    # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    return search_conversation_messages_dict(
+        sqlite_store,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -363,8 +382,15 @@ def search_conversation_messages(
 ) -> str:
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    k = safe_limit(top_k, default=5, maximum=50)
+    payload = search_conversation_messages_dict(
+        SQLITE_STORE,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=k,
+        conversation_id=conversation_id,
+    )
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
@@ -377,8 +403,34 @@ def search_nana_memory(
 ) -> str:
     """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
 
-    # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
-    ...
+    k = safe_limit(limit, default=5, maximum=20)
+    refs = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=k)
+    rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=k)
+
+    lines = ["[개인 참고자료]"]
+    if refs:
+        for index, ref in enumerate(refs, start=1):
+            metadata = ref.get("metadata") or {}
+            title = metadata.get("title", "")
+            content = ref.get("content", "")
+            lines.append(f"{index}. {title} - {content}".strip())
+    else:
+        lines.append("- 검색된 개인 참고자료가 없습니다.")
+
+    lines.append("[저장된 일정/할 일]")
+    if rows:
+        for index, row in enumerate(rows, start=1):
+            title = row.get("title", "")
+            kind = row.get("kind", "")
+            reason = row.get("reason", "")
+            lines.append(f"{index}. [{kind}] {title} - {reason}".strip())
+    else:
+        lines.append("- 검색된 저장 일정이 없습니다.")
+
+    context = "\n".join(lines)
+    return json_payload(
+        {"context": context, "references": refs, "saved_requests": rows}
+    )
 
 def week04_tools() -> list[Any]:
     """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
@@ -401,9 +453,23 @@ def week04_system_prompt() -> str:
 def week04_prompt_parts() -> list[str]:
     """1~4주차 system prompt 조각을 누적합니다."""
 
+    memory_part = (
+        "## Week 4 기억 검색 (3개 출처 구분)\n"
+        "- 기억은 세 출처로 나뉜다. 질문 성격에 맞는 tool을 하나 또는 여러 개 고른다.\n"
+        "- search_personal_references: 내가 적어 둔 취향/메모/선호 등 개인 참고자료를 찾을 때.\n"
+        "- search_saved_requests: 내가 저장한 일정/할 일/알림 기록을 찾을 때.\n"
+        "- search_conversation_messages: 예전 대화에서 나눈 일반 채팅 발화를 찾을 때.\n"
+        "## 기억 추가·저장 구분 (강한 제약)\n"
+        "- '메모해둬/기억해둬/적어둬'라는 말이 있어도, 그 내용이 특정 날짜·시간·할 일이 아니라 나에 대한 지속적 선호·원칙·취향·일하는 방식이면 add_personal_reference로 참고자료에 추가한다. 이때 extract_schedule_request나 save_structured_request를 쓰지 않는다.\n"
+        "- 특정 시간·행동에 묶인 리마인더/할 일/일정 저장 요청일 때만 기존 저장 경로(extract_schedule_request → save_structured_request)를 쓴다.\n"
+        "## 근거 규칙 (강한 제약)\n"
+        "- assistant가 예전에 한 말만으로 사실을 확정하지 않는다. 위 검색 tool의 결과를 근거로 답한다.\n"
+        "- 서로 다른 출처를 섞어 말하지 않는다. 참고자료/저장 일정/일반 대화를 혼동하지 않는다."
+    )
+
     return [
         *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        memory_part,
     ]
 
 
