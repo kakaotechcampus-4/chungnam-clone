@@ -643,7 +643,14 @@ def week03_tools() -> list[Any]:
 def week03_system_prompt() -> str:
     """3주차 단일 agent가 따르는 시스템 프롬프트입니다."""
 
-    return join_system_prompt(week03_prompt_parts())
+    return join_system_prompt(
+        [
+            *week03_prompt_parts(),
+            # Week 3 한정 범위 규칙: 재사용되는 prompt_parts에 두면 Week 4+가 "RAG 안 함"을
+            # 상속한 뒤 "RAG 하라"로 부정하는 모순이 생기므로, Week 3 최종 조립에서만 추가한다.
+            "Week 3 범위: RAG 검색과 외부 멤버 일정 조율은 아직 하지 않는다.",
+        ]
+    )
 
 
 def week03_prompt_parts() -> list[str]:
@@ -664,7 +671,6 @@ def week03_prompt_parts() -> list[str]:
             "일정 조회=personal_list_saved_schedules, 구조화 원본 기록=list_saved_requests/get_saved_request, "
             "수정=personal_update_saved_schedule, 삭제=personal_delete_saved_schedules, "
             "인자가 이미 분해된 개인 일정 생성=personal_create_schedule(임시 메모리+SQLite 이중 기록).\n"
-            "Week 3 범위: RAG 검색과 외부 멤버 일정 조율은 아직 하지 않는다. "
             "최종 답변은 tool 결과 JSON을 근거로 한국어로 간결하게 작성한다."
         ),
     ]
