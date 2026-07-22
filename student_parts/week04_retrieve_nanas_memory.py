@@ -225,8 +225,9 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    # 실제 임베딩 저장은 store가 담당한다. tags가 None이면 빈 list로 바꿔
+    # 항상 list 타입으로 넘긴다(저장 메타데이터가 일관되게 유지되도록).
+    return reference_store.add_personal_reference(title=title, content=content, tags=tags or [])
 
 
 def search_personal_reference_hits(
@@ -284,8 +285,16 @@ def search_conversation_message_rows(
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
-    # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    # 모듈 상단에 준비된 REFERENCE_STORE 싱글턴에 저장한다.
+    saved = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
+    # 저장 위치(reference_backend)와 저장된 참고자료 본문(reference)을 나눠 반환한다.
+    # LLM은 이 결과를 보고 "무엇을 어디에 기록했는지" 답할 수 있다.
+    return json_payload(
+        {
+            "reference_backend": saved["backend"],
+            "reference": {key: saved[key] for key in ("reference_id", "title", "content", "tags")},
+        }
+    )
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
