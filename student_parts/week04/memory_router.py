@@ -7,11 +7,9 @@ from student_parts.week04.schemas import MemoryRoute
 
 
 MEMORY_ROUTER_PROMPT = """
-사용자의 질문에 답하기 위해 검색할 저장소를 하나만 선택한다.
-structured는 save_request를 통해 생성된 구조화 요청 저장소다.
+structured는 일정,할일,알람을 검색한다. 그 외는 검색하는곳이 아니다.
 conversation은 conversations와 messages에 저장된 대화 원문 저장소다.
 reference는 add_personal_reference를 통해 생성된 개인 참고자료 저장소다.
-질문의 표현이 아니라 답이 실제로 저장되어 있을 저장소를 기준으로 판단한다.
 search_query에는 선택한 저장소를 검색할 짧은 핵심어를 넣는다.
 반드시 source와 search_query만 반환한다.
 """.strip()
