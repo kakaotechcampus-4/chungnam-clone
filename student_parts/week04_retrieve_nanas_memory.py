@@ -309,9 +309,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     safe_top_k = safe_limit(top_k, 3)
     result = search_personal_reference_hits(reference_store=REFERENCE_STORE, query=query, top_k=safe_top_k)
 
-    payload = {
-        "hits" : result,
-    }
+    payload = {"hits" : result, }
     return json_payload(payload)
 
 
@@ -322,9 +320,7 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     safe_top_k = safe_limit(top_k, 3)
     result = search_saved_request_rows(sqlite_store=SQLITE_STORE, query=query, top_k=safe_top_k)
 
-    payload = {
-        "rows" : result,
-    }
+    payload = {"rows" : result, }
 
     return json_payload(payload)
 
@@ -362,7 +358,7 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
+        #search_conversation_messages, 현재 미구현으로 인해 tool 목록에서 제외
     ]
 
 
@@ -376,8 +372,16 @@ def week04_prompt_parts() -> list[str]:
     """1~4주차 system prompt 조각을 누적합니다."""
 
     return [
-        *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        *week03_prompt_parts(),    
+            """
+저장된 참고자료나 기록에 대한 질문은 추측하지 말고 검색 tool을 먼저 호출한 뒤, 그 결과(hits/rows)를 근거로 답한다.
+- 사용자가 적어둔 자유 메모·참고자료·사실을 찾을 때(예: "발표 언제야?", "카나메이트 UI에 뭐 나와?")
+  → search_personal_references  (의미 기반 벡터 검색, 결과 키는 hits)
+- 저장된 구조화 일정·할 일·알림 기록을 찾을 때 (예: "저장된 회의 있어?", "group_schedule 보여줘")
+  → search_saved_requests  (SQLite 검색, 결과 키는 rows)
+- 사용자가 메모/참고자료를 기억해달라고 하면 
+    → add_personal_reference 로 저장한다.
+""",
     ]
 
 
