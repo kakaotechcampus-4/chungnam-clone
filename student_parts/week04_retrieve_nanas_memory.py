@@ -272,6 +272,9 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    # LLM 이 conversation_id 에 빈 문자열을 넣으면 None 이 아니라서 현재 대화 제외를
+    # 건너뛰게 된다. 빈 값은 "지정 안 함"으로 정규화한다.
+    conversation_id = (conversation_id or "").strip() or None
     current_id = current_session_scope()
     exclude_id = None
     if conversation_id is None and current_id != DEFAULT_SESSION_SCOPE:
