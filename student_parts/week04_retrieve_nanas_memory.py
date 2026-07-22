@@ -27,15 +27,12 @@ _WEEK04_AGENT: Any | None = None
 # [4주차 수강생 구현 가이드]
 #
 # 목표
-#   Nana가 "내가 적어 둔 참고자료", "SQLite에 저장된 일정/할 일 기록",
-#   "앱에 저장된 일반 채팅 발화"를 구분해서 검색하게 합니다.
+#   Nana가 "내가 적어 둔 참고자료", "SQLite에 저장된 일정/할 일 기록", "앱에 저장된 일반 채팅 발화"를 구분해서 검색하게 합니다.
 #   Week 4의 핵심은 RAG를 하나의 마법 함수로 보지 않고, 데이터 출처별 검색 tool을 분리하는 것입니다.
 #
 # 과제 구성
-#   - 메인과제: 개인 참고자료를 추가하고, 참고자료와 SQLite 저장 기록을 출처별로 검색하는
-#     RAG 세로 슬라이스를 완성합니다.
-#   - 추가 과제: 앱 대화 발화를 ChromaDB에 lazy sync해 검색하는 agentic RAG와
-#     이전 버전 호환 통합 검색까지 확장합니다.
+#   - 메인과제: 개인 참고자료를 추가하고, 참고자료와 SQLite 저장 기록을 출처별로 검색하는 RAG 세로 슬라이스를 완성합니다.
+#   - 추가 과제: 앱 대화 발화를 ChromaDB에 lazy sync해 검색하는 agentic RAG와 이전 버전 호환 통합 검색까지 확장합니다.
 #
 # 구현 위치와 사용할 코드
 #   - 이 파일(student_parts/week04_retrieve_nanas_memory.py)의 개인 참고자료/RAG tool을 구현합니다.
@@ -225,8 +222,8 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    result = reference_store.add_personal_reference(title=title, content=content, tags=tags)
+    return result
 
 
 def search_personal_reference_hits(
@@ -237,8 +234,16 @@ def search_personal_reference_hits(
 ) -> list[dict[str, Any]]:
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    raw_hits = reference_store.search_personal_references(query=query, limit=top_k)
+    return {[
+            {
+                "id" : h["id"],
+                "content" : h["content"],
+                "distance" : h["distance"],
+                "metadata": {"title" : h["title"], "tags" : h["tags"]}    
+        }
+        for h in raw_hits
+    ]}
 
 
 def search_saved_request_rows(
@@ -249,8 +254,7 @@ def search_saved_request_rows(
 ) -> list[dict[str, Any]]:
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    return sqlite_store.search_saved_requests(query=query,kind=None,limit=top_k)
 
 
 def search_conversation_messages_dict(
