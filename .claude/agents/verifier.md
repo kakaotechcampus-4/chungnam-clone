@@ -8,6 +8,7 @@ skills:
   - kanana-conventions
   - verify-week2
   - verify-week3
+  - verify-week4
 ---
 
 # 역할 (Role)
