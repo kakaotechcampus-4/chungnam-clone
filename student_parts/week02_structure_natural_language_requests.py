@@ -108,7 +108,7 @@ class StructuredRequest(BaseModel):
     members: list[str] = Field(default_factory=list, description="관련 참여자 또는 참석자 목록")
     priority: str | None = Field(default=None, description="우선순위 또는 중요도")
     reason: str | None = Field(default=None, description="해당 값들을 추론한 근거")
-    original_text: str = Field(default="", description="사용자가 입력한 원본 자연어 문장") 
+    original_text: str = Field(default="", description="사용자가 입력한 원본 자연어 문장")
 
 
 class StructuredRequestBatch(BaseModel):
@@ -119,23 +119,34 @@ class StructuredRequestBatch(BaseModel):
 
 
 def _coerce_structured_request(value: Any) -> StructuredRequest:
-    """이후 회차에서 사용할 StructuredRequest 정규화 예약 함수입니다."""
+    """dict/JSON 문자열/StructuredRequest 입력을 StructuredRequest 하나로 정규화합니다."""
 
-    ...
+    if isinstance(value, StructuredRequest):
+        return value
+    if isinstance(value, str):
+        return StructuredRequest.model_validate(json.loads(value))
+    if isinstance(value, dict):
+        return StructuredRequest.model_validate(value)
+    raise TypeError(f"지원하지 않는 StructuredRequest 입력입니다: {type(value)!r}")
 
 
 def extract_structured_request(text: str) -> StructuredRequest:
-    """이후 회차에서 사용할 단건 구조화 예약 함수입니다."""
+    """자연어 한 문장을 Week 2 agent로 구조화해 StructuredRequest 하나로 반환합니다."""
 
-    ...
+    result = build_week02_agent().invoke({"messages": [{"role": "user", "content": text}]})
+    batch = result.get("structured_response") if isinstance(result, dict) else None
+    requests = getattr(batch, "requests", None) or []
+    if not requests:
+        return StructuredRequest(kind="unknown", original_text=text)
+    return _coerce_structured_request(requests[0])
 
 
 @tool
 def extract_schedule_request(query: str) -> str:
-    """이후 회차에서 저장 흐름과 연결할 예약 tool입니다."""
+    """자연어 요청을 StructuredRequest로 구조화해 저장 tool에 넘길 JSON 문자열로 반환합니다."""
 
-    ...
-
+    structured = extract_structured_request(query)
+    return json.dumps(structured.model_dump(), ensure_ascii=False)
 
 def week02_tools() -> list[Any]:
     """Week 2 agent에 Week 1 도구를 노출해 tool JSON을 structured_response 근거로 씁니다."""
