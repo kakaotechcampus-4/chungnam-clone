@@ -216,6 +216,9 @@ class SearchNanaMemoryInput(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
 
 
+# DB에 실제로 쓰기(write) 작업을 함, title, content, tags를 받아서 PersonalReferenceStore(ChromaDB 벡터 저장소)에 저장
+# "어떤 backend에 저장됐는지"는 fixed/reference_store.py의 backend_info()를 보면 알 수 있음
+# 마지막으로 저장된 reference row를 dict로 반환함
 def add_personal_reference_dict(
     reference_store: PersonalReferenceStore,
     *,
@@ -226,7 +229,15 @@ def add_personal_reference_dict(
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    # - title/content/tags를 REFERENCE_STORE.add_personal_reference에 넘깁니다.
+    # - tags가 None이면 빈 list로 바꿉니다.
+    # - 이 tool 안에서 reference_backend와 reference가 있는 JSON payload를 완성합니다.
+    if tags is None :
+        tags = tags or []
+    result = reference_store.add_personal_reference(title=title, content=content, tags=tags)
+    return result
+    
+    
 
 
 def search_personal_reference_hits(
@@ -238,9 +249,28 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    hits = reference_store.search_personal_references(query, top_k)
+    result = []
+    for h in hits:
+        new_dict = {
+            "id": h["id"],
+            "content": h["content"],
+            "distance": h["distance"],
+            "metadata": {
+                "title": h["title"],
+                "tags": h["tags"],
+            }
+        }
+        result.append(new_dict)
+    return result
+    
+    
 
-
+# SQLITE_STORE.search_saved_requests(query, limit)를 호출합니다.
+# - top_k는 이 tool 안에서 안전한 범위로 정리합니다.
+# - 검색 결과가 없으면 rows=[]를 그대로 반환합니다.
+# - course repo 기준 계약에 맞게 top-level {"rows": [...]} JSON을 반환합니다.
+# AppSQLiteStore의 저장 요청 검색 결과를 rows 배열로 반환합니다. 일정/할 일/알림 구조화 기록을 찾을 때 사용합니다.
 def search_saved_request_rows(
     sqlite_store: AppSQLiteStore,
     *,
@@ -250,7 +280,8 @@ def search_saved_request_rows(
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    result = sqlite_store.search_saved_requests(query, top_k)
+    return result
 
 
 def search_conversation_messages_dict(
@@ -264,7 +295,7 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    result = sqlite_store.search_conversation_messages(query, top_k, conversation_id)
 
 
 def search_conversation_message_rows(
@@ -285,7 +316,13 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    # 참고자료 추가 tool입니다. title/content/tags를 받아 vector store에 저장하고 JSON 문자열을 반환합니다.
+    result = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
+    payload = {
+        "reference_backend": result["backend"],
+        "reference": result,
+    }
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
@@ -293,7 +330,9 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=2, maximum=20)
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
+    return json.payload({"hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -301,7 +340,9 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=3, maximum=20)
+    rows = search_saved_requests(SQLITE_STORE, query=query, top_k=top_k)
+    return json.payload({"rows": rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
