@@ -329,9 +329,21 @@ def _delete_saved_schedules(
 
     has_condition = bool(schedule_ids) or any([date, title, start_time, time_unspecified])
 
+    if delete_all and has_condition:
+        # 전체 삭제 의도와 개별 삭제 의도가 동시에 들어온 모순 상태다.
+        # 어느 쪽이 진짜 의도인지 임의로 추측해서 실행하지 않고, 명시적으로 거부한다.
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            status="rejected",
+            deleted_count=0,
+            filters=filters,
+            deleted=[],
+            error="delete_all=True와 개별 삭제 조건(schedule_ids/date/title/start_time/time_unspecified)을 "
+            "동시에 지정할 수 없습니다. 전체 삭제인지 개별 삭제인지 하나만 선택해 다시 요청하세요.",
+        )
+
     if has_condition:
-        # delete_all=True가 같이 들어와도 개별 조건이 있으면 항상 개별 조건을 우선한다.
-        # 전체 삭제(delete_all)는 개별 조건이 전혀 없을 때만 실행된다.
         deleted = store.delete_schedules_by_filter(
             schedule_ids=schedule_ids,
             date=date,
