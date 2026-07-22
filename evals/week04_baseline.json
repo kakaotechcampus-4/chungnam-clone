@@ -1,0 +1,65 @@
+{
+  "today": "2026-03-04",
+  "n": 5,
+  "results": {
+    "ref_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "saved_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "conversation_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "multi_source_combine": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "add_reference_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "add_reminder_guard": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "reference_rule_routing": {
+      "passed": 0,
+      "n": 5,
+      "critical": false,
+      "ambiguous": true,
+      "notes": [
+        "tools=['search_saved_requests']",
+        "tools=['search_saved_requests']"
+      ]
+    },
+    "current_conversation_excluded": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    }
+  }
+}
