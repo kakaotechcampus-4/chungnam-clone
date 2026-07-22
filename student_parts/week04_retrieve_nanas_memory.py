@@ -238,8 +238,20 @@ def search_personal_reference_hits(
 ) -> list[dict[str, Any]]:
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    # store는 top_k가 아니라 limit 인자를 쓰므로 이름을 맞춰 넘긴다.
+    raw_hits = reference_store.search_personal_references(query=query, limit=top_k)
+
+    # store가 준 평평한 hit(id/title/content/tags/distance)를 가이드 계약 형식으로 재정리한다.
+    # title/tags는 문서 본문이 아니라 부가정보이므로 metadata 안으로 묶는다.
+    return [
+        {
+            "id": hit["id"],
+            "content": hit["content"],
+            "distance": hit["distance"],
+            "metadata": {"title": hit.get("title", ""), "tags": hit.get("tags", "")},
+        }
+        for hit in raw_hits
+    ]
 
 
 def search_saved_request_rows(
@@ -301,8 +313,10 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
-    # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    # top_k를 1~20 범위로 보정한 뒤 헬퍼로 검색한다(스키마가 이미 검증하지만, 헬퍼 직접 호출 대비 방어).
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=safe_limit(top_k, default=2, maximum=20))
+    # 가이드 계약: top- level 키는 hits 하나. LLM이 hits를 근거로 답한다.
+    return json_payload({"hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
