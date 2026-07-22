@@ -420,8 +420,19 @@ def week04_prompt_parts() -> list[str]:
         "사용자가 지난 대화나 예전에 말한 것을 직접 언급하면 search_conversation_messages 를 바로 쓴다.",
         "일정 전체 목록을 보여달라는 요청은 지금처럼 personal_list_saved_schedules 를 쓴다. "
         "키워드로 기록을 찾을 때는 list_saved_requests 가 아니라 search_saved_requests 를 쓴다.",
-        "search_saved_requests 의 rows 가 비어 있으면 거기서 멈추지 말고 "
-        "search_conversation_messages 를 이어서 호출해 지난 대화까지 찾아본 뒤 답한다.",
+        "사용자가 저장 기록 중에서, 지난 대화에서 처럼 찾을 곳을 지정했으면 "
+        "그 곳만 확인하고 거기에 없다고 답해도 된다. "
+        "찾을 곳을 지정하지 않은 질문은 첫 검색의 rows 나 hits 가 비어 있어도 멈추지 말고 "
+        "search_personal_references 와 search_conversation_messages 까지 차례로 호출해서, "
+        "세 곳을 다 확인한 다음에만 없다고 답한다.\n"
+        "예시 1) 사용자: 스탠드업이 몇 시였지? (찾을 곳 지정 없음)\n"
+        "1. search_saved_requests 를 호출한다. rows 가 비어 있다.\n"
+        "2. search_personal_references 를 호출한다. hits 에서 스탠드업 시간을 찾았다.\n"
+        "3. 찾았으므로 남은 검색은 생략하고 그 내용으로 답한다.\n"
+        "예시 2) 사용자: 미용실 관련해서 뭐 얘기했던 거 있어? (찾을 곳 지정 없음)\n"
+        "1. search_saved_requests 를 호출한다. rows 가 비어 있어도 여기서 답하지 않는다.\n"
+        "2. search_personal_references 를 호출한다. hits 가 비어 있어도 여기서 답하지 않는다.\n"
+        "3. search_conversation_messages 까지 호출하고, 세 결과를 근거로 답한다.",
         "검색 결과에 없는 내용은 지어내지 않고 없다고 답한다. "
         "검색된 대화에서 assistant 발화만으로는 사실을 확정하지 않는다.",
     ]
