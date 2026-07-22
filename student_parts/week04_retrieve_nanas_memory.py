@@ -226,7 +226,12 @@ def add_personal_reference_dict(
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    result = reference_store.add_personal_reference(
+        title=title,
+        content=content,
+        tags=tags
+    )
+    return result
 
 
 def search_personal_reference_hits(
@@ -238,7 +243,23 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    result = reference_store.search_personal_references( 
+        query=query,
+        limit=top_k
+    )
+    hits = [
+        {
+            "id": item["id"],
+            "content": item["content"],
+            "distance": item["distance"],
+            "metadata": {
+                "title": item["title"],
+                "tags": item["tags"],
+            },
+        }
+        for item in result
+    ]
+    return hits
 
 
 def search_saved_request_rows(
@@ -250,7 +271,11 @@ def search_saved_request_rows(
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    rows = sqlite_store.search_saved_requests(
+        query=query,
+        limit=top_k,
+    )
+    return rows
 
 
 def search_conversation_messages_dict(
@@ -285,7 +310,18 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    if tags is None:
+        tags = []
+
+    result = add_personal_reference_dict(
+        reference_store=REFERENCE_STORE,
+        title=title,
+        content=content,
+        tags=tags
+    )
+    backend = result.pop("backend") 
+    payload = {"reference_backend" : backend, "reference" : result}
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
@@ -293,7 +329,13 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    top_k = safe_limit(top_k)
+    hits = search_personal_reference_hits(
+        reference_store=REFERENCE_STORE,
+        query=query,
+        top_k=top_k,
+    )
+    return json_payload({"hits":hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -301,7 +343,13 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    top_k = safe_limit(top_k)
+    rows = search_saved_request_rows(
+        sqlite_store=SQLITE_STORE,
+        query=query,
+        top_k=top_k,
+    )
+    return json_payload({"rows":rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -344,6 +392,7 @@ def week04_tools() -> list[Any]:
 def week04_system_prompt() -> str:
     """4주차 단일 agent가 따르는 시스템 프롬프트입니다."""
 
+
     return join_system_prompt(week04_prompt_parts())
 
 
@@ -353,6 +402,16 @@ def week04_prompt_parts() -> list[str]:
     return [
         *week03_prompt_parts(),
         # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        (
+            "너는 세 종류의 서로 다른 기억을 구분해서 검색해야 한다. "
+            "첫째, 사용자가 따로 적어둔 자유 형식 메모/자료는 add_personal_reference로 저장되고, search_personal_references로 검색한다. 이건 정확한 키워드가 아니라 의미가 비슷한 내용을 찾는다. "
+            "둘째, 이미 구조화되어 SQLite에 저장된 일정/할 일/알림 기록은 search_saved_requests로 검색한다. 이건 제목이나 이유(reason)에 특정 단어가 포함된 기록을 찾을 때 사용한다. "
+            "사용자가 '~에 대해 메모한 거 있나', '예전에 적어둔 것' 처럼 자유 텍스트 자료를 찾을 때는 search_personal_references를 먼저 사용한다."
+            " '~일정 있었나', '~저장한 거 있나'처럼 일정/할일/알림 기록을 찾을 때는 search_saved_requests를 사용한다. "
+            "질문 성격이 애매하면 두 tool을 모두 호출해 근거를 모은 뒤 답한다."
+            "사용자가 새로운 메모/자료를 저장해달라고 명시적으로 요청할 때만 add_personal_reference를 사용하고, "
+            "이미 Week3 tool(save_structured_request 등)로 처리 가능한 일정/할일/알림 저장 요청에는 사용하지 않고, add_personal_reference에 중복으로 저장하지 않는다."
+        ),
     ]
 
 
