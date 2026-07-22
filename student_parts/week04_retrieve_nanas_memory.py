@@ -277,8 +277,11 @@ def search_conversation_messages_dict(
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
     sync_result = conversation_rag_store.sync_from_sqlite(sqlite_store)
     exclude_conversation_id = None if conversation_id else current_session_scope()
-    hits = conversation_rag_store.search_conversation_messages(
-        query, top_k, conversation_id, exclude_conversation_id
+    hits = conversation_rag_store.search(
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+        exclude_conversation_id=exclude_conversation_id,
     )
     return {
         "hits" : hits,
@@ -302,9 +305,9 @@ def search_conversation_message_rows(
     result = search_conversation_messages_dict(
         sqlite_store,
         CONVERSATION_RAG_STORE,
-        query,
-        top_k,
-        conversation_id,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
     )
     return result["hits"]
 
