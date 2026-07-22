@@ -16,6 +16,7 @@ from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
 from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_helpers import _tool_name, tool_result
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -322,17 +323,16 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
 
     stored = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
     return json_payload(
-        {
-            "ok": True,
-            "tool_name": "add_personal_reference",
-            "reference_backend": stored["backend"],
-            "reference": {
+        tool_result(
+            _tool_name(add_personal_reference),
+            reference_backend=stored["backend"],
+            reference={
                 "reference_id": stored["reference_id"],
                 "title": stored["title"],
                 "content": stored["content"],
                 "tags": stored["tags"],
             },
-        }
+        )
     )
 
 
@@ -341,7 +341,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
     hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
-    return json_payload({"ok": True, "tool_name": "search_personal_references", "hits": hits})
+    return json_payload(tool_result(_tool_name(search_personal_references), hits=hits))
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -349,7 +349,7 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
     rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
-    return json_payload({"ok": True, "tool_name": "search_saved_requests", "rows": rows})
+    return json_payload(tool_result(_tool_name(search_saved_requests), rows=rows))
 
 
 @tool(args_schema=SearchConversationMessagesInput)
