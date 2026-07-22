@@ -444,7 +444,8 @@ def week04_prompt_parts() -> list[str]:
         "참고자료성 질문(선호/규칙 등)은 search_personal_references를, "
         "저장된 일정/할 일/알림 관련 질문은 search_saved_requests를, "
         "과거 잡담/일반 대화 관련 질문은 search_conversation_messages를 사용해 근거를 찾은 뒤 답한다. "
-        "검색 결과가 없으면 모른다고 답하고 추측하지 않는다.",
+        "검색 결과가 없으면 모른다고 답하고 추측하지 않는다. "
+        "사용자가 자신의 선호나 규칙을 알려주며 기억해달라고 하면 add_personal_reference로 저장한 뒤 답한다.",
     ]
 
 
