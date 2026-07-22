@@ -11,6 +11,7 @@
 | Week 1 | `student_parts/week01_claude.md` | `student_parts/week01_wake_up_nana.py` |
 | Week 2 | `student_parts/week02_claude.md` | `student_parts/week02_structure_natural_language_requests.py` |
 | Week 3 | `student_parts/week03_claude.md` | `student_parts/week03_build_nanas_logbook.py` |
+| Week 4 | `student_parts/week04_claude.md` | `student_parts/week04_retrieve_nanas_memory.py` |
 
 해당 주차 작업을 시작하기 전에 위 표에서 그 주차의 `weekN_claude.md`를 먼저 읽고 거기 적힌
 작업 목표·수정 범위·하지 말아야 할 것을 따른다. 새 주차가 추가되면 같은 이름 규칙

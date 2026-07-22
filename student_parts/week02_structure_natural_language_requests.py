@@ -320,8 +320,8 @@ StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구
         """Week 1 tool(personal_create_schedule 등) 호출 결과로 JSON을 이미 받았다면, 같은 정보를
 다시 얻기 위해 tool을 재호출하지 않는다. 그 payload를 그대로 읽어 structured_response의 필드를
 채우는 근거로 사용한다.""",
-        """Week 2에서는 아직 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다. 구조화 결과를
-DB에 저장하거나 다른 사람 일정과 조율하는 동작은 이번 주차 범위 밖이다.""",
+        """Week 2에서는 아직 외부 멤버 일정 조율을 하지 않는다. 구조화 결과를 다른 사람 일정과
+조율하는 동작은 이번 주차 범위 밖이다.""",
     ]
 
 

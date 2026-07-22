@@ -643,7 +643,7 @@ def week03_prompt_parts() -> list[str]:
         "저장된 일정 목록이나 내 일정 조회 요청은 personal_list_saved_schedules로 앱 SQLite 일정 row를 확인한다. "
         "personal_list_schedules는 Week 1-2 현재 대화 임시 메모리 조회 전용이므로 Week 3의 단순 일정 조회에는 사용하지 않는다. "
         "새 대화에서 이전에 저장한 중요한 일정/할 일/알림을 참고해야 할 때는 대화 전사가 아니라 SQLite 조회 도구 결과만 근거로 삼는다. "
-        "Week 3에서는 개인 RAG와 외부 멤버 일정 조율을 처리하지 않는다. "
+        "Week 3에서는 외부 멤버 일정 조율을 처리하지 않는다. "
         "도구 결과에 없는 사실은 만들지 않는다."
     ]
 
