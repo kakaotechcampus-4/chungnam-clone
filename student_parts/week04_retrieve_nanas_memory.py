@@ -226,7 +226,15 @@ def add_personal_reference_dict(
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    saved = dict(
+        reference_store.add_personal_reference(
+            title=title,
+            content=content,
+            tags=tags or [],
+        )
+    )
+    backend = saved.pop("backend", None) or reference_store.backend_info()
+    return {"reference_backend": backend, "reference": saved}
 
 
 def search_personal_reference_hits(
@@ -238,7 +246,19 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    found = reference_store.search_personal_references(query=query, limit=top_k)
+    return [
+        {
+            "id": item.get("id"),
+            "content": item.get("content", ""),
+            "distance": item.get("distance"),
+            "metadata": {
+                "title": item.get("title", ""),
+                "tags": item.get("tags", ""),
+            },
+        }
+        for item in found
+    ]
 
 
 def search_saved_request_rows(
@@ -250,7 +270,15 @@ def search_saved_request_rows(
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    found = sqlite_store.search_saved_requests(query, limit=top_k)
+
+    rows: list[dict[str, Any]] = []
+    for row in found:
+        item = dict(row)
+        item["members"] = _decode_attendees(item.pop("members_json", None))
+        item.pop("raw_json", None)
+        rows.append(item)
+    return rows
 
 
 def search_conversation_messages_dict(
@@ -285,7 +313,13 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    payload = add_personal_reference_dict(
+        REFERENCE_STORE,
+        title=title,
+        content=content,
+        tags=tags or [],
+    )
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
@@ -293,7 +327,9 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    limit = safe_limit(top_k, default=2, maximum=20)
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=limit)
+    return json_payload({"query": query, "hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -301,7 +337,9 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    limit = safe_limit(top_k, default=3, maximum=50)
+    rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=limit)
+    return json_payload({"query": query, "rows": rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -337,7 +375,7 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
+        # search_conversation_messages,
     ]
 
 
@@ -353,6 +391,24 @@ def week04_prompt_parts() -> list[str]:
     return [
         *week03_prompt_parts(),
         # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        "너는 Kanana의 Week 4 Nana memory agent다. "
+        "Week 3의 '개인 RAG를 처리하지 않는다'는 제약은 Week 4부터 해제된다. "
+        "이제 개인 참고자료 저장소와 SQLite 기록을 출처별로 구분해 검색한다.",
+        "사용자가 자기 취향, 습관, 규칙, 메모, 참고할 내용을 알려주면 "
+        "add_personal_reference로 저장한다. title은 짧은 제목, content는 사용자가 말한 원문, "
+        "tags는 나중에 찾기 쉬운 핵심어 목록으로 넣는다. "
+        "일정/할 일/알림처럼 날짜와 시간이 있는 요청은 참고자료가 아니므로 Week 3 저장 도구를 그대로 쓴다.",
+        "저장해 둔 메모나 개인 취향의 내용을 묻는 질문은 search_personal_references를 호출한다. "
+        "'내가 적어둔 게 뭐였지', '나는 어떤 시간대를 선호하지' 같은 질문이 여기에 해당한다. "
+        "query에는 사용자 질문을 그대로 넣거나 핵심 명사구만 남겨 넣는다. "
+        "이 검색은 의미가 비슷하면 단어가 달라도 찾으므로 query를 억지로 축약하지 않아도 된다.",
+        "저장된 일정/할 일/알림 중 특정 키워드가 들어간 기록을 찾을 때는 search_saved_requests를 호출한다. "
+        "이 검색은 LIKE 문자열 매칭이므로 query에는 제목이나 내용에 실제로 들어 있을 짧은 핵심어만 넣는다. "
+        "반면 '내 일정 보여줘'처럼 조건 없이 목록을 보는 요청은 Week 3의 personal_list_saved_schedules를 쓴다. "
+        "날짜 범위로 좁히는 조회도 personal_list_saved_schedules의 date_from/date_to를 사용한다.",
+        "어느 출처인지 애매하면 search_personal_references와 search_saved_requests를 모두 호출해 결과를 비교한다. "
+        "답변은 tool 결과의 hits 또는 rows에 실제로 있는 값만 근거로 삼는다. "
+        "검색 결과가 비어 있으면 지어내지 말고 저장된 내용을 찾지 못했다고 답한다.",
     ]
 
 
