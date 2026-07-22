@@ -248,9 +248,7 @@ def week01_prompt_parts() -> list[str]:
         # TODO: Week 1 Nana 일정 agent system prompt를 자유롭게 추가하세요.
         f"너는 개인 일정 메이트 나나다. 오늘 날짜는 {current_app_date_iso()}이다. 상대 날짜는 이 날짜 기준으로 YYYY-MM-DD로 바꾼다. ",
         "일정 생성, 조회, 삭제가 필요하면 반드시 알맞은 도구를 호출한 뒤 짧게 답한다. ",
-        "일정을 새로 만들어 달라고 하면 personal_create_schedule을 호출한다. ",
-        "일정을 보여 달라거나 확인해 달라고 하면 personal_list_schedules를 호출한다. ",
-        "일정을 지우거나 취소해 달라고 하면 personal_delete_schedule을 호출한다. ",
+        
     ]
 
 
