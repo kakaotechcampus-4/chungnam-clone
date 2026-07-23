@@ -15,8 +15,10 @@ from pydantic import ValidationError
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+from fixed.session_scope import conversation_session_scope  # noqa: E402
 from fixed.store_base import new_id, now_iso  # noqa: E402
 from student_parts.week04_retrieve_nanas_memory import (  # noqa: E402
+    CONVERSATION_RAG_STORE,
     REFERENCE_STORE,
     SQLITE_STORE,
     AddPersonalReferenceInput,
@@ -28,10 +30,16 @@ from student_parts.week04_retrieve_nanas_memory import (  # noqa: E402
     add_personal_reference_dict,
     json_payload,
     safe_limit,
+    search_conversation_message_rows,
+    search_conversation_messages,
+    search_conversation_messages_dict,
     search_personal_reference_hits,
     search_personal_references,
     search_saved_request_rows,
     search_saved_requests,
+    week04_prompt_parts,
+    week04_system_prompt,
+    week04_tools,
     _decode_attendees,
 )
 
@@ -545,3 +553,125 @@ def test_ref_tool_rejects_out_of_range_top_k(seeded_references, bad_top_k):
     # 스키마 범위(1~20) 밖 top_k는 실행 전 거부
     with pytest.raises(Exception):
         search_personal_references.invoke({"query": "커피", "top_k": bad_top_k})
+
+
+# ============================================================
+# 대화 RAG — search_conversation_messages
+# ============================================================
+@pytest.fixture(scope="module")
+def seeded_conversations():
+    # 서로 다른 주제의 대화 2개를 SQLite에 만들고, 끝나면 삭제 후 재sync로 ChromaDB 청크까지 정리
+    ca = SQLITE_STORE.create_conversation(title=f"{MARKER} 김치찌개")["conversation_id"]
+    SQLITE_STORE.append_message(ca, "user", "김치찌개에는 돼지고기를 넣어야 국물이 깊고 진해진다.")
+    SQLITE_STORE.append_message(ca, "assistant", "돼지고기 김치찌개 국물 팁을 기억해 두겠습니다.")
+    cb = SQLITE_STORE.create_conversation(title=f"{MARKER} 파이썬")["conversation_id"]
+    SQLITE_STORE.append_message(cb, "user", "파이썬 데코레이터는 함수를 감싸 기능을 덧붙이는 문법이다.")
+    SQLITE_STORE.append_message(cb, "assistant", "데코레이터 개념을 기록해 두겠습니다.")
+    yield {"a": ca, "b": cb}
+    for conv in (ca, cb):
+        SQLITE_STORE.delete_conversation(conv)
+    CONVERSATION_RAG_STORE.sync_from_sqlite(SQLITE_STORE)
+
+
+def test_conv_dict_keys(seeded_conversations):
+    # worker 반환에 hits/rows/context/rag_backend/sync 키가 모두 있는지
+    result = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query="돼지고기 국물", top_k=5)
+    assert set(result) >= {"hits", "rows", "context", "rag_backend", "sync"}
+
+
+def test_conv_rows_equals_hits(seeded_conversations):
+    # rows와 hits는 같은 데이터를 담는지
+    result = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query="데코레이터", top_k=5)
+    assert result["rows"] == result["hits"]
+
+
+def test_conv_conversation_id_filter(seeded_conversations):
+    # conversation_id를 주면 그 대화의 청크만 반환하는지
+    ca = seeded_conversations["a"]
+    result = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query="국물", top_k=5, conversation_id=ca)
+    assert result["hits"]
+    assert all(h["conversation_id"] == ca for h in result["hits"])
+
+
+def test_conv_excludes_current_conversation(seeded_conversations):
+    # 현재 대화(scope=ca)에서 tool을 부르면 ca 청크가 빠지는지 — 대조로 공허한 통과를 방지
+    ca = seeded_conversations["a"]
+    query = "돼지고기 국물 진하게"
+    # (대조) 제외 없이는 ca가 결과에 포함되어야 이 테스트가 의미를 가진다
+    base = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query=query, top_k=10)
+    assert any(h["conversation_id"] == ca for h in base["hits"]), "제외 전에는 ca가 잡혀야 대조가 성립"
+    # 현재 대화=ca로 두면 ca 청크는 결과에서 빠져야 한다
+    with conversation_session_scope(ca):
+        out = json.loads(search_conversation_messages.invoke({"query": query, "top_k": 10}))
+    assert all(h["conversation_id"] != ca for h in out["hits"])
+
+
+def test_conv_tool_json_keys(seeded_conversations):
+    # tool 반환 JSON에 hits/rows/context/sync 키가 있는지
+    out = json.loads(search_conversation_messages.invoke({"query": "데코레이터", "top_k": 5}))
+    assert set(out) >= {"hits", "rows", "context", "sync"}
+
+
+def test_conv_message_rows_helper(seeded_conversations):
+    # _rows 헬퍼가 hit dict들의 list(각 hit에 conversation_id/content 포함)를 반환하는지
+    # (독립된 두 RAG 검색의 정확한 일치를 기대하면 임베딩 재호출로 flaky하므로 구조만 검증)
+    rows = search_conversation_message_rows(SQLITE_STORE, query="김치찌개 돼지고기", top_k=5)
+    assert isinstance(rows, list)
+    assert all(isinstance(h, dict) and "conversation_id" in h and "content" in h for h in rows)
+
+
+@pytest.mark.parametrize("top_k", [1, 2, 3])
+def test_conv_top_k_respected(seeded_conversations, top_k):
+    # top_k가 결과 개수 상한으로 작동하는지
+    result = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query="회의", top_k=top_k)
+    assert len(result["hits"]) <= top_k
+
+
+@pytest.mark.parametrize("bad_top_k", [0, 51, 999])
+def test_conv_tool_rejects_out_of_range_top_k(seeded_conversations, bad_top_k):
+    # 스키마 범위(1~50) 밖 top_k는 실행 전 거부
+    with pytest.raises(Exception):
+        search_conversation_messages.invoke({"query": "김치찌개", "top_k": bad_top_k})
+
+
+# ============================================================
+# 배선 조립 — week04_tools / prompt_parts / system_prompt (프록시 불필요)
+# ============================================================
+def test_week04_tools_includes_week4_rag_tools():
+    # 4주차 RAG 도구 4개가 목록에 노출되는지
+    names = {t.name for t in week04_tools()}
+    assert {"add_personal_reference", "search_personal_references",
+            "search_saved_requests", "search_conversation_messages"} <= names
+
+
+def test_week04_tools_accumulates_week3_tools():
+    # week03 도구(저장/조회/수정/삭제)가 그대로 누적되는지
+    names = {t.name for t in week04_tools()}
+    assert {"save_structured_request", "personal_list_saved_schedules",
+            "personal_delete_saved_schedules", "extract_schedule_request"} <= names
+
+
+def test_week04_tool_names_unique():
+    # 같은 이름 도구가 중복 노출되지 않는지(week1 create를 week4용으로 교체하므로)
+    names = [t.name for t in week04_tools()]
+    assert len(names) == len(set(names))
+
+
+def test_week04_prompt_parts_are_strings():
+    # 프롬프트 조각이 모두 비어있지 않은 문자열인지
+    parts = week04_prompt_parts()
+    assert parts and all(isinstance(p, str) and p.strip() for p in parts)
+
+
+def test_week04_prompt_accumulates_on_week3():
+    # week03 프롬프트 위에 week4 조각이 누적되는지(개수가 더 많아야)
+    from student_parts.week03_build_nanas_logbook import week03_prompt_parts
+    assert len(week04_prompt_parts()) > len(week03_prompt_parts())
+
+
+def test_week04_system_prompt_mentions_all_search_tools():
+    # 라우팅 안내에 3개 검색 도구가 모두 언급되는지(LLM이 고를 근거)
+    sp = week04_system_prompt()
+    assert isinstance(sp, str) and sp.strip()
+    for name in ("search_personal_references", "search_saved_requests", "search_conversation_messages"):
+        assert name in sp
