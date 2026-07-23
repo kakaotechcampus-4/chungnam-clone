@@ -277,8 +277,28 @@ def search_conversation_messages_dict(
 ) -> dict[str, Any]:
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
-    # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    # ① SQLite 대화를 ChromaDB에 lazy sync — 바뀐 대화만 반영(sync 통계 반환).
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+
+    # ② 현재 대화 제외 규칙: conversation_id를 명시하면 그 대화 안에서 검색하고,
+    #    명시하지 않으면 지금 진행 중인 대화(current_session_scope)를 검색에서 제외한다.
+    #    → "방금 내가 한 말"이 과거 검색 결과처럼 섞이는 것을 막는다.
+    exclude = None if conversation_id else current_session_scope()
+    hits = conversation_rag_store.search(
+        query=query,
+        top_k=top_k,
+        exclude_conversation_id=exclude,
+        conversation_id=conversation_id,
+    )
+
+    # ③ hits/rows(같은 데이터)와 함께 근거 문자열(context)·검색 backend·sync 통계를 담아 반환.
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync,
+    }
 
 
 def search_conversation_message_rows(
@@ -290,8 +310,11 @@ def search_conversation_message_rows(
 ) -> list[dict[str, Any]]:
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
-    # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    # worker가 조립한 결과에서 hits만 떼어 반환하는 얇은 헬퍼(모듈 싱글턴 store 사용).
+    result = search_conversation_messages_dict(
+        sqlite_store, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id
+    )
+    return result["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -338,8 +361,15 @@ def search_conversation_messages(
 ) -> str:
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    # 모듈 싱글턴 store를 worker에 넘겨 검색하고 결과를 JSON 문자열로 반환한다.
+    result = search_conversation_messages_dict(
+        SQLITE_STORE,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=safe_limit(top_k, default=5, maximum=50),
+        conversation_id=conversation_id,
+    )
+    return json_payload(result)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
