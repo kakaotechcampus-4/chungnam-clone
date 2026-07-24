@@ -252,12 +252,12 @@ def search_personal_reference_hits(
     raw_hits = reference_store.search_personal_references(query, top_k)
     return [
         {
-            "id": r_h["id"],
-            "content": r_h["content"],
-            "distance": r_h["distance"],
-            "metadata": {"title": r_h["title"], "tags": r_h["tags"]}
+            "id": hit["id"],
+            "content": hit["content"],
+            "distance": hit["distance"],
+            "metadata": {"title": hit["title"], "tags": hit["tags"]}
         }
-        for r_h in raw_hits
+        for hit in raw_hits
     ]
 
 
