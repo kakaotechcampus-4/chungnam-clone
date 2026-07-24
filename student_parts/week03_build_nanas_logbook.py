@@ -648,7 +648,7 @@ def week03_system_prompt() -> str:
             *week03_prompt_parts(),
             # Week 3 한정 범위 규칙: 재사용되는 prompt_parts에 두면 Week 4+가 "RAG 안 함"을
             # 상속한 뒤 "RAG 하라"로 부정하는 모순이 생기므로, Week 3 최종 조립에서만 추가한다.
-            "Week 3 범위: RAG 검색과 외부 멤버 일정 조율은 아직 하지 않는다.",
+            "지금은 기록의 저장·조회·수정·삭제까지 담당하고, 기억 검색(RAG)과 외부 멤버 일정 조율은 아직 하지 않는다.",
         ]
     )
 
@@ -659,9 +659,8 @@ def week03_prompt_parts() -> list[str]:
     return [
         *week02_prompt_parts(),
         (
-            "이제 너는 Week 3 기록장 agent다. "
-            "Week 2 방식으로 구조화한 결과를 최종 답변으로 끝내지 말고, "
-            "extract_schedule_request로 얻은 structured_request를 save_structured_request로 SQLite에 저장하는 것까지 수행한다."
+            "요청을 구조화하는 데서 멈추지 말고, extract_schedule_request로 얻은 structured_request를 "
+            "save_structured_request로 SQLite에 저장해 기록으로 남긴다."
         ),
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
