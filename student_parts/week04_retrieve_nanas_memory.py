@@ -224,9 +224,10 @@ def add_personal_reference_dict(
     tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
-
+    # 로직 명확화 + None인 경우 명확히 처리
+    # clean_tags = tags if tags is not None else []
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    saved = reference_store.add_personal_reference(title, content, tags or [])
+    saved = reference_store.add_personal_reference(title, content, tags if tags is not None else [])
     return {
         "reference_backend": saved["backend"],
         "reference" : {
