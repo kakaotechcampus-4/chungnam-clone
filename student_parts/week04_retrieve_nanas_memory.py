@@ -15,7 +15,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools, tool_result
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -311,7 +311,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
         content = content,
         tags = tags or []
     )
-    return json_payload(payload)
+    return json_payload(tool_result("add_personal_reference", **payload))
     
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
@@ -319,7 +319,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
 
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
     hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
-    return json_payload({"hits": hits})
+    return json_payload(tool_result("search_personal_references", hits=hits))
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -328,7 +328,7 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
     rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
-    return json_payload({"rows": rows})
+    return json_payload(tool_result("search_saved_requests", rows=rows))
 
 
 @tool(args_schema=SearchConversationMessagesInput)

@@ -216,7 +216,7 @@ def json_payload(payload: dict[str, Any]) -> str:
 
 
 def tool_result(tool_name: str, *, ok: bool = True, **payload: Any) -> dict[str, Any]:
-    """Week 3 tool들이 공통으로 쓰는 JSON payload 껍데기를 만듭니다."""
+    """Week 3, week4 tool들이 공통으로 쓰는 JSON payload 껍데기를 만듭니다."""
 
     return {"ok": ok, "tool_name": tool_name, **payload}
 
