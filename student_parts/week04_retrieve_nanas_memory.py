@@ -176,6 +176,22 @@ def safe_limit(limit: int, default: int = 5, maximum: int = 50) -> int:
     return max(1, min(value, maximum))
 
 
+def _messages_from_chunk(content: str) -> list[dict[str, str]]:
+    """대화 청크 본문에서 시각, 발화자, 내용을 분리해 메시지 목록으로 만듭니다."""
+
+    lines = content.split("\n")
+    if "[메시지]" not in lines:
+        return []
+    messages: list[dict[str, str]] = []
+    for line in lines[lines.index("[메시지]") + 1 :]:
+        parts = line.split(" | ", 2)
+        if len(parts) != 3:
+            continue
+        created_at, role, text = parts
+        messages.append({"created_at": created_at, "role": role, "content": text})
+    return messages
+
+
 class AddPersonalReferenceInput(BaseModel):
     """개인 참고자료 추가 입력입니다."""
 
@@ -285,6 +301,9 @@ def search_conversation_messages_dict(
         exclude_conversation_id=exclude_id,
         conversation_id=conversation_id,
     )
+    # 청크 본문에만 묻혀 있는 발화자 정보를 hit 안에서 바로 읽을 수 있게 꺼내 둔다.
+    for hit in hits:
+        hit["messages"] = _messages_from_chunk(hit.get("content", ""))
     return {
         "hits": hits,
         "rows": hits,
