@@ -237,10 +237,10 @@ def search_personal_reference_hits(
     raw_hits = reference_store.search_personal_references(query=query, limit=top_k)
     return [
             {
-                "id" : h["id"],
-                "content" : h["content"],
-                "distance" : h["distance"],
-                "metadata": {"title" : h["title"], "tags" : h["tags"]}    
+                "id" : h.get("id"),
+                "content" : h.get("content", ""),
+                "distance" : h.get("distance"),
+                "metadata": {"title" : h.get("title", ""), "tags" : h.get("tags", "")}
         }
         for h in raw_hits
     ]
@@ -295,7 +295,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
             "reference_id": result["reference_id"],
             "title": result["title"],
             "content": result["content"],
-            "tags": result["tags"], 
+            "tags": result["tags"],
             }
     }
 
@@ -306,7 +306,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
     
-    safe_top_k = safe_limit(top_k, 3)
+    safe_top_k = safe_limit(limit=top_k, default=3, maximum=5)
     result = search_personal_reference_hits(reference_store=REFERENCE_STORE, query=query, top_k=safe_top_k)
 
     payload = {"hits" : result, }
@@ -317,7 +317,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
 def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
-    safe_top_k = safe_limit(top_k, 3)
+    safe_top_k = safe_limit(limit=top_k, default=3, maximum=20)
     result = search_saved_request_rows(sqlite_store=SQLITE_STORE, query=query, top_k=safe_top_k)
 
     payload = {"rows" : result, }
@@ -375,13 +375,18 @@ def week04_prompt_parts() -> list[str]:
         *week03_prompt_parts(),    
             """
 저장된 참고자료나 기록에 대한 질문은 추측하지 말고 검색 tool을 먼저 호출한 뒤, 그 결과(hits/rows)를 근거로 답한다.
-- 사용자가 적어둔 자유 메모·참고자료·사실을 찾을 때(예: "발표 언제야?", "카나메이트 UI에 뭐 나와?")
+
+- 사용자가 적어둔 자유 메모·참고자료·사실을 찾을 때(예: "발표 언제야?", "카나메이트 UI에 뭐 나왔어?", "작업물 어디있지?"")
   → search_personal_references  (의미 기반 벡터 검색, 결과 키는 hits)
 - 저장된 구조화 일정·할 일·알림 기록을 찾을 때 (예: "저장된 회의 있어?", "group_schedule 보여줘")
   → search_saved_requests  (SQLite 검색, 결과 키는 rows)
-- 사용자가 메모/참고자료를 기억해달라고 하면 
+- 사용자가 메모/참고자료를 기억해달라고 하면(예: "발표 준비 시 제목을 유의해서 작성해야해.", "UI/UX 파트가 중요해", "나는 과일을 싫어해", 등 사용자의 선호 및 기억해야할 사항 등 다양한 주제의 자유 매모가 들어올 경우)
     → add_personal_reference 로 저장한다.
-""",
+
+유의사항 :
+    발표/자료/메모처럼 날짜·kind 없는 자유 사실을 물으면 반드시 search_personal_references를 사용하고, 
+    extract_schedule_request/list_saved_requests를 사용하지 않도록 한다. 
+    """,
     ]
 
 
