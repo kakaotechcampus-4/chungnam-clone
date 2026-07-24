@@ -267,7 +267,32 @@ def search_conversation_messages_dict(
 ) -> dict[str, Any]:
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+
+    # ① lazy sync: SQLite의 신규/변경 대화를 검색 직전에 ChromaDB로 반영
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+
+    # ② top_k 보정 (다른 tool과 일관되게 keyword로 명시)
+    safe_top_k = safe_limit(limit=top_k, default=5, maximum=20)
+
+    # ③ 검색 — conversation_id를 지정 안 하면 현재 대화는 제외("방금 한 말" 혼입 방지)
+    #    TODO: conversation_id가 없을 때 현재 대화(current_session_scope())를 exclude에 넣기
+    exclude = None if conversation_id else current_session_scope()
+    hits = conversation_rag_store.search(
+        query=query,
+        top_k=safe_top_k,
+        exclude_conversation_id=exclude,
+        conversation_id=conversation_id,
+    )
+
+    # ④ 근거 문자열 + 반환 계약(hits/rows 동일, context/rag_backend/sync 포함)
+    context = conversation_rag_store.context_from_hits(hits)
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": context,
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync,
+    }
 
 
 def search_conversation_message_rows(
@@ -280,7 +305,14 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    result = search_conversation_messages_dict(
+        sqlite_store,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )
+    return result["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -334,7 +366,14 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    result = search_conversation_messages_dict(
+        SQLITE_STORE,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )
+    return json_payload(result)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
@@ -358,7 +397,7 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        #search_conversation_messages, 현재 미구현으로 인해 tool 목록에서 제외
+        search_conversation_messages,
     ]
 
 
@@ -380,6 +419,8 @@ def week04_prompt_parts() -> list[str]:
   → search_personal_references  (의미 기반 벡터 검색, 결과 키는 hits)
 - 저장된 구조화 일정·할 일·알림 기록을 찾을 때 (예: "저장된 회의 있어?", "group_schedule 보여줘")
   → search_saved_requests  (SQLite 검색, 결과 키는 rows)
+- 이전에 나눈 대화·과거 채팅에서 오간 내용을 찾을 때 (예: "예전 대화에서 제주도 얘기 찾아줘", "지난번에 뭐라고 했지?")
+  → search_conversation_messages  (앱 대화 RAG 검색)
 - 사용자가 메모/참고자료를 기억해달라고 하면(예: "발표 준비 시 제목을 유의해서 작성해야해.", "UI/UX 파트가 중요해", "나는 과일을 싫어해", 등 사용자의 선호 및 기억해야할 사항 등 다양한 주제의 자유 매모가 들어올 경우)
     → add_personal_reference 로 저장한다.
 
