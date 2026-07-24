@@ -216,9 +216,6 @@ class SearchNanaMemoryInput(BaseModel):
     limit: int = Field(default=5, ge=1, le=20)
 
 
-# DB에 실제로 쓰기(write) 작업을 함, title, content, tags를 받아서 PersonalReferenceStore(ChromaDB 벡터 저장소)에 저장
-# "어떤 backend에 저장됐는지"는 fixed/reference_store.py의 backend_info()를 보면 알 수 있음
-# 마지막으로 저장된 reference row를 dict로 반환함
 def add_personal_reference_dict(
     reference_store: PersonalReferenceStore,
     *,
@@ -229,11 +226,6 @@ def add_personal_reference_dict(
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    # - title/content/tags를 REFERENCE_STORE.add_personal_reference에 넘깁니다.
-    # - tags가 None이면 빈 list로 바꿉니다.
-    # - 이 tool 안에서 reference_backend와 reference가 있는 JSON payload를 완성합니다.
-    if tags is None :
-        tags = tags or []
     result = reference_store.add_personal_reference(title=title, content=content, tags=tags)
     return result
     
@@ -265,12 +257,6 @@ def search_personal_reference_hits(
     return result
     
     
-
-# SQLITE_STORE.search_saved_requests(query, limit)를 호출합니다.
-# - top_k는 이 tool 안에서 안전한 범위로 정리합니다.
-# - 검색 결과가 없으면 rows=[]를 그대로 반환합니다.
-# - course repo 기준 계약에 맞게 top-level {"rows": [...]} JSON을 반환합니다.
-# AppSQLiteStore의 저장 요청 검색 결과를 rows 배열로 반환합니다. 일정/할 일/알림 구조화 기록을 찾을 때 사용합니다.
 def search_saved_request_rows(
     sqlite_store: AppSQLiteStore,
     *,
@@ -280,7 +266,7 @@ def search_saved_request_rows(
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    result = sqlite_store.search_saved_requests(query, top_k)
+    result = sqlite_store.search_saved_requests(query, limit=top_k)
     return result
 
 
@@ -295,7 +281,22 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    result = sqlite_store.search_conversation_messages(query, top_k, conversation_id)
+    result = conversation_rag_store.sync_from_sqlite(sqlite_store) # 이전에 했던 대화들만 한 번에 임베딩 해옴
+    exclude_conversation_id = None
+    if conversation_id is None:
+        exclude_conversation_id = current_session_scope() # 현재 대화 제외
+
+    # 위 과정은 호출만 해왔고, 검색은 아직 안 함
+    # 검색 하는 함수 호출해서 검색 해오기
+    hits = conversation_rag_store.search(query=query, top_k=top_k, exclude_conversation_id=exclude_conversation_id, conversation_id=conversation_id)
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": result,
+    }
+    
 
 
 def search_conversation_message_rows(
@@ -308,7 +309,8 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    result = search_conversation_messages_dict(sqlite_store, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return result["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -316,7 +318,6 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    # 참고자료 추가 tool입니다. title/content/tags를 받아 vector store에 저장하고 JSON 문자열을 반환합니다.
     result = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
     payload = {
         "reference_backend": result["backend"],
@@ -332,7 +333,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
     top_k = safe_limit(top_k, default=2, maximum=20)
     hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
-    return json.payload({"hits": hits})
+    return json_payload({"hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -341,8 +342,8 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
     top_k = safe_limit(top_k, default=3, maximum=20)
-    rows = search_saved_requests(SQLITE_STORE, query=query, top_k=top_k)
-    return json.payload({"rows": rows})
+    rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
+    return json_payload({"rows": rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -354,7 +355,10 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=5, maximum=20)
+    result = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return json_payload(result)
+    
 
 
 @tool(args_schema=SearchNanaMemoryInput)
@@ -367,8 +371,7 @@ def search_nana_memory(
 ) -> str:
     """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
 
-    # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
-    ...
+
 
 def week04_tools() -> list[Any]:
     """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
@@ -394,6 +397,17 @@ def week04_prompt_parts() -> list[str]:
     return [
         *week03_prompt_parts(),
         # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        f"Agent는 Week 4 memory agent이고, 현재 날짜는 {current_app_date_iso()}이다.",
+        "너는 이번주차부터 사용자의 정보를 기억하고, 사용자가 선호하는 것, 해야 할 일에 대해서 답한다.",
+        "사용자의 정보를 기억하려면 add_personal_reference를 호출하여 기억한다.",
+        "선호하는 것과 개인 참고 자료에 대해선 search_personal_references를 호출하여 답한다.",
+        "저장된 일정과 해야 할 일에 대해선 search_saved_requests를 호출하여 답한다.",
+        "저장된 일정과 해야 할 일 외 대화에 대해선 search_conversation_messages를 호출하여 답한다.",
+        "과거에 발화만으로 사실을 단정짓지 말고, 실제 검색된 근거를 바탕으로 답한다.",
+        "기억하라고 한 내용만 저장하고, 그렇지 않은 것은 절대 저장하지 않는다.",
+        "conversation_id는 절대 임의로 만들지 않는다.",
+        "실제 conversation_id를 알고 있는 경우가 아니면 항상 비워두고 검색해라.",
+        "답할 때 취소선 문법인 물결 두 개(~~)를 사용하지 않는다.",
     ]
 
 
