@@ -285,9 +285,21 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
-
-
+    top_k = safe_limit(top_k, default=5, maximum=50)
+    sync_info = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    # 현재 대화 범위를 scope 변수에 담기
+    scope = current_session_scope()
+    # 이후 exclude_id 변수에 안전 검사 뒤 scope 넣어주기 -> 현재 진행 중인 대화를 제외하여 검색으로 들어오지 않게 함.
+    exclude_id = None if conversation_id else (scope if scope != DEFAULT_SESSION_SCOPE else None)
+    # 그 후 검색 진행
+    hits = conversation_rag_store.search(query=query, top_k=top_k, exclude_conversation_id=exclude_id, conversation_id=conversation_id)
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync_info
+    }
 def search_conversation_message_rows(
     sqlite_store: AppSQLiteStore,
     *,
@@ -298,8 +310,8 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
-
+    result = search_conversation_messages_dict(sqlite_store, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return result["hits"]
 
 @tool(args_schema=AddPersonalReferenceInput)
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
@@ -341,8 +353,8 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
-
+    payload = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return json_payload(tool_result("search_conversation_messages", **payload))
 
 @tool(args_schema=SearchNanaMemoryInput)
 def search_nana_memory(
