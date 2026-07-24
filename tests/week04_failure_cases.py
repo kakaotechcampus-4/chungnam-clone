@@ -5,18 +5,34 @@
 
 실행: 저장소 루트에서  python tests/week04_failure_cases.py
 임베딩/LLM에 의존하는 스토어 메서드는 stub으로 대체해 테스트 로직은 네트워크를 타지 않습니다.
-(모듈 import 시 실제 참고자료 스토어 seed가 1회 일어날 수 있으나 테스트 결과에는 영향 없음)
-임시 SQLite와 stub store를 쓰므로 실제 앱 데이터(data/)는 건드리지 않습니다.
+week04는 import 시점에 전역 store를 생성하므로, 모듈을 import하기 "전에" CONFIG의 저장소
+경로를 임시 디렉터리로 돌립니다(아래). 그래서 import 중 만들어지는 파일까지 임시 폴더에만
+생기고 실제 앱 데이터(data/)는 전혀 건드리지 않습니다.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+# week04는 import 시점에 전역 store(REFERENCE_STORE/SQLITE_STORE/CONVERSATION_RAG_STORE)를
+# 만들기 때문에, "모듈 import 전에" CONFIG의 저장소 경로를 임시 디렉터리로 돌려 둔다.
+# (이 순서가 아니면 실제 Chroma/SQLite 파일이 import 도중에 생성된다 — 멘토 리뷰 반영)
+import fixed.config as _cfg
+
+_TMP = Path(tempfile.mkdtemp(prefix="week4_failure_"))
+_cfg.CONFIG = dataclasses.replace(
+    _cfg.CONFIG,
+    chroma_dir=_TMP / "chroma",
+    app_db_path=_TMP / "app.sqlite3",
+    external_db_path=_TMP / "external.sqlite3",
+    proxy_token=_cfg.PROXY_TOKEN_PLACEHOLDER,  # has_openai_key=False → import 시 seed(네트워크) 방지
+)
 
 from fixed.app_store import AppSQLiteStore
 from fixed.session_scope import conversation_session_scope
@@ -62,8 +78,7 @@ class FakeConvStore:
         return {"vector_store": "fake_conv"}
 
 
-tmp = Path(tempfile.mkdtemp(prefix="week4_failure_"))
-sqlite_store = AppSQLiteStore(tmp / "app.sqlite3")
+sqlite_store = AppSQLiteStore(_TMP / "test_app.sqlite3")
 fake_ref = FakeReferenceStore()
 fake_conv = FakeConvStore()
 w4.REFERENCE_STORE = fake_ref
