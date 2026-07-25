@@ -80,6 +80,40 @@ search_saved_requests는 SQLITE_STORE.search_saved_requests를 호출하면 되�
 - 직접 수정한 부분 : safe_limit(top_k, default=3, maximum=50) 으로 top_k를 보정한 뒤, SQLITE_STORE.search_saved_requests(query, limit=top_k) 를 호출해서 결과를 rows 에 담았다. 검색 결과가 비어 있어도 빈 리스트를 그대로 유지하고, 최종 반환은 {"rows": rows} 로 감쌌다.
 - 수정 이유 : SQL 쿼리 조립과 LIKE 검색 로직은 store 메서드가 전부 처리하므로 tool에서 쿼리를 직접 쓸 필요가 없고, kind 필터도 store 기본값 None이 조건에서 빠지게 해준다. 또 결과가 없을 때 예외를 던지거나 None을 반환하면 LLM이 오류로 오해할 수 있으므로, rows=[] 를 유지해서 "검색했지만 없다"를 정상 응답으로 전달해야 하기 때문이다.
 
+### search_conversation_messages() 함수 구현하기
+
+- AI 활용 내용 :
+
+```
+search_conversation_messages를 구현하려는데 ConversationRAGStore의 API가 어떻게 되는지 알려 줘.
+SQLite 대화를 ChromaDB에 sync하는 메서드랑 검색 메서드 시그니처,
+```
+
+```
+자꾸 오류가 나서 그러는데 conversation_id를 안 줬을 때
+"지금 하고 있는 대화"를 검색에서 빼려면 어떻게 해야 하는지도 같이 봐 줘.
+반환 JSON에 어떤 키들을 둬야 하는지도 알려 줘.
+```
+
+위의 프롬프트로 ConversationRAGStore가 sync_from_sqlite(sqlite_store) 로 lazy sync를 하고, search(query, top_k, exclude_conversation_id, conversation_id) 로 검색하며, context_from_hits(hits) 와 backend_info() 로 근거 문자열/백엔드 정보를 만든다는 것을 확인하였다. 특히 conversation_id를 명시하지 않았을 때는 exclude_conversation_id=current_session_scope() 를 넘기면 search 내부에서 현재 대화 청크만 걸러 준다는 것을 확인한 뒤, "헬퍼가 정리하고 tool이 json_payload로 감싼다"는 설계 방향을 설명 듣고나서 구현하였다.
+
+- 직접 수정한 부분 : AI가 너무 잘 구ㅕㄴ해서 따로 수정할 부분이 없었다 ㅜㅜ
+
+### search_nana_memory() 함수 구현하기
+
+- AI 활용 내용 :
+
+```
+search_nana_memory는 이전 버전 호환용 통합 검색 tool이라던데, 이 repo에 이걸 참조하는 테스트나 코드가 있어서
+꼭 맞춰야 하는 응답 구조가 있는지 먼저 확인해 줘. 없다면 개인 참고자료 hit랑 SQLite 일정 chunk를 어떻게 묶어서
+context 문자열로 만들면 되는지, 일정은 어떤 store 메서드로 가져와야 attendees까지 디코딩돼서 나오는지도 알려 줘.
+```
+
+위의 프롬프트로 이 레포에는 search_nana_memory를 참조하는 테스트나 다른 코드가 없어 엄격히 맞춰야 할 기존의 구조는 없다는 것을 확인하였다. 또 list_schedules(limit, kind, date_from, date_to) 가 decode_schedule_row를 거쳐 attendees를 이미 list로 디코딩한 row를 돌려주므로 attendee 필터를 파이썬에서 바로 걸 수 있다는 것을 확인한 뒤, 참고자료 hit와 일정 chunk를 하나의 context 문자열로 묶는 방향을 설명 듣고나서 구현하였다.
+
+- 직접 수정한 부분 : safe_limit(limit, default=5, maximum=20) 으로 limit을 보정하고, search_personal_reference_hits로 참고자료 hit를 가져왔다. 일정은 SQLITE_STORE.list_schedules 로 받아온 후 attendee가 있으면 attendees 리스트에 포함된 row만 남기도록 필터링했다.
+- 수정 이유 : 이전 trace/테스트 호환을 위해 tool 자체는 남기되, 출처별 tool이 실제 핵심이므로 week04_tools()에는 노출하지 않았다. 두 출처를 한 번에 묶은 context 문자열이 있어야 LLM이 통합 근거를 한눈에 읽을 수 있고, list_schedules가 SQL 필터(date_from/date_to)와 attendees 디코딩을 이미 처리하므로 tool에서 쿼리를 직접 작성하지 않고 attendee만 파이썬에서 걸러 코드를 단순하게 유지할 수 있기 때문이다..
+
 ---
 
 ## 구현하면서 고민한 점
