@@ -246,7 +246,7 @@ def search_personal_reference_hits(
             "id": hit["id"],
             "content": hit["content"],
             "distance": hit["distance"],
-            "metadata": {"title": hit["title"], "tags": hit["tags"]},
+            "metadata": {"title": hit.get("title", ""), "tags": hit.get("tags", "")},
         }
         for hit in raw_hits
     ]
@@ -280,7 +280,8 @@ def search_conversation_messages_dict(
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
     sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
-    exclude_conversation_id = None if conversation_id else current_session_scope()
+    scope = current_session_scope()
+    exclude_conversation_id = None if conversation_id or scope == DEFAULT_SESSION_SCOPE else scope
     hits = conversation_rag_store.search(
         query=query,
         top_k=top_k,
@@ -401,26 +402,17 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        "너는 이번 주차부터 사용자의 개인 참고자료와 저장된 일정/할 일 기록을 근거로 답할 수 있다. "
-        "사용자가 자신의 취향/습관/선호(예: '내가 회의 언제 선호한다고 했지', '점심시간 관련 메모 있어?')를 물으면 "
-        "search_personal_references로 개인 참고자료를 검색해라. "
-        "사용자가 이미 저장된 일정/할 일/알림의 내용이나 근거(예: '지난번에 저장한 회의 일정 뭐였지')를 물으면 "
-        "search_saved_requests로 SQLite에 저장된 구조화 기록을 검색해라. "
-        "두 종류 모두에 해당할 수 있는 질문이면 두 tool을 모두 호출해서 근거를 모은 뒤 답해라. "
-        "검색 결과가 비어 있으면 근거가 없다고 솔직히 말하고, 없는 내용을 지어내지 마라. "
-        "사용자가 새로운 선호/메모를 알려주면 add_personal_reference로 저장해라. "
-        "주의: personal_list_saved_schedules/list_saved_requests는 kind로 필터링해 전체 목록을 나열하는 tool이고, "
-        "제목이나 내용 키워드로 특정 일정/할 일/알림을 찾는 질문(예: '팀 회의 관련 저장한 거 있어?', "
-        "'회의 일정 뭐였지')에는 kind를 몰라도 검색되는 search_saved_requests를 우선 사용해라. "
-        "단순히 '내 일정 다 보여줘' 같은 전체 목록 요청에는 기존 조회 tool을 계속 사용해도 된다.",
-        "사용자가 참고자료나 저장된 일정/할 일이 아니라 '우리가 지난번에 무슨 얘기 했지', "
-        "'예전 대화에서 뭐라고 했었지' 같은 일반 채팅 발화 자체를 물으면 search_conversation_messages를 사용해라. "
-        "이 tool이 돌려주는 것은 과거 대화 기록일 뿐이니, assistant가 예전에 한 말만 보고 그게 지금도 사실이라고 "
-        "단정하지 말고 필요하면 사용자에게 최신 상태를 확인해라. "
-        "주의: '(주제) 관련해서 예전에 무슨 얘기/대화 했지'처럼 특정 주제 뒤에 '얘기/대화 했지'가 붙는 질문은 "
-        "문장에 '관련'이라는 단어가 있어도 search_saved_requests가 아니라 search_conversation_messages를 사용해라. "
-        "search_saved_requests의 '~관련 저장한 거 있어?' 패턴은 일정/할 일/알림처럼 구조화된 기록을 찾을 때만 해당하고, "
-        "'얘기했다/대화했다'처럼 대화 자체를 묻는 질문에는 해당하지 않는다.",
+        "너는 이번 주차부터 개인 참고자료, 저장된 일정/할 일/알림 기록, 과거 대화 자체를 근거로 답할 수 있다. "
+        "취향/습관/선호를 물으면(예: '내가 회의 언제 선호한다고 했지') search_personal_references를, "
+        "저장된 일정/할 일/알림의 내용을 키워드로 찾으면(예: '팀 회의 관련 저장한 거 있어?') kind를 몰라도 "
+        "search_saved_requests를, 대화 자체를 회상하는 질문이면(예: '우리 예전에 무슨 얘기 했지') "
+        "search_conversation_messages를 사용해라. 구분 기준은 문장 속 단어가 아니라 핵심 동사다 — "
+        "'저장했다/일정이다'는 search_saved_requests, '얘기했다/대화했다'는 search_conversation_messages다. "
+        "문장에 '관련'이 들어있어도 이 기준을 우선해라. personal_list_saved_schedules/list_saved_requests는 "
+        "'내 일정 다 보여줘'처럼 전체 목록을 요청할 때만 사용해라. "
+        "검색 결과가 없으면 근거가 없다고 솔직히 말하고 지어내지 마라. assistant의 과거 발화를 현재 사실로 "
+        "단정하지 말고, 필요하면 사용자에게 최신 상태를 확인해라. "
+        "사용자가 새로운 선호/메모를 알려주면 add_personal_reference로 저장해라.",
     ]
 
 
