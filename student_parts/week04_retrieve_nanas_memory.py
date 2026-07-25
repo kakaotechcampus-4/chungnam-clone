@@ -225,8 +225,8 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    return reference_store.add_personal_reference(title, content, tags or [])
+
+    return reference_store.add_personal_reference(title, content, tags)
 
 
 def search_personal_reference_hits(
@@ -373,9 +373,14 @@ def search_nana_memory(
     # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
     normalized_limit = safe_limit(limit, default=5, maximum=20)
     reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=normalized_limit)
-    schedule_rows = SQLITE_STORE.list_schedules(limit=normalized_limit, date_from=date_from, date_to=date_to)
+    # list_schedules는 query 키워드를 받지 않으므로, 넉넉히 후보를 받아온 뒤 title 기준으로 직접 필터링합니다.
+    schedule_rows = SQLITE_STORE.list_schedules(limit=200, date_from=date_from, date_to=date_to)
+    query_text = query.strip().lower()
+    if query_text:
+        schedule_rows = [row for row in schedule_rows if query_text in (row.get("title") or "").lower()]
     if attendee:
         schedule_rows = [row for row in schedule_rows if attendee in (row.get("attendees") or [])]
+    schedule_rows = schedule_rows[:normalized_limit]
 
     context_lines = ["[개인 참고자료]"]
     if reference_hits:
