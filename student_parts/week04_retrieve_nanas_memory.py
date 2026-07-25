@@ -271,10 +271,15 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     sync_result = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    # conversation_id를 명시하지 않으면 현재 세션 ID를 자동으로 제외
+    # DEFAULT_SESSION_SCOPE는 앱 밖 직접 호출 시 반환되므로 그 경우엔 제외하지 않음
+    effective_exclude = conversation_id or current_session_scope()
+    if effective_exclude == DEFAULT_SESSION_SCOPE:
+        effective_exclude = None
     hits = conversation_rag_store.search(
         query=query,
         top_k=top_k,
-        exclude_conversation_id=conversation_id,
+        exclude_conversation_id=effective_exclude,
     )
     context = conversation_rag_store.context_from_hits(hits)
     rag_backend = conversation_rag_store.backend_info()

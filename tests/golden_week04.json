@@ -47,10 +47,78 @@
         "has_field": "rows",
         "rows_max_count": 1
       }
+    },
+    {
+      "id": "search_conversation_messages_structure",
+      "tier": "main",
+      "desc": "search_conversation_messages 결과에 hits/rows/context/rag_backend/sync 키가 모두 있다 (빈 DB)",
+      "tool": "search_conversation_messages",
+      "input": { "query": "회의 점심" },
+      "expect": {
+        "has_keys": ["hits", "rows", "context", "rag_backend", "sync"]
+      }
+    },
+    {
+      "id": "search_conversation_messages_hits_list",
+      "tier": "main",
+      "desc": "빈 DB에서 검색하면 hits와 rows가 list 타입이다",
+      "tool": "search_conversation_messages",
+      "input": { "query": "아무거나" },
+      "expect": {
+        "hits_is_list": true,
+        "rows_is_list": true
+      }
+    },
+    {
+      "id": "search_conversation_messages_exclude_current",
+      "tier": "extra",
+      "desc": "conversation_id를 명시하지 않아도 현재 세션이 자동으로 제외된다 (exclude_conversation_id 버그 검증)",
+      "tool": "search_conversation_messages",
+      "input": { "query": "테스트" },
+      "expect": {
+        "has_keys": ["hits", "sync"]
+      }
     }
   ],
 
   "embedding": [
+    {
+      "id": "conversation_rag_search_hit",
+      "tier": "main",
+      "desc": "대화를 SQLite에 추가하고 sync 후 검색하면 hits에 해당 대화 내용이 포함된다",
+      "tool": "search_conversation_messages",
+      "pre_conversation": {
+        "title": "점심 회의 선호",
+        "messages": [
+          {"role": "user", "content": "점심에는 회의 잡지 말아줘"},
+          {"role": "assistant", "content": "알겠습니다. 점심 시간에는 회의를 잡지 않겠습니다."}
+        ]
+      },
+      "input": {"query": "점심 회의", "top_k": 3},
+      "expect": {
+        "has_field": "hits",
+        "hits_min_count": 1
+      }
+    },
+    {
+      "id": "conversation_rag_exclude_current",
+      "tier": "main",
+      "desc": "현재 세션 ID가 설정된 대화는 conversation_id 미명시 시 검색 결과에서 자동으로 제외된다",
+      "tool": "search_conversation_messages",
+      "pre_conversation": {
+        "title": "제외 테스트 대화",
+        "messages": [
+          {"role": "user", "content": "점심에 회의 잡지 말아줘"},
+          {"role": "assistant", "content": "알겠습니다. 점심은 비워두겠습니다."}
+        ]
+      },
+      "set_current_session_to_pre_conversation": true,
+      "input": {"query": "점심 회의", "top_k": 5},
+      "expect": {
+        "has_field": "hits",
+        "hits_exclude_pre_conversation_id": true
+      }
+    },
     {
       "id": "add_reference_ok",
       "tier": "main",
