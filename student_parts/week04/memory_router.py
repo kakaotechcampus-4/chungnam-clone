@@ -7,9 +7,17 @@ from student_parts.week04.schemas import MemoryRoute
 
 
 MEMORY_ROUTER_PROMPT = """
-structured는 일정,할일,알람을 검색한다. 그 외는 검색하는곳이 아니다.
-conversation은 conversations와 messages에 저장된 대화 원문 저장소다.
-reference는 add_personal_reference를 통해 생성된 개인 참고자료 저장소다.
+structured:
+- 일정, 할 일, 알람으로 명시적으로 저장된 기록을 찾을 때만 선택한다.
+
+reference:
+- 사용자가 '참고자료', '자료', '문서', '메모', '링크', '저장한 자료'처럼
+- 사용자가 저장한 자료를 명시적으로 찾을 때 선택한다.
+  
+conversation:
+- 사용자가 한 일반적인 대화를 의미한다.
+- 저장 경로가 명확하지 않으면 conversation을 기본값으로 선택한다.
+  
 search_query에는 선택한 저장소를 검색할 짧은 핵심어를 넣는다.
 반드시 source와 search_query만 반환한다.
 """.strip()

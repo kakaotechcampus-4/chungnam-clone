@@ -59,6 +59,9 @@ def retrieve_memory(
                 ],
             }
         )
+    sync_result = CONVERSATION_RAG_STORE.sync_from_sqlite(
+    SQLITE_STORE
+    )
 
     route = route_memory_query(question)
     allowed_conversation_ids: set[str] = set()
@@ -91,11 +94,10 @@ def retrieve_memory(
 
     else:
         conversation_payload = search_conversation_messages_dict(
-            SQLITE_STORE,
-            CONVERSATION_RAG_STORE,
-            query=route.search_query,
-            top_k=5,
-            conversation_id=current_session_scope(),
+        CONVERSATION_RAG_STORE,
+        query=route.search_query,
+        top_k=5,
+        conversation_id=current_session_scope(),
         )
 
         allowed_conversation_ids = {
@@ -108,6 +110,7 @@ def retrieve_memory(
             **conversation_payload,
             "source": route.source,
             "search_query": route.search_query,
+            "sync":sync_result
         }
 
     return Command(

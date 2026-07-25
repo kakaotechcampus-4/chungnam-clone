@@ -1,0 +1,283 @@
+label: router-now-stability
+created_at: 2026-07-26T02:02:39.505147+09:00
+total: 24
+passed: 24
+accuracy: 100.00%
+eventual_accuracy: 100.00%
+errors: 0
+average_seconds: 4.507
+
+[by_source]
+conversation: 24/24 (100.00%)
+
+[confusion_matrix]
+conversation: {'conversation': 24}
+
+[tool_call_counts]
+retrieve_memory: 24
+
+[results]
+================================================================================
+PASS conversation-01-preference-song repeat=1
+input: 내가 예전에 좋아한다고 말한 노래가 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 7.151
+error: None
+answer: 예전에 좋아한다고 말한 노래에 대한 기록은 현재 저장된 대화나 기억에서 찾을 수 없습니다. 다른 방식으로 더 알려주시면 다시 찾아보겠습니다.
+================================================================================
+PASS conversation-02-place repeat=1
+input: 지난 대화에서 내가 자주 간다고 한 카페 이름이 뭐였어?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.558
+error: None
+answer: 사용자가 자주 간다고 말한 카페 이름은 '파도서점'입니다. 더 궁금한 점 있으면 알려 주세요.
+================================================================================
+PASS conversation-03-dislike repeat=1
+input: 내가 전에 싫어한다고 말한 음식이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.545
+error: None
+answer: 이전에 싫어한다고 말씀하신 음식에 대한 기록은 현재 저장된 기억에서 찾을 수 없습니다. 다른 방식으로 더 알려주시면 다시 찾아보겠습니다.
+================================================================================
+PASS conversation-04-experience repeat=1
+input: 예전에 이야기했던 여행 취향을 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.377
+error: None
+answer: 이전에 여행 취향에 대한 구체적인 기록이 저장되어 있지 않습니다. 혹시 여행 취향에 대해 새로 알려주시거나, 다른 방식으로 도와드릴까요?
+================================================================================
+PASS conversation-05-book repeat=1
+input: 지난번 대화에서 내가 읽고 있다고 한 책이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.606
+error: None
+answer: 지난번 대화에서 사용자가 읽고 있다고 한 책에 대한 정보는 저장된 대화 기록에서 찾을 수 없습니다. 다른 질문이나 확인하고 싶은 내용이 있으면 알려주세요.
+================================================================================
+PASS conversation-06-person repeat=1
+input: 내가 전에 누구와 등산하고 싶다고 했더라?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.683
+error: None
+answer: 이전에 등산하고 싶다고 하신 분에 대한 정보는 현재 기억에서 찾을 수 없습니다. 저장된 일정이나 할 일 중에 관련 내용이 있는지 확인해 보시겠어요? 필요하면 제가 조회해 드릴 수 있습니다.
+================================================================================
+PASS conversation-07-context repeat=1
+input: 예전 대화에서 내가 고민하던 내용이 무엇이었는지 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 3.959
+error: None
+answer: 예전 대화에서 제피르 프로젝트의 배포 방식을 고민하고 계셨습니다. 관련된 아이디어나 할 일, 일정 등을 기록하거나 현재 고민 중인 내용을 정리해 드릴까요?
+================================================================================
+PASS conversation-08-device repeat=1
+input: 지난 대화에서 내가 사용한다고 말한 노트북이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.188
+error: None
+answer: 지난 대화에서 사용한다고 말한 노트북에 대한 기록은 저장되어 있지 않습니다. 다른 정보나 확인하고 싶은 내용이 있으면 알려주세요.
+================================================================================
+PASS conversation-01-preference-song repeat=2
+input: 내가 예전에 좋아한다고 말한 노래가 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.675
+error: None
+answer: 예전에 좋아한다고 말한 노래에 대한 기록은 현재 저장된 기억에서 찾을 수 없습니다. 다른 방식으로 더 도와드릴까요?
+================================================================================
+PASS conversation-02-place repeat=2
+input: 지난 대화에서 내가 자주 간다고 한 카페 이름이 뭐였어?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.2
+error: None
+answer: 사용자가 자주 간다고 말한 카페 이름은 '파도서점'입니다. 더 궁금한 점 있으면 알려 주세요.
+================================================================================
+PASS conversation-03-dislike repeat=2
+input: 내가 전에 싫어한다고 말한 음식이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 3.997
+error: None
+answer: 이전에 싫어한다고 말씀하신 음식에 대한 기록은 현재 저장된 기억에서 찾을 수 없습니다. 다른 방식으로 더 알려주시면 다시 찾아보겠습니다.
+================================================================================
+PASS conversation-04-experience repeat=2
+input: 예전에 이야기했던 여행 취향을 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.425
+error: None
+answer: 이전에 여행 취향에 대해 저장된 정보가 현재로서는 확인되지 않습니다. 혹시 구체적으로 어떤 여행 취향에 대해 이야기하셨는지 더 알려주시면 다시 찾아보겠습니다.
+================================================================================
+PASS conversation-05-book repeat=2
+input: 지난번 대화에서 내가 읽고 있다고 한 책이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 5.613
+error: None
+answer: 지난번 대화에서 사용자가 읽고 있다고 한 책에 대한 정보는 저장된 대화 기록에서 찾을 수 없습니다. 다른 질문이나 확인하고 싶은 내용이 있으면 알려주세요.
+================================================================================
+PASS conversation-06-person repeat=2
+input: 내가 전에 누구와 등산하고 싶다고 했더라?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.276
+error: None
+answer: 이전에 등산하고 싶다고 한 상대에 대한 기록은 현재 기억나지 않습니다. 저장된 일정이나 할 일 중에서 등산 관련 내용을 찾아볼까요? 원하시면 조회해 드리겠습니다.
+================================================================================
+PASS conversation-07-context repeat=2
+input: 예전 대화에서 내가 고민하던 내용이 무엇이었는지 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.522
+error: None
+answer: 과거 대화에서 사용자가 고민하던 내용으로는 "제피르 프로젝트의 배포 방식"에 대한 고민이 있었습니다. 관련된 아이디어나 할 일, 일정 등을 기록하거나 현재 고민 중인 내용을 정리해 드릴 수 있습니다. 추가로 원하시는 것이 있나요?
+================================================================================
+PASS conversation-08-device repeat=2
+input: 지난 대화에서 내가 사용한다고 말한 노트북이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.218
+error: None
+answer: 지난 대화 기록이나 참고자료 중에 사용하신 노트북에 대한 정보는 저장되어 있지 않습니다. 다른 관련 정보가 있으면 알려주시면 더 찾아보겠습니다.
+================================================================================
+PASS conversation-01-preference-song repeat=3
+input: 내가 예전에 좋아한다고 말한 노래가 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 3.958
+error: None
+answer: 예전에 좋아한다고 말한 노래에 대한 기록은 현재 저장된 기억이나 대화 내역에서 찾을 수 없습니다. 다른 방식으로 더 도와드릴까요?
+================================================================================
+PASS conversation-02-place repeat=3
+input: 지난 대화에서 내가 자주 간다고 한 카페 이름이 뭐였어?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.346
+error: None
+answer: 사용자가 자주 간다고 말한 카페 이름은 '파도서점'입니다. 더 궁금한 점 있으면 알려 주세요.
+================================================================================
+PASS conversation-03-dislike repeat=3
+input: 내가 전에 싫어한다고 말한 음식이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 3.885
+error: None
+answer: 이전에 싫어한다고 말씀하신 음식에 대한 기록은 현재 저장된 기억에서 찾을 수 없습니다. 다른 방식으로 더 알려주시면 다시 찾아보겠습니다.
+================================================================================
+PASS conversation-04-experience repeat=3
+input: 예전에 이야기했던 여행 취향을 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.578
+error: None
+answer: 이전에 여행 취향에 대한 구체적인 기록이나 정보가 저장되어 있지 않습니다. 여행 취향에 대해 새로 알려주시면 저장하거나 도와드릴 수 있습니다. 여행 취향에 대해 알려주시겠어요?
+================================================================================
+PASS conversation-05-book repeat=3
+input: 지난번 대화에서 내가 읽고 있다고 한 책이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.419
+error: None
+answer: 지난번 대화에서 사용자가 읽고 있다고 한 책에 대한 정보는 저장된 대화 기록에서 찾을 수 없습니다. 다른 질문이나 확인하고 싶은 내용이 있으면 알려주세요.
+================================================================================
+PASS conversation-06-person repeat=3
+input: 내가 전에 누구와 등산하고 싶다고 했더라?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.397
+error: None
+answer: 이전에 등산하고 싶다고 하신 분에 대한 정보가 현재 기억에 없습니다. 혹시 더 구체적인 정보나 다른 단서가 있을까요? 아니면 등산 관련 일정을 새로 등록해 드릴까요?
+================================================================================
+PASS conversation-07-context repeat=3
+input: 예전 대화에서 내가 고민하던 내용이 무엇이었는지 찾아줘.
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.39
+error: None
+answer: 예전에 제피르 프로젝트의 배포 방식에 대해 고민하고 계셨습니다. 관련된 아이디어나 할 일, 일정 등을 기록하거나 현재 고민 중인 내용을 정리해 드릴까요?
+================================================================================
+PASS conversation-08-device repeat=3
+input: 지난 대화에서 내가 사용한다고 말한 노트북이 뭐였지?
+expected: conversation
+actual: conversation
+tools: ['retrieve_memory']
+sources: ['conversation']
+eventual: True
+elapsed_seconds: 4.2
+error: None
+answer: 지난 대화에서 사용하신 노트북에 관한 기록이나 정보는 저장되어 있지 않습니다. 다른 확인하고 싶은 내용이 있으면 알려주세요.

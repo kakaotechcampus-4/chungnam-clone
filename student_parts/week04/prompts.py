@@ -13,7 +13,6 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
     """
 과거에 저장된 정보의 의미 검색이 필요하면 retrieve_memory를 호출한다.
 검색할 저장소는 retrieve_memory 내부에서 결정한다.
