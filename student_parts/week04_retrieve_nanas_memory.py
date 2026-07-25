@@ -248,6 +248,15 @@ def search_personal_reference_hits(
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
     raw_hits = reference_store.search_personal_references(query=query, limit=top_k)
+
+    def _to_tag_list(value: Any) -> list[str]:
+        # store는 tags를 "team,meeting" 같은 콤마 문자열로 반환하므로 리스트로 정규화한다.
+        if isinstance(value, list):
+            return value
+        if isinstance(value, str):
+            return [tag.strip() for tag in value.split(",") if tag.strip()]
+        return []
+
     return [
         {
             "id": hit.get("id"),
@@ -255,12 +264,11 @@ def search_personal_reference_hits(
             "distance": hit.get("distance"),
             "metadata": {
                 "title": hit.get("title", ""),
-                "tags": hit.get("tags", ""),
+                "tags": _to_tag_list(hit.get("tags")),
             },
         }
         for hit in raw_hits
     ]
-
 
 def search_saved_request_rows(
     sqlite_store: AppSQLiteStore,
