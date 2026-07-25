@@ -18,10 +18,31 @@ from student_parts.week01_wake_up_nana import join_system_prompt
 from student_parts.week03_build_nanas_logbook import json_payload, tool_result, week03_prompt_parts, week03_tools
 
 
-REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
-SQLITE_STORE = AppSQLiteStore(CONFIG.app_db_path)
-CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
 _WEEK04_AGENT: Any | None = None
+
+
+def _reference_store() -> PersonalReferenceStore:
+    """PersonalReferenceStore를 호출마다 새로 만듭니다.
+
+    week03_build_nanas_logbook._store()와 같은 패턴입니다. import 시점에
+    전역으로 붙잡아 두면 이 모듈을 import하기만 해도 ChromaDB/embedding
+    seed 호출이 실행되고, 그 인스턴스가 이후 모든 호출에서 공유·고정되어
+    테스트에서 다른 CONFIG로 교체하기도 어려워집니다.
+    """
+
+    return PersonalReferenceStore(CONFIG.chroma_dir)
+
+
+def _sqlite_store() -> AppSQLiteStore:
+    """AppSQLiteStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다."""
+
+    return AppSQLiteStore(CONFIG.app_db_path)
+
+
+def _conversation_rag_store() -> ConversationRAGStore:
+    """ConversationRAGStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다."""
+
+    return ConversationRAGStore(CONFIG.chroma_dir)
 
 
 # [4주차 1회차 수강생 구현 가이드]
@@ -34,9 +55,9 @@ _WEEK04_AGENT: Any | None = None
 #   - 이 파일(student_parts/week04_retrieve_nanas_memory.py)의 개인 참고자료 저장/검색 tool과
 #     SQLite 저장 요청 검색 tool을 구현합니다.
 #   - 개인 참고자료 저장소는 fixed/reference_store.py의 PersonalReferenceStore이며,
-#     이 파일 상단의 REFERENCE_STORE가 CONFIG.chroma_dir 기준 인스턴스입니다.
+#     _reference_store()가 첫 호출 시점에 CONFIG.chroma_dir 기준으로 만들어 재사용합니다.
 #   - SQLite 저장 요청 검색은 fixed/app_store.py의 AppSQLiteStore를 사용하고,
-#     이 파일 상단의 SQLITE_STORE가 CONFIG.app_db_path 기준 인스턴스입니다.
+#     _sqlite_store()가 첫 호출 시점에 CONFIG.app_db_path 기준으로 만들어 재사용합니다.
 #   - 각 tool 입력은 Pydantic args_schema로 검증하고,
 #     search_personal_reference_hits(), search_saved_request_rows()에서 조회 결과를 정리합니다.
 #   - tool 함수 add_personal_reference/search_personal_references/search_saved_requests는
@@ -45,7 +66,7 @@ _WEEK04_AGENT: Any | None = None
 #
 # 구현 대상
 #   1. add_personal_reference
-#      - title/content/tags를 REFERENCE_STORE.add_personal_reference에 넘깁니다.
+#      - title/content/tags를 _reference_store().add_personal_reference에 넘깁니다.
 #      - tags가 None이면 빈 list로 바꿉니다.
 #      - 이 tool 안에서 reference_backend와 reference가 있는 JSON payload를 완성합니다.
 #
@@ -56,7 +77,7 @@ _WEEK04_AGENT: Any | None = None
 #      - hit에는 id, content, distance, metadata(title/tags)가 들어가야 답변 근거로 쓰기 쉽습니다.
 #
 #   3. search_saved_requests
-#      - SQLITE_STORE.search_saved_requests(query, limit)를 호출합니다.
+#      - _sqlite_store().search_saved_requests(query, limit)를 호출합니다.
 #      - top_k는 이 tool 안에서 안전한 범위로 정리합니다.
 #      - 검색 결과가 없으면 rows=[]를 그대로 반환합니다.
 #      - course repo 기준 계약에 맞게 top-level {"rows": [...]} JSON을 반환합니다.
@@ -116,10 +137,9 @@ _WEEK04_AGENT: Any | None = None
 #
 # 구현 위치와 사용할 코드
 #   - 일반 채팅 발화 검색은 fixed/conversation_rag_store.py의 ConversationRAGStore를 사용하고,
-#     이 파일 상단의 CONVERSATION_RAG_STORE가 CONFIG.chroma_dir 기준 인스턴스입니다.
+#     _conversation_rag_store()가 첫 호출 시점에 CONFIG.chroma_dir 기준으로 만들어 재사용합니다.
 #   - search_conversation_messages_dict(), search_conversation_message_rows()에서 앱 대화 RAG 조회 결과를 정리합니다.
 #   - search_conversation_messages는 helper 결과를 json_payload()로 감싼 JSON 문자열로 반환합니다.
-#   - search_nana_memory는 이전 버전 호환용 통합 검색 helper입니다.
 #   - week04_tools()는 student_parts/week03_build_nanas_logbook.py의 week03_tools() 위에
 #     Week 4 RAG tool을 누적해 agent에 공개합니다.
 #
@@ -134,12 +154,7 @@ _WEEK04_AGENT: Any | None = None
 #      - 반환 JSON에는 hits와 rows에 같은 결과를 넣고, context/rag_backend/sync도 함께 둡니다.
 #      - assistant 발화만으로 사실을 확정하지 않도록 prompt와 응답 근거를 분리합니다.
 #
-#   3. search_nana_memory
-#      - 이전 버전 호환용 통합 검색 tool입니다.
-#      - 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
-#      - 새 구현의 핵심은 출처별 tool이지만, 기존 테스트/trace 호환을 위해 응답 구조를 유지합니다.
-#
-#   4. week04_system_prompt / week04_prompt_parts
+#   3. week04_system_prompt / week04_prompt_parts
 #      - "참고자료", "저장된 일정/할 일", "일반 채팅 발화"를 서로 다른 출처로 설명합니다.
 #      - 질문 성격에 따라 search_personal_references, search_saved_requests,
 #        search_conversation_messages 중 맞는 tool을 선택하도록 지시합니다.
@@ -156,8 +171,8 @@ _WEEK04_AGENT: Any | None = None
 #   결과 JSON에 hits, rows, context, rag_backend, sync가 유지되는지 확인합니다.
 #
 # 함수별 동작 설명
-#   - SearchConversationMessagesInput / SearchNanaMemoryInput
-#     앱 대화 RAG 검색과 기존 호환용 통합 검색 tool의 입력 스키마입니다.
+#   - SearchConversationMessagesInput
+#     앱 대화 RAG 검색 tool의 입력 스키마입니다.
 #
 #   - search_conversation_messages_dict(...)
 #     SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 ChromaDB 검색을 수행합니다.
@@ -168,9 +183,6 @@ _WEEK04_AGENT: Any | None = None
 #
 #   - search_conversation_messages(...)
 #     앱에 저장된 일반 대화 발화를 검색하는 RAG tool입니다. 일정 DB 검색과 다른 출처임을 context/rag_backend/sync로 함께 보여줍니다.
-#
-#   - search_nana_memory(...)
-#     이전 버전 호환용 통합 검색 tool입니다. 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
 #
 #   - week04_tools()
 #     Week 3까지의 tool에 Week 4 RAG tool들을 누적해 agent에 공개합니다.
@@ -198,6 +210,23 @@ def safe_limit(limit: int, default: int = 5, maximum: int = 50) -> int:
     except (TypeError, ValueError):
         value = default
     return max(1, min(value, maximum))
+
+
+def _safe_tool_error(exc: Exception, action: str) -> str:
+    """예외 원문 대신 agent가 다음 행동을 판단할 수 있는 안전한 메시지를 만듭니다.
+
+    이 파일에서 예측 가능한 유일한 예외는 fixed/reference_store.py의
+    OpenAIEmbeddingFunction._openai_client()가 PROXY_TOKEN 누락 시 던지는
+    RuntimeError뿐이다(참고자료/대화 RAG 검색 모두 이 embedding function을
+    공유한다). 이 경우는 원인 문구 자체에 DB 경로나 API 응답 본문이 없어
+    그대로 보여줘도 안전하고, agent에게 ".env 설정을 확인하라"는 구체적인
+    행동을 알려줄 수 있다. 그 외 예외(ChromaDB/SQLite 등 라이브러리가 던지는
+    것)는 내부 정보가 섞여 있을 수 있으므로 원문을 감추고 재시도를 유도한다.
+    """
+
+    if isinstance(exc, RuntimeError):
+        return f"{action} 중 설정 문제가 발생했습니다: {exc}"
+    return f"{action} 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
 class AddPersonalReferenceInput(BaseModel):
@@ -228,16 +257,6 @@ class SearchConversationMessagesInput(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
     conversation_id: str | None = None
-
-
-class SearchNanaMemoryInput(BaseModel):
-    """Week 4 호환 통합 검색 입력입니다."""
-
-    query: str
-    date_from: str | None = None
-    date_to: str | None = None
-    attendee: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
 
 
 def add_personal_reference_dict(
@@ -299,15 +318,29 @@ def search_conversation_messages_dict(
     top_k: int = 5,
     conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
+    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다.
+
+    conversation_id 정책: None, "", 공백만 있는 문자열은 모두 "미지정"으로
+    취급해 현재 대화를 제외한 검색을 한다. 공백 문자열도 파이썬에서는 참
+    (truthy)이라 strip 없이 `if conversation_id`만 보면 현재 대화가 제외되지
+    않고 존재하지 않는 공백 ID로 검색되어 조용히 빈 결과만 나온다.
+    """
 
     sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
-    if conversation_id:
-        hits = conversation_rag_store.search(query=query, top_k=top_k, conversation_id=conversation_id)
-    else:
+
+    normalized_conversation_id = (conversation_id or "").strip()
+    if not normalized_conversation_id:
         hits = conversation_rag_store.search(
             query=query, top_k=top_k, exclude_conversation_id=current_session_scope()
         )
+        return {
+            "hits": hits,
+            "context": conversation_rag_store.context_from_hits(hits),
+            "rag_backend": conversation_rag_store.backend_info(),
+            "sync": sync,
+        }
+
+    hits = conversation_rag_store.search(query=query, top_k=top_k, conversation_id=normalized_conversation_id)
     return {
         "hits": hits,
         "context": conversation_rag_store.context_from_hits(hits),
@@ -327,7 +360,7 @@ def search_conversation_message_rows(
 
     result = search_conversation_messages_dict(
         sqlite_store,
-        CONVERSATION_RAG_STORE,
+        _conversation_rag_store(),
         query=query,
         top_k=top_k,
         conversation_id=conversation_id,
@@ -340,7 +373,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     try:
-        saved = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags or [])
+        saved = add_personal_reference_dict(_reference_store(), title=title, content=content, tags=tags or [])
     except Exception as exc:
         return json_payload(
             tool_result(
@@ -348,7 +381,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
                 ok=False,
                 reference_backend=None,
                 reference=None,
-                error=f"참고자료 저장에 실패했습니다: {exc}",
+                error=_safe_tool_error(exc, "참고자료 저장"),
             )
         )
     return json_payload(
@@ -366,10 +399,10 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
 
     top_k = safe_limit(top_k, default=2, maximum=20)
     try:
-        hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
+        hits = search_personal_reference_hits(_reference_store(), query=query, top_k=top_k)
     except Exception as exc:
         return json_payload(
-            tool_result("search_personal_references", ok=False, hits=[], error=f"참고자료 검색에 실패했습니다: {exc}")
+            tool_result("search_personal_references", ok=False, hits=[], error=_safe_tool_error(exc, "참고자료 검색"))
         )
     return json_payload(tool_result("search_personal_references", hits=hits))
 
@@ -380,10 +413,10 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
 
     top_k = safe_limit(top_k, default=3, maximum=50)
     try:
-        rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
+        rows = search_saved_request_rows(_sqlite_store(), query=query, top_k=top_k)
     except Exception as exc:
         return json_payload(
-            tool_result("search_saved_requests", ok=False, rows=[], error=f"저장된 요청 검색에 실패했습니다: {exc}")
+            tool_result("search_saved_requests", ok=False, rows=[], error=_safe_tool_error(exc, "저장된 요청 검색"))
         )
     return json_payload(tool_result("search_saved_requests", rows=rows))
 
@@ -399,8 +432,8 @@ def search_conversation_messages(
     top_k = safe_limit(top_k, default=5, maximum=50)
     try:
         result = search_conversation_messages_dict(
-            SQLITE_STORE,
-            CONVERSATION_RAG_STORE,
+            _sqlite_store(),
+            _conversation_rag_store(),
             query=query,
             top_k=top_k,
             conversation_id=conversation_id,
@@ -413,7 +446,7 @@ def search_conversation_messages(
                 hits=[],
                 rows=[],
                 context="",
-                error=f"대화 기록 검색에 실패했습니다: {exc}",
+                error=_safe_tool_error(exc, "대화 기록 검색"),
             )
         )
     return json_payload(
@@ -427,59 +460,6 @@ def search_conversation_messages(
         )
     )
 
-
-@tool(args_schema=SearchNanaMemoryInput)
-def search_nana_memory(
-    query: str,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    attendee: str | None = None,
-    limit: int = 5,
-) -> str:
-    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
-
-    limit = safe_limit(limit, default=5, maximum=20)
-    errors: list[str] = []
-    try:
-        reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=limit)
-    except Exception as exc:
-        reference_hits = []
-        errors.append(f"참고자료 검색 실패: {exc}")
-    try:
-        schedules = SQLITE_STORE.list_schedules(limit=limit, date_from=date_from, date_to=date_to)
-        if attendee:
-            schedules = [row for row in schedules if attendee in (row.get("attendees") or [])]
-    except Exception as exc:
-        schedules = []
-        errors.append(f"저장된 일정 검색 실패: {exc}")
-
-    lines = ["[개인 참고자료]"]
-    if reference_hits:
-        for hit in reference_hits:
-            title = hit["metadata"].get("title", "")
-            lines.append(f"- {title}: {hit['content']}")
-    else:
-        lines.append("- 관련 참고자료가 없습니다.")
-    lines.append("[저장된 일정]")
-    if schedules:
-        for row in schedules:
-            lines.append(
-                f"- {row.get('title', '')} | {row.get('date', '')} {row.get('start_time', '')}"
-                f"~{row.get('end_time', '')} | 참석자: {', '.join(row.get('attendees') or [])}"
-            )
-    else:
-        lines.append("- 관련 일정이 없습니다.")
-
-    return json_payload(
-        tool_result(
-            "search_nana_memory",
-            ok=not errors,
-            hits=reference_hits,
-            schedules=schedules,
-            context="\n".join(lines),
-            errors=errors,
-        )
-    )
 
 def week04_tools() -> list[Any]:
     """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
