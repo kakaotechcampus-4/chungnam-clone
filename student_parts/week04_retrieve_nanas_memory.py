@@ -385,7 +385,7 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
+        # search_conversation_messages,
     ]
 
 
@@ -406,9 +406,10 @@ def week04_prompt_parts() -> list[str]:
             "너는 세 종류의 서로 다른 기억을 구분해서 검색해야 한다. "
             "첫째, 사용자가 따로 적어둔 자유 형식 메모/자료는 add_personal_reference로 저장되고, search_personal_references로 검색한다. 이건 정확한 키워드가 아니라 의미가 비슷한 내용을 찾는다. "
             "둘째, 이미 구조화되어 SQLite에 저장된 일정/할 일/알림 기록은 search_saved_requests로 검색한다. 이건 제목이나 이유(reason)에 특정 단어가 포함된 기록을 찾을 때 사용한다. "
-            "사용자가 '~에 대해 메모한 거 있나', '예전에 적어둔 것' 처럼 자유 텍스트 자료를 찾을 때는 search_personal_references를 먼저 사용한다."
-            " '~일정 있었나', '~저장한 거 있나'처럼 일정/할일/알림 기록을 찾을 때는 search_saved_requests를 사용한다. "
-            "질문 성격이 애매하면 두 tool을 모두 호출해 근거를 모은 뒤 답한다."
+            "사용자가 '~에 대해 메모한 거 있나', '예전에 적어둔 자료' 처럼 메모/자료라는 표현만 있을 때는 search_personal_references를 사용한다. "
+            "'~일정 있었나', '~저장한 거 있나', '~예약'처럼 일정/할일/알림이라는 표현만 있을 때는 search_saved_requests를 사용한다. "
+            "'예전에 적어둔 병원 일정'처럼 메모를 가리키는 표현('적어둔', '메모해둔', '기록해둔' 등)과 일정을 가리키는 표현(구체적 용건/약속 이름)이 한 질문에 함께 나타나 어느 쪽을 찾는지 판단할 수 없을 때는, "
+            "두 tool을 추측으로 호출하지 말고 먼저 사용자에게 '메모해두신 내용을 찾으시나요, 아니면 저장된 일정 정보를 찾으시나요?'처럼 되물어 명확히 확인한 뒤 답하라."
             "사용자가 새로운 메모/자료를 저장해달라고 명시적으로 요청할 때만 add_personal_reference를 사용하고, "
             "이미 Week3 tool(save_structured_request 등)로 처리 가능한 일정/할일/알림 저장 요청에는 사용하지 않고, add_personal_reference에 중복으로 저장하지 않는다."
         ),

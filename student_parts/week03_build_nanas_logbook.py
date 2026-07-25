@@ -50,11 +50,17 @@ WEEK03_TOOL_CALL_PROMPT = (
     "personal_list_saved_schedules 또는 list_saved_requests로 훑어보고, "
     "그 결과에서 얻은 request_id로 특정 요청 하나를 더 정확히 다시 확인해야 할 때만 get_saved_request를 사용하라."
 
-    "수정/삭제: 일정을 고치거나 지우기 전에는 먼저 personal_list_saved_schedules로 대상 "
-    "후보를 조회해 schedule_id를 확인하라. 그 뒤 personal_update_saved_schedule 또는 "
-    "personal_delete_saved_schedules에 확인된 schedule_id 또는 명확한 필터(date, title 등)를 "
-    "전달하라. 후보 확인 없이 곧바로 수정/삭제 tool을 호출하지 마라."
-)
+    "수정: 일정을 고치기 전에는 먼저 personal_list_saved_schedules로 대상 후보를 조회해 "
+    "정확한 schedule_id를 확인하라. 후보를 확인한 뒤에만 그 schedule_id와 바꿀 값을 "
+    "personal_update_saved_schedule에 전달하라. 후보 확인 없이 곧바로 호출하지 마라."
+
+    "삭제: 일정을 지우기 전에는 먼저 personal_list_saved_schedules로 대상 후보를 조회해 "
+    "정확한 schedule_id를 확인하라. 확인이 된 경우 그 뒤 사용자에게 '정말 [대상 일정]을 삭제할까요?'라고 "
+    "되물어 명시적인 동의를 받고, 동의를 받았을 때만 삭제하라. "
+    "사용자가 이미 '전부 지워줘', '삭제해줘'처럼 강하게 의도를 표현했더라도, 이는 되묻는 절차를 "
+    "생략해도 된다는 뜻이 아니다. 삭제 대상이 몇 건이든 예외 없이 먼저 되묻고 답변을 받은 뒤에만 "
+    "confirmed=True로 설정하라. 사용자 동의 없이 confirmed=True를 설정하지 마라."
+    )
 
 # [3주차 수강생 구현 가이드]
 #
@@ -323,6 +329,7 @@ class SavedScheduleDeleteInput(BaseModel):
     start_time: str | None = None
     time_unspecified: bool = False
     delete_all: bool = False
+    confirmed: bool = False
 
 
 def _delete_saved_schedules(
@@ -334,6 +341,7 @@ def _delete_saved_schedules(
     start_time: str | None = None,
     time_unspecified: bool = False,
     delete_all: bool = False,
+    confirmed: bool = False,
 ) -> dict[str, Any]:
     """삭제 guard와 DB 호출을 한 곳에 둡니다."""
     filters = {
@@ -353,7 +361,17 @@ def _delete_saved_schedules(
             deleted=[],
         )
         #삭제 조건 없음
+    if not confirmed:
+        return tool_result(
+            "personal_delete_saved_schedules",
+            ok=False,
+            filters=filters,
+            deleted_count=0,
+            deleted=[],
+        )
+    
     # TODO: deleted_count, filters, deleted가 포함된 tool 결과 dict를 반환하세요.
+
     if delete_all:
         deleted = store.delete_all_schedules()
         #전체 삭제
@@ -504,6 +522,7 @@ def delete_saved_schedules_dict(
     start_time: str | None = None,
     time_unspecified: bool = False,
     delete_all: bool = False,
+    confirmed: bool = False,
     app_store: AppSQLiteStore | None = None,
 ) -> dict[str, Any]:
     """tool invoke 없이 저장 일정 삭제 로직을 직접 호출합니다."""
@@ -566,6 +585,7 @@ def personal_delete_saved_schedules(
     start_time: str | None = None,
     time_unspecified: bool = False,
     delete_all: bool = False,
+    confirmed: bool = False,
 ) -> str:
     """Nana가 고른 일정 ID나 날짜/제목/시간 필터로 저장 일정을 삭제합니다."""
     # TODO: _delete_saved_schedules(...)에 삭제 조건을 전달하고 결과를 JSON 문자열로 반환하세요.
@@ -577,6 +597,7 @@ def personal_delete_saved_schedules(
         start_time=start_time,
         time_unspecified=time_unspecified,
         delete_all=delete_all,
+        confirmed=confirmed
     )
     # return 값이 tool_result() 한 dict 값
     return json_payload(result)
