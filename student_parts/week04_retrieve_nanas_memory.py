@@ -254,6 +254,13 @@ def search_personal_reference_hits(
     hits = []
     for elem in result:
         hits.append( {
+            # Q. elem["id"] vs elem.get("id")의 차이 및 장단점?
+            # A. elem["id"]: id라는 키값이 없으면 KeyError를 반환 / elem.get("id"): id라는 키가 없으면 조용히 None(또는 지정한 default 값)을 반환(에러 발생 X)
+            # [] 방식
+            # 장점: 에러 발생 시 빠른 원인 체크 가능 / 단점: 필수 필드가 아닌 경우(키 값이 없을 수도 있는 경우)에도 에러 발생 가능(정상적인 경우에도 프로그램이 죽음)
+            # get() 방식
+            # 장점: 에러가 발생해도 프로그램이 죽지 않음 / 단점: []와 반대로 있어야하는 키가 없는 경우에 버그가 발생해야하는데 조용히 넘어감
+            # dict 방식을 채택한 이유: elem은 위에서 호출한 tool을 통해 출처가 보장되고, reference_store.py를 확인해보면 hits에는 항상 키값이 존재함 -> 키 값이 없으면 비정상이므로 에러 발생이 필요
             "id": elem["id"],
             "content": elem["content"],
             "distance": elem["distance"],
@@ -293,8 +300,25 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    synced = conversation_rag_store.sync_from_sqlite(sqlite_store)    
+    if conversation_id is None:
+        exclude_conversation_id = current_session_scope()
+    else:
+        exclude_conversation_id = None
 
+    hits = conversation_rag_store.search(query=query,top_k=top_k,exclude_conversation_id=exclude_conversation_id,conversation_id=conversation_id)
+    context = conversation_rag_store.context_from_hits(hits)
+    backend_info = conversation_rag_store.backend_info()
+    
+    result = {
+        "hits": hits,
+        "rows": hits,
+        "context": context,
+        "rag_backend": backend_info,
+        "sync":synced,
+    }
+    
+    return result
 
 def search_conversation_message_rows(
     sqlite_store: AppSQLiteStore,
@@ -306,7 +330,10 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    result = search_conversation_messages_dict(sqlite_store,CONVERSATION_RAG_STORE,query=query, top_k=top_k, conversation_id=conversation_id)
+    hits= result["hits"]
+    
+    return hits
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -353,7 +380,10 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    top_k = safe_limit(top_k,default=5,maximum=50)
+    result=search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE,query=query,top_k=top_k,conversation_id=conversation_id)
+    
+    return json_payload(result)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
@@ -398,6 +428,7 @@ def week04_prompt_parts() -> list[str]:
         "'내가 적어뒀던 참고자료, 메모'에 대한 질문이면 search_personal_references 툴을 사용한다.",
         "저장된 일정/할 일/알림(리마인더) 기록에 대한 질문이면 search_saved_requests 툴을 사용한다.",
         "일정을 잡을 수 있는지/아닌지에 대한 판단을 할 떄는 serach_saved_requests뿐만이 아니라 search_personal_references도 함께 확인하여 근거에 기반한 답변을 한다.",
+        "search_conversation_messages는 사용자가 이전에 나눴던 대화를 궁금해 보이는 경우 찾아볼 때 사용하는데, 방금 나눈 대화는 검색 대상에서 제외시킨다.",
         "질문의 출처가 여러 개와 관련 있어보인다면 두 tool을 모두 호출하여 근거를 모은 후 답변한다.",
         "검색 결과가 없으면 없다고 솔직하게 답변하고, 근거 없이 내용을 지어내지 않도록 한다.",
     ]
