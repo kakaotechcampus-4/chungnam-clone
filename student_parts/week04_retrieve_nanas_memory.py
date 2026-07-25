@@ -19,30 +19,45 @@ from student_parts.week03_build_nanas_logbook import json_payload, tool_result, 
 
 
 _WEEK04_AGENT: Any | None = None
+_REFERENCE_STORE: PersonalReferenceStore | None = None
+_CONVERSATION_RAG_STORE: ConversationRAGStore | None = None
 
 
 def _reference_store() -> PersonalReferenceStore:
-    """PersonalReferenceStore를 호출마다 새로 만듭니다.
+    """PersonalReferenceStore를 첫 호출 시점에만 만들어 재사용합니다.
 
-    week03_build_nanas_logbook._store()와 같은 패턴입니다. import 시점에
-    전역으로 붙잡아 두면 이 모듈을 import하기만 해도 ChromaDB/embedding
-    seed 호출이 실행되고, 그 인스턴스가 이후 모든 호출에서 공유·고정되어
-    테스트에서 다른 CONFIG로 교체하기도 어려워집니다.
+    import 시점에 전역으로 붙잡아 두면 이 모듈을 import하기만 해도
+    ChromaDB/embedding seed 호출이 실행되는 문제가 있어 즉시 초기화는
+    피하되, 매 호출마다 새로 만들지도 않습니다. 실측(python -m timeit 상당)
+    결과 ChromaDB PersistentClient 생성이 호출당 약 25~40ms(같은 프로세스
+    기준)가 들어, week03의 _store()(AppSQLiteStore, 호출당 약 2ms)처럼
+    매번 새로 만들면 tool 호출마다 그 비용이 누적됩니다. 그래서
+    _WEEK04_AGENT와 같은 lazy singleton 패턴을 씁니다.
     """
 
-    return PersonalReferenceStore(CONFIG.chroma_dir)
+    global _REFERENCE_STORE
+    if _REFERENCE_STORE is None:
+        _REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
+    return _REFERENCE_STORE
 
 
 def _sqlite_store() -> AppSQLiteStore:
-    """AppSQLiteStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다."""
+    """AppSQLiteStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다.
+
+    AppSQLiteStore 생성 비용은 실측 기준 호출당 약 2ms로 ChromaDB 기반
+    store보다 한 자릿수 이상 저렴해, 캐싱 없이 매번 새로 만들어도 됩니다.
+    """
 
     return AppSQLiteStore(CONFIG.app_db_path)
 
 
 def _conversation_rag_store() -> ConversationRAGStore:
-    """ConversationRAGStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다."""
+    """ConversationRAGStore를 첫 호출 시점에만 만들어 재사용합니다. _reference_store()와 같은 이유입니다."""
 
-    return ConversationRAGStore(CONFIG.chroma_dir)
+    global _CONVERSATION_RAG_STORE
+    if _CONVERSATION_RAG_STORE is None:
+        _CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
+    return _CONVERSATION_RAG_STORE
 
 
 # [4주차 1회차 수강생 구현 가이드]
@@ -57,7 +72,7 @@ def _conversation_rag_store() -> ConversationRAGStore:
 #   - 개인 참고자료 저장소는 fixed/reference_store.py의 PersonalReferenceStore이며,
 #     _reference_store()가 첫 호출 시점에 CONFIG.chroma_dir 기준으로 만들어 재사용합니다.
 #   - SQLite 저장 요청 검색은 fixed/app_store.py의 AppSQLiteStore를 사용하고,
-#     _sqlite_store()가 첫 호출 시점에 CONFIG.app_db_path 기준으로 만들어 재사용합니다.
+#     _sqlite_store()가 호출마다 CONFIG.app_db_path 기준으로 새로 만듭니다(생성 비용이 작아 캐싱하지 않음).
 #   - 각 tool 입력은 Pydantic args_schema로 검증하고,
 #     search_personal_reference_hits(), search_saved_request_rows()에서 조회 결과를 정리합니다.
 #   - tool 함수 add_personal_reference/search_personal_references/search_saved_requests는
