@@ -323,12 +323,11 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
         tags=tags if tags is not None else [],
     )
     return json_payload(
-        {
-            "ok": True,
-            "tool_name": "add_personal_reference",
-            "reference_backend": payload["reference_backend"],
-            "reference": payload["reference"],
-        }
+        tool_result(
+            "add_personal_reference",
+            reference_backend=payload["reference_backend"],
+            reference=payload["reference"],
+        )
     )
 
 
@@ -339,8 +338,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
     safe_top_k = safe_limit(top_k, default=2, maximum=20)
     hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=safe_top_k)
-    return json_payload({"hits": hits})
-
+    return json_payload(tool_result("search_personal_references", hits=hits))
 
 @tool(args_schema=SearchSavedRequestsInput)
 def search_saved_requests(query: str, top_k: int = 3) -> str:
@@ -349,8 +347,7 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
     safe_top_k = safe_limit(top_k, default=3, maximum=50)
     rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=safe_top_k)
-    return json_payload({"rows": rows})
-
+    return json_payload(tool_result("search_saved_requests", rows=rows))
 
 @tool(args_schema=SearchConversationMessagesInput)
 def search_conversation_messages(
