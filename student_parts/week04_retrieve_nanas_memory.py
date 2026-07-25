@@ -225,7 +225,7 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    return reference_store.add_personal_reference(title=title, content=content, tags=tags or [])
+    return reference_store.add_personal_reference(title=title, content=content, tags=tags)
 
 
 def search_personal_reference_hits(
@@ -345,7 +345,7 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
+        # TODO: 심화 과제에서 search_conversation_messages, search_nana_memory 를 구현하면 추가한다.
     ]
 
 

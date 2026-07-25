@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import json
+import sys
 
 from student_parts.week04_retrieve_nanas_memory import (
     add_personal_reference,
@@ -33,17 +34,22 @@ def trace(tool_name: str, arguments: dict, result_json: str) -> dict:
 def check(label: str, condition: bool) -> None:
     mark = "✅" if condition else "❌"
     print(f"{mark} {label}")
+    if not condition:
+        raise AssertionError(label)
 
 
-def run_scenario(title: str, fn) -> None:
+def run_scenario(title: str, fn) -> bool:
     print("=" * 70)
     print(title)
     print("=" * 70)
+    success = True
     try:
         fn()
     except Exception as e:
-        print(f"❌ 시나리오 실행 중 에러 발생 (아직 구현 안 됐을 수 있음): {e!r}")
+        print(f"❌ 시나리오 실패: {e!r}")
+        success = False
     print()
+    return success
 
 #search_saved_requests 함수 테스트
 def scenario_search_saved_requests() -> None:
@@ -78,6 +84,10 @@ def scenario_search_personal_references() -> None:
 
 
 if __name__ == "__main__":
-    run_scenario("시나리오 1: search_saved_requests(query='철수') → 철수 관련 일정이 나와야 한다", scenario_search_saved_requests)
-    run_scenario("시나리오 2: add_personal_reference 저장 → ok=True가 나와야 한다", scenario_add_personal_reference)
-    run_scenario("시나리오 3: search_personal_references(query='점심 시간') → 방금 저장한 내용이 나와야 한다", scenario_search_personal_references)
+    results = [
+        run_scenario("시나리오 1: search_saved_requests(query='철수') → 철수 관련 일정이 나와야 한다", scenario_search_saved_requests),
+        run_scenario("시나리오 2: add_personal_reference 저장 → ok=True가 나와야 한다", scenario_add_personal_reference),
+        run_scenario("시나리오 3: search_personal_references(query='점심 시간') → 방금 저장한 내용이 나와야 한다", scenario_search_personal_references),
+    ]
+    if not all(results):
+        sys.exit(1)
