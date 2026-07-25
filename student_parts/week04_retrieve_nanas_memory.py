@@ -304,8 +304,8 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     saved = add_personal_reference_dict(reference_store=REFERENCE_STORE, title=title, content=content, tags=tags)
-    result = tool_result(tool_name='add_personal_reference', ok=True, backend=saved['backend'], reference=saved)
-    return json_payload()
+    result = tool_result(tool_name='add_personal_reference', ok=True, reference_backend=saved['backend'], reference=saved)
+    return json_payload(result)
 
 #   - [메인] search_personal_references(...)
 #     개인 참고자료 전용 검색 tool입니다. top-level hits 키를 반환하므로 LLM이 근거 문서를 바로 읽을 수 있습니다.
@@ -325,7 +325,9 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
 
     top_k = safe_limit(top_k)
     rows = search_saved_request_rows(sqlite_store=SQLITE_STORE, query=query, top_k=top_k)
-    return json_payload({ 'rows': rows })
+    
+    result = tool_result(tool_name='search_saved_requests', ok=True, rows=rows)
+    return json_payload(result)
 
 #   - [추가] search_conversation_messages(...)
 #     앱에 저장된 일반 대화 발화를 검색하는 RAG tool입니다. 일정 DB 검색과 다른 출처임을 context/rag_backend/sync로 함께 보여줍니다.
