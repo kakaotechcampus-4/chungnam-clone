@@ -19,7 +19,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools, tool_result
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -232,9 +232,11 @@ def add_personal_reference_dict(
     title: str,
     content: str,
     tags: list[str] | None = None,
-) -> dict[str, Any]:
+) -> dict[str, Any]:    
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
+    if tags is None:
+        tags = []
     saved = reference_store.add_personal_reference(title=title, content=content, tags=tags)
     return saved
 
@@ -302,7 +304,8 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     saved = add_personal_reference_dict(reference_store=REFERENCE_STORE, title=title, content=content, tags=tags)
-    return json_payload({ 'saved': saved })
+    result = tool_result(tool_name='add_personal_reference', ok=True, backend=saved['backend'], reference=saved)
+    return json_payload()
 
 #   - [메인] search_personal_references(...)
 #     개인 참고자료 전용 검색 tool입니다. top-level hits 키를 반환하므로 LLM이 근거 문서를 바로 읽을 수 있습니다.
@@ -379,12 +382,6 @@ def week04_prompt_parts() -> list[str]:
             '이제 너는 개인 참고자료를 저장하고 꺼내올 수 있다.'
             '사용자가 메모, 참고할 내용 등을 저장하거나 기억해달라고 하면 add_personal_reference로 저장한다.'
             '참고자료는 의미 기반 검색으로 다시 찾는다.'
-        ),
-        (
-            "저장된 기억을 다시 찾을 때는 질문 성격에 맞는 검색 도구를 고른다. "
-            "내가 적어둔 메모·참고자료·팁을 찾는 질문은 search_personal_references로 의미 검색한다. "
-            "예전에 저장한 일정·할 일·알림을 핵심어로 찾는 질문은 search_saved_requests로 검색한다. "
-            "질문에 두 종류가 섞여 있으면 두 도구를 모두 사용해도 된다."
         ),
         (
             '저장된 정보를 다시 찾을 때는 사용자의 입력에 맞는 검색 도구를 고른다.'
