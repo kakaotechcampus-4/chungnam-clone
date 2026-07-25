@@ -248,20 +248,18 @@ def search_personal_reference_hits(
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
     raw_hits = reference_store.search_personal_references(query=query, limit=top_k)
-    hits: list[dict[str, Any]] = []
-    for hit in raw_hits:
-        hits.append(
-            {
-                "id": hit.get("id"),
-                "content": hit.get("content"),
-                "distance": hit.get("distance"),
-                "metadata": {
-                    "title": hit.get("title", ""),
-                    "tags": hit.get("tags", ""),
-                },
-            }
-        )
-    return hits
+    return [
+        {
+            "id": hit.get("id"),
+            "content": hit.get("content"),
+            "distance": hit.get("distance"),
+            "metadata": {
+                "title": hit.get("title", ""),
+                "tags": hit.get("tags", ""),
+            },
+        }
+        for hit in raw_hits
+    ]
 
 
 def search_saved_request_rows(
