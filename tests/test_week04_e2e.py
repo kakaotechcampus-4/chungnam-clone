@@ -18,9 +18,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
 from fixed.langchain_trace import extract_agent_events  # noqa: E402
+from fixed.store_base import now_iso  # noqa: E402
 from student_parts.week04_retrieve_nanas_memory import SQLITE_STORE, build_week_agent  # noqa: E402
 
-E2E_MARKER = "[E2E]"
 # "저장 기록 조회"는 목록/검색 tool 중 무엇을 골라도 정답으로 본다.
 SAVED_SIDE = {"search_saved_requests", "personal_list_saved_schedules", "list_saved_requests"}
 
@@ -32,11 +32,13 @@ def called_tools(query: str) -> list[str]:
 
 @pytest.fixture()
 def purge_saved():
-    # 저장 흐름 테스트가 만든 [E2E] 마커 저장분을 테스트 후 제거한다.
+    # 저장 흐름 테스트는 실제 DB에 일정을 만든다. 입력은 실제 사용자가 쓸 자연어 그대로 두고,
+    # 정리는 "테스트 실행 중에 새로 생긴 row"만 삭제해 기존 기록을 건드리지 않는다.
+    started_at = now_iso()
     yield
     with SQLITE_STORE.connect() as conn:
-        conn.execute("DELETE FROM structured_requests WHERE title LIKE ?", (f"%{E2E_MARKER}%",))
-        conn.execute("DELETE FROM schedules WHERE title LIKE ?", (f"%{E2E_MARKER}%",))
+        conn.execute("DELETE FROM structured_requests WHERE created_at >= ?", (started_at,))
+        conn.execute("DELETE FROM schedules WHERE created_at >= ?", (started_at,))
 
 
 @pytest.mark.parametrize(
@@ -81,8 +83,8 @@ def test_e2e_routes_to_conversation(query):
 @pytest.mark.parametrize(
     "query",
     [
-        "다음 주 화요일 3시에 [E2E] 스터디 저장해줘",
-        "내일 오전 10시 [E2E] 병원 예약 기록해줘",
+        "다음 주 화요일 3시에 알고리즘 스터디 저장해줘",
+        "내일 오전 10시 치과 정기검진 기록해줘",
     ],
 )
 def test_e2e_save_flow(query, purge_saved):

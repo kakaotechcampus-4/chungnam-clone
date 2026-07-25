@@ -23,6 +23,14 @@ SQLITE_STORE = AppSQLiteStore(CONFIG.app_db_path)
 CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
 _WEEK04_AGENT: Any | None = None
 
+# 참고자료 검색 품질 기준. 앱의 실제 참고자료로 측정한 distance 분포에서 정했다.
+#   관련 있는 질의 0.77~1.13 / 경계 1.46 / 무관한 질의 1.62 이상
+REFERENCE_RELEVANCE_MAX_DISTANCE = 1.5
+# 필요한 메모가 4위로 밀려 top_k=2에서 잘린 사례가 있어, 최소 후보 수를 확보한다.
+REFERENCE_MIN_CANDIDATES = 4
+# 근거가 약하다고 판단되면 이 개수까지 넓혀 한 번 더 검색한다.
+REFERENCE_WIDENED_CANDIDATES = 8
+
 
 # [4주차 수강생 구현 가이드]
 #
@@ -337,10 +345,38 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
-    # top_k를 1~20 범위로 보정한 뒤 헬퍼로 검색한다(스키마가 이미 검증하지만, 헬퍼 직접 호출 대비 방어).
-    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=safe_limit(top_k, default=2, maximum=20))
-    # 가이드 계약: top- level 키는 hits 하나. LLM이 hits를 근거로 답한다.
-    return json_payload({"hits": hits})
+    # ① 요청 top_k를 1~20으로 보정하고, 최소 후보 수를 확보한다.
+    #    top_k가 너무 작으면 필요한 메모가 순위에서 잘려 답변 근거가 빠진다.
+    requested = max(safe_limit(top_k, default=2, maximum=20), REFERENCE_MIN_CANDIDATES)
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=requested)
+
+    # ② 최상위 distance로 "근거가 충분한가"를 판단한다. distance가 클수록 의미가 먼 문서다.
+    best_distance = hits[0]["distance"] if hits else None
+    sufficient = best_distance is not None and best_distance <= REFERENCE_RELEVANCE_MAX_DISTANCE
+
+    # ③ 근거가 약하면 후보를 넓혀 한 번 더 검색한다(같은 질의라 최상위 거리는 그대로지만,
+    #    순위에서 밀린 관련 메모가 함께 올라올 수 있다).
+    widened = False
+    if not sufficient and requested < REFERENCE_WIDENED_CANDIDATES:
+        hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=REFERENCE_WIDENED_CANDIDATES)
+        widened = True
+        best_distance = hits[0]["distance"] if hits else None
+        sufficient = best_distance is not None and best_distance <= REFERENCE_RELEVANCE_MAX_DISTANCE
+
+    # ④ hits와 함께 검색 품질 정보를 반환한다. sufficient=false면 LLM이 근거 부족을 인지하고
+    #    단정하지 않거나 질의를 바꿔 재검색할 수 있고, trace에서도 검색 상태를 확인할 수 있다.
+    return json_payload(
+        {
+            "hits": hits,
+            "retrieval": {
+                "requested_top_k": requested,
+                "returned": len(hits),
+                "best_distance": best_distance,
+                "sufficient": sufficient,
+                "widened": widened,
+            },
+        }
+    )
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -425,8 +461,14 @@ def week04_prompt_parts() -> list[str]:
             "④ 일정을 새로 잡거나 '~해도 돼?/괜찮아?'처럼 가능 여부를 판단해 답하기 전에, "
             "관련 선호·규칙이 참고자료에 있는지 search_personal_references로 먼저 확인하고 그 규칙을 반영해 답한다. "
             "⑤ 질문이 어느 출처인지 모호하면(예: '팀 회의 정보') 참고자료와 저장기록을 모두 검색한 뒤 종합해 답한다. "
-            "⑥ 종류를 특정하지 않은 일정 조회(예: '내일 일정 뭐야')는 개인 일정만 보지 말고 "
-            "search_saved_requests로 저장기록 전체(개인/그룹/할 일/알림)를 확인한다."
+            "⑥ 종류를 특정하지 않은 일정 조회(예: '내일 일정 뭐야')는 개인 일정만 보는 "
+            "personal_list_saved_schedules로 끝내지 말고 저장기록 전체(개인/그룹/할 일/알림)를 확인한다. "
+            "이때 날짜나 종류가 분명하면 list_saved_requests에 date_from/date_to/kind 필터를 넘겨 조회하고, "
+            "제목·내용의 키워드로 찾아야 하면 search_saved_requests를 쓴다. "
+            "⑦ 참고자료 검색 질의에는 사용자 문장의 구체 조건(요일·시간대·대상 등)을 그대로 남긴다. "
+            "'선호 시간'처럼 일반적인 표현으로 바꾸면 정작 필요한 메모가 상위에 오지 않는다. "
+            "⑧ 참고자료 검색 결과의 retrieval.sufficient가 false면 근거가 약하다는 뜻이다. "
+            "단정해서 답하지 말고, 질의를 사용자 표현에 가깝게 바꿔 한 번 더 검색하거나 근거를 찾지 못했다고 답한다."
         ),
     ]
 
