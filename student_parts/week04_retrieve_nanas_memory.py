@@ -252,9 +252,9 @@ def search_personal_reference_hits(
     for hit in raw_hits:
         tags = hit.get("tags") or ""
         if isinstance(tags, str):
-            tag_list = [tag for tag in tags.split(",") if tag]
+            tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
         elif isinstance(tags, list):
-            tag_list = tags
+            tag_list = [str(tag).strip() for tag in tags if str(tag).strip()]
         else:
             tag_list = []
         hits.append(
@@ -295,7 +295,29 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    limit = safe_limit(top_k, default=5, maximum=50)
+    if conversation_id:
+        hits = conversation_rag_store.search(
+            query=query,
+            top_k=limit,
+            conversation_id=conversation_id,
+        )
+    else:
+        current = current_session_scope()
+        exclude = None if current == DEFAULT_SESSION_SCOPE else current
+        hits = conversation_rag_store.search(
+            query=query,
+            top_k=limit,
+            exclude_conversation_id=exclude,
+        )
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync,
+    }
 
 
 def search_conversation_message_rows(
@@ -308,7 +330,14 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    result = search_conversation_messages_dict(
+        sqlite_store,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )
+    return list(result.get("hits") or [])
 
 
 @tool(args_schema=AddPersonalReferenceInput)
@@ -352,7 +381,14 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    payload = search_conversation_messages_dict(
+        SQLITE_STORE,
+        CONVERSATION_RAG_STORE,
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
@@ -366,7 +402,67 @@ def search_nana_memory(
     """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
 
     # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
-    ...
+    safe_top = safe_limit(limit, default=5, maximum=20)
+    reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=safe_top)
+    schedules = SQLITE_STORE.list_schedules(
+        limit=safe_top,
+        date_from=date_from,
+        date_to=date_to,
+    )
+    if attendee:
+        needle = attendee.strip().lower()
+        schedules = [
+            schedule
+            for schedule in schedules
+            if any(needle in str(name).lower() for name in (schedule.get("attendees") or []))
+        ]
+
+    schedule_chunks: list[dict[str, Any]] = []
+    for schedule in schedules:
+        schedule_chunks.append(
+            {
+                "schedule_id": schedule.get("schedule_id"),
+                "request_id": schedule.get("request_id"),
+                "title": schedule.get("title"),
+                "date": schedule.get("date"),
+                "start_time": schedule.get("start_time"),
+                "end_time": schedule.get("end_time"),
+                "attendees": schedule.get("attendees") or [],
+                "content": (
+                    f"{schedule.get('title') or '제목 없음'} "
+                    f"{schedule.get('date') or ''} "
+                    f"{schedule.get('start_time') or ''}"
+                ).strip(),
+            }
+        )
+
+    context_lines = ["[통합 검색 결과]", "[개인 참고자료]"]
+    if reference_hits:
+        for index, hit in enumerate(reference_hits, start=1):
+            metadata = hit.get("metadata") or {}
+            context_lines.append(
+                f"{index}. {metadata.get('title') or '제목 없음'}: {hit.get('content') or ''}"
+            )
+    else:
+        context_lines.append("- 참고자료 없음")
+
+    context_lines.append("[SQLite 일정]")
+    if schedule_chunks:
+        for index, chunk in enumerate(schedule_chunks, start=1):
+            context_lines.append(
+                f"{index}. {chunk.get('title')} | {chunk.get('date')} {chunk.get('start_time') or ''}"
+            )
+    else:
+        context_lines.append("- 일정 없음")
+
+    return json_payload(
+        {
+            "reference_backend": REFERENCE_STORE.backend_info(),
+            "hits": reference_hits,
+            "schedule_chunks": schedule_chunks,
+            "context": "\n".join(context_lines),
+        }
+    )
 
 
 def week04_tools() -> list[Any]:
@@ -409,8 +505,13 @@ def week04_prompt_parts() -> list[str]:
             "필요하면 Week 3의 personal_list_saved_schedules로 목록을 확인할 수 있다."
         ),
         (
+            "예전에 나눈 일반 채팅 내용을 물을 때는 search_conversation_messages를 사용한다. "
+            "방금 현재 대화에서 한 말은 과거 기억처럼 섞지 않는다. "
+            "assistant 발화만으로 사실을 확정하지 않는다."
+        ),
+        (
             "검색 결과의 hits나 rows를 근거로 답하고, 근거가 없으면 추측하지 말고 "
-            "찾지 못했다고 말한다."
+            "찾지 못했다고 말한다. 여러 출처가 필요하면 tool을 이어서 호출해도 된다."
         ),
     ]
 
