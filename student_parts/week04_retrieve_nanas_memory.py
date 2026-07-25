@@ -499,7 +499,7 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        "Week 4부터는 서로 다른 세 출처를 구분해서 검색한다. "
+        "서로 다른 세 출처를 구분해서 검색한다. "
         "'내가 적어 둔 참고자료/선호/메모'처럼 사용자가 미리 남긴 정보를 찾을 때는 search_personal_references를 쓴다. "
         "'저장한 일정/할 일/알림을 찾아줘'처럼 구조화된 기록을 찾을 때는 search_saved_requests를 쓴다. "
         "'예전에 내가/네가 뭐라고 했었지'처럼 과거 채팅 발화 자체를 찾을 때는 search_conversation_messages를 쓴다. "
