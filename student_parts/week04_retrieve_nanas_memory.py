@@ -247,18 +247,6 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    
-
-
-def search_saved_request_rows(
-    sqlite_store: AppSQLiteStore,
-    *,
-    query: str,
-    top_k: int = 3,
-) -> list[dict[str, Any]]:
-    """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
-
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
     results = reference_store.search_personal_references(query=query, top_k=top_k)
     hits = []
     for result in results:
@@ -272,6 +260,18 @@ def search_saved_request_rows(
             },
         })
     return hits
+
+
+def search_saved_request_rows(
+    sqlite_store: AppSQLiteStore,
+    *,
+    query: str,
+    top_k: int = 3,
+) -> list[dict[str, Any]]:
+    """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
+    rows = sqlite_store.search_saved_requests(query=query, limit=top_k)
+    return rows if rows else []
+
 
 
 def search_conversation_messages_dict(
@@ -389,7 +389,9 @@ def week04_prompt_parts() -> list[str]:
             "개인 메모나 참고자료 질문은 search_personal_references를 사용하세요. "
             "저장된 일정/할 일/알림 질문은 search_saved_requests를 사용하세요. "
             "두 출처를 동시에 검색해야 할 때는 두 tool을 모두 호출하세요. "
-            "참고자료를 새로 추가할 때는 add_personal_reference를 사용하세요. "
+            "검색 결과가 있으면 반드시 그 내용을 답변 근거로 사용하고, 참고자료의 title이나 저장 요청의 종류를 함께 언급하세요. "
+            "검색 결과가 없으면 기억에 있는 것처럼 단정하지 말고 관련 자료가 없다고 설명하세요. "
+            "두 출처의 결과가 다르면 섞지 않고 출처를 구분해서 답하세요. "
             "Week 4에서는 외부 API 호출이나 RAG 외의 외부 데이터 연동은 하지 않습니다."
         ),
         # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
