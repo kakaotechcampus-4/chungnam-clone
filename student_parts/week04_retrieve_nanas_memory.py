@@ -315,7 +315,9 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
 
     top_k = safe_limit(top_k)
     hits = search_personal_reference_hits(reference_store=REFERENCE_STORE, query=query, top_k=top_k)
-    return json_payload({ 'hits': hits })
+
+    result = tool_result(tool_name='search_personal_references', ok=True, hits=hits)
+    return json_payload(result)
 
 #   - [메인] search_saved_requests(...)
 #     SQLite에 저장된 structured request/schedule 기록 검색 tool입니다. top-level rows 키를 반환합니다.
@@ -325,7 +327,7 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
 
     top_k = safe_limit(top_k)
     rows = search_saved_request_rows(sqlite_store=SQLITE_STORE, query=query, top_k=top_k)
-    
+
     result = tool_result(tool_name='search_saved_requests', ok=True, rows=rows)
     return json_payload(result)
 
