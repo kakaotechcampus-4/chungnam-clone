@@ -41,20 +41,27 @@ Week 4의 핵심은 단일 RAG 함수 대신 **데이터 출처별 전용 Retrie
 - **`add_personal_reference`** (`add_personal_reference_dict` 헬퍼)
   - `title`, `content`, `tags` 수신. `tags`가 `None`이면 빈 리스트(`[]`)로 변환.
   - `REFERENCE_STORE.add_personal_reference` 호출 후 `reference_backend` 및 `reference` dict 포함 응답 반환.
+  - top-level 키 제약이 없는 도구이므로, Week 1~3과 동일하게 `week03_build_nanas_logbook.tool_result(...)`로
+    감싸 `{"ok": true, "tool_name": "add_personal_reference", ...}` 형태로 반환한다(세 검색 도구와 달리
+    `ok`/`tool_name`을 추가해도 계약 위반이 아니다).
 - **`search_personal_references`** (`search_personal_reference_hits` 헬퍼)
-  - `query`, `top_k` 수신 후 `safe_limit`으로 `top_k` 범위 보정.
+  - `query`, `top_k` 수신. `top_k` 범위는 `SearchPersonalReferencesInput`의 `Field(ge=1, le=20)`이
+    이미 검증하므로, helper 안에서 `safe_limit`을 또 호출해 중복 클램프하지 않는다.
   - 결과는 반드시 **top-level 키 `{"hits": [...]}`** 형태의 JSON으로 반환.
   - 각 hit 요소: `id`, `content`, `distance`, `metadata` (title/tags 포함).
 
 ### 2. SQLite 저장 기록 검색 도구
 - **`search_saved_requests`** (`search_saved_request_rows` 헬퍼)
-  - `query`, `limit` 수신 후 `safe_limit`으로 범위 보정.
-  - `SQLITE_STORE.search_saved_requests(query, limit)` 호출.
+  - `query`, `top_k` 수신. `top_k` 범위는 `SearchSavedRequestsInput`의 `Field(ge=1, le=50)`이
+    이미 검증하므로, helper 안에서 `safe_limit`을 또 호출하지 않는다.
+  - `SQLITE_STORE.search_saved_requests(query, limit=top_k)` 호출.
   - 결과는 반드시 **top-level 키 `{"rows": [...]}`** 형태의 JSON으로 반환. 데이터 없으면 `{"rows": []}`.
 
 ### 3. 대화 이력 RAG 도구
-- **`search_conversation_messages`** (`search_conversation_messages_hits` 헬퍼)
+- **`search_conversation_messages`** (`search_conversation_messages_dict` 헬퍼)
   - 대화 기록을 `ConversationRAGStore`에 lazy sync 후 현재 대화를 제외하여 검색.
+  - `top_k` 범위는 `SearchConversationMessagesInput`의 `Field(ge=1, le=50)`이 이미 검증하므로,
+    helper 안에서 `safe_limit`을 또 호출하지 않는다.
   - 결과를 **`{"hits": [...]}`** JSON으로 반환.
 
 ### 4. 프롬프트 및 에이전트 조립
@@ -65,7 +72,10 @@ Week 4의 핵심은 단일 RAG 함수 대신 **데이터 출처별 전용 Retrie
 - **Top-level JSON 키 반환 규격 준수**:
   - 개인 참고자료 검색: `{"hits": [...]}`
   - SQLite 기록 검색: `{"rows": [...]}`
-- **안전한 Limit 제한**: 도구 내에서 `safe_limit(limit/top_k)`을 반드시 적용.
+- **안전한 Limit 제한**: `top_k`/`limit`의 범위는 tool의 Pydantic `args_schema`에 선언한
+  `Field(ge=.., le=..)`가 1차로 강제한다. helper의 유일한 호출 경로가 이 Pydantic 검증을 거친
+  tool뿐이라면, helper 안에서 `safe_limit(limit/top_k)`을 또 호출해 중복 클램프하지 않는다.
+  Pydantic 검증 없이 helper가 직접 호출될 수 있는 경로가 생기는 경우에만 `safe_limit()`을 쓴다.
 - **`tags` 처리**: `tags=None` 입력 시 예외 방지를 위해 `tags = tags or []` 처리.
 - **유니코드 한글 보존**: JSON 반환 시 반드시 `json_payload(...)` 헬퍼를 사용하여 직렬화.
 - **프롬프트 덮어쓰기 금지**: `week04_prompt_parts()` 작성 시 이전 주차 프롬프트를 덮어쓰지 말고 리스트에 추가(Append).

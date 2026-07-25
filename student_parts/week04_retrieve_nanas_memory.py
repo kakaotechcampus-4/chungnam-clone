@@ -15,7 +15,11 @@ from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import (
+    tool_result,
+    week03_prompt_parts,
+    week03_tools,
+)
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -266,10 +270,13 @@ def search_personal_reference_hits(
     query: str,
     top_k: int = 2,
 ) -> list[dict[str, Any]]:
-    """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
+    """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다.
 
-    limit = safe_limit(top_k, default=2, maximum=20)
-    raw_hits = reference_store.search_personal_references(query, limit)
+    top_k 범위는 호출자인 search_personal_references의 args_schema(Field(ge=1, le=20))가
+    이미 보정하므로 여기서 safe_limit을 다시 적용하지 않는다.
+    """
+
+    raw_hits = reference_store.search_personal_references(query, top_k)
     return [
         {
             "id": hit.get("id"),
@@ -290,10 +297,13 @@ def search_saved_request_rows(
     query: str,
     top_k: int = 3,
 ) -> list[dict[str, Any]]:
-    """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
+    """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다.
 
-    limit = safe_limit(top_k, default=3, maximum=50)
-    return sqlite_store.search_saved_requests(query, limit=limit)
+    top_k 범위는 호출자인 search_saved_requests의 args_schema(Field(ge=1, le=50))가
+    이미 보정하므로 여기서 safe_limit을 다시 적용하지 않는다.
+    """
+
+    return sqlite_store.search_saved_requests(query, limit=top_k)
 
 
 def search_conversation_messages_dict(
@@ -304,16 +314,19 @@ def search_conversation_messages_dict(
     top_k: int = 5,
     conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
+    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다.
 
-    limit = safe_limit(top_k, default=5, maximum=50)
+    top_k 범위는 호출자인 search_conversation_messages의 args_schema(Field(ge=1, le=50))가
+    이미 보정하므로 여기서 safe_limit을 다시 적용하지 않는다.
+    """
+
     sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
     if conversation_id:
-        hits = conversation_rag_store.search(query=query, top_k=limit, conversation_id=conversation_id)
+        hits = conversation_rag_store.search(query=query, top_k=top_k, conversation_id=conversation_id)
     else:
         scope = current_session_scope()
         exclude = None if scope == DEFAULT_SESSION_SCOPE else scope
-        hits = conversation_rag_store.search(query=query, top_k=limit, exclude_conversation_id=exclude)
+        hits = conversation_rag_store.search(query=query, top_k=top_k, exclude_conversation_id=exclude)
     context = conversation_rag_store.context_from_hits(hits)
     return {
         "hits": hits,
@@ -348,7 +361,7 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     payload = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
-    return json_payload(payload)
+    return json_payload(tool_result("add_personal_reference", ok=True, **payload))
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
@@ -393,11 +406,14 @@ def search_nana_memory(
     attendee: str | None = None,
     limit: int = 5,
 ) -> str:
-    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
+    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다.
 
-    safe = safe_limit(limit, default=5, maximum=20)
-    reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=safe)
-    schedule_rows = SQLITE_STORE.list_schedules(limit=safe, date_from=date_from, date_to=date_to)
+    limit 범위는 이 tool의 args_schema(SearchNanaMemoryInput.limit, Field(ge=1, le=20))가
+    이미 보정하므로 여기서 safe_limit을 다시 적용하지 않는다.
+    """
+
+    reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=limit)
+    schedule_rows = SQLITE_STORE.list_schedules(limit=limit, date_from=date_from, date_to=date_to)
     if attendee:
         schedule_rows = [row for row in schedule_rows if attendee in row.get("attendees", [])]
 
@@ -405,7 +421,8 @@ def search_nana_memory(
     if reference_hits:
         for hit in reference_hits:
             title = hit["metadata"].get("title", "")
-            context_lines.append(f"- {title}: {hit['content']}")
+            tags = hit["metadata"].get("tags", "")
+            context_lines.append(f"- {title} [{tags}]: {hit['content']}")
     else:
         context_lines.append("- 관련 참고자료 없음")
 
@@ -413,8 +430,11 @@ def search_nana_memory(
     if schedule_rows:
         for row in schedule_rows:
             attendees = ", ".join(row.get("attendees", []))
+            start_time = row.get("start_time") or "미정"
+            end_time = row.get("end_time")
+            time_text = f"{start_time}~{end_time}" if end_time else start_time
             context_lines.append(
-                f"- {row.get('date', '')} {row.get('start_time', '')} {row.get('title', '')} "
+                f"- {row.get('date', '')} {time_text} {row.get('title', '')} "
                 f"(참석자: {attendees})"
             )
     else:
