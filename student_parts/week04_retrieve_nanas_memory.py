@@ -29,7 +29,8 @@ WEEK04_MEMORY_PROMPT = (
     "search_personal_references를 사용하세요. "
     "사용자가 이미 저장된 일정/할 일/알림/구조화 기록을 찾거나 조회하라고 하면 "
     "search_saved_requests를 사용하세요. "
-    "이 두 도구는 서로 다른 출처이므로 질문 성격에 맞는 하나만 선택하고, 같은 질문을 두 도구에 동시에 던지지 마세요."
+    "이 두 도구는 서로 다른 출처를 다루므로 질문 성격에 맞는 도구를 먼저 선택하세요. "
+    "참고자료와 저장 기록이 모두 필요하면 각 출처에 맞는 도구를 적절히 병행할 수 있습니다."
 )
 
 
@@ -240,6 +241,7 @@ def add_personal_reference_dict(
         content=content,
         tags=normalized_tags,
     )
+    reference.pop("backend", None)
     return {
         "reference_backend": reference_store.backend_info(),
         "reference": reference,
@@ -383,7 +385,6 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
     ]
 
 
