@@ -1,84 +1,81 @@
-# Nana 프로젝트 — Week 03
+# Nana 프로젝트 — Week 04 (Retrieving Nana's Memory)
 
 ## 실행 명령어
-```
-./run.sh --week3
+```bash
+./run.sh --week4
 ```
 
 ## 주요 파일
-- 구현 파일: `student_parts/week03_build_nanas_logbook.py`
-- 의존 파일: `student_parts/week02_structure_natural_language_requests.py` 
-(StructuredRequest, RequestKind 등 상속 및 연동)  
-`student_parts/week01_wake_up_nana.py` (join_system_prompt, week01_tools 등 상속)  
-`fixed/config.py` (CONFIG 전역 설정 인입)  
-`fixed/llm.py` (chat_model() 사용)  
-`fixed/runtime_clock.py` (current_app_date_iso 사용)  
-`fixed/app_store.py` (AppSQLiteStore 연동)  
-- 에이전트 빌더: `build_week03_agent()` 및 런타임 엔트리 포인트 `build_week_agent()`
+- **구현 파일**: `student_parts/week04_retrieve_nanas_memory.py`
+- **의존 파일**:
+  - `fixed/reference_store.py` (`PersonalReferenceStore` - ChromaDB 기반 개인 참고자료)
+  - `fixed/app_store.py` (`AppSQLiteStore` - SQLite 기반 일정/할일 기록)
+  - `fixed/conversation_rag_store.py` (`ConversationRAGStore` - 대화 이력 검색)
+  - `fixed/config.py` (`CONFIG` 환경 설정)
+  - `student_parts/week03_build_nanas_logbook.py` (`week03_prompt_parts`, `week03_tools` 상속 및 누적)
 
-## 아키텍처
-Week3의 핵심 목적은 Week2에서 완성한 자연어 구조화 결과물인 StructuredRequest 데이터를 Pydantic 입력 스키마로 1차 검증한 뒤, SQLite 영속 DB 저장소(AppSQLiteStore)에 연동하여 "저장 -> 조회 -> 수정/삭제"의 세로 슬라이스를 완성하는 것이다. 이를 통해 이 프로젝트는 일회성 대화 세션에 머무르던 Week1의 임시 메모리를 탈피하여, 앱이 종료되거나 새 대화가 시작되어도 SQLite DB에 남아 있는 기록을 기반으로 상태를 복원하고 지속적으로 일정을 관리하는 기록장(영속 메모리)을 확보하게 된다. 
+## 아키텍처 (RAG 출처 분리)
+Week 4의 핵심은 단일 RAG 함수 대신 **데이터 출처별 전용 Retrieval Tool을 분리**하여 LLM이 질문에 맞춰 적절한 도구를 선택하도록 구현하는 것이다.
 
 ```
-[사용자 자연어 입력]
-       ↓
-[Week 3 Agent (with week03_tools)]
-       ↓ (1단계: extract_schedule_request로 구조화)
-[StructuredRequest (구조화 결과 확보)]
-       ↓ (2단계: save_structured_request 등의 SQLite 저장 도구 호출)
-[SQLite DB (AppSQLiteStore) 영속성 저장]
-       ↓ (3단계: list_saved_requests / personal_list_saved_schedules 등으로 조회 및 대화 맥락 복원)
-[기록된 정보 기반 답변 제공 및 영속적 유지]
+                  [ 사용자 질문 ]
+                        ↓
+             [ Week 4 Nana Agent ]
+      ┌─────────────────┼─────────────────┐
+      ↓                 ↓                 ↓
+[개인 참고자료 RAG]   [SQLite 저장 검색]  [대화 이력 RAG]
+ (ChromaDB Vector)    (AppSQLiteStore)  (ConversationRAG)
+  - hits 반환          - rows 반환       - hits 반환
 ```
 
 ## 개발 행동 원칙
-클로드 코드는 본 프로젝트의 코드를 작성하고 수정하는 전 과정에서 다음의 4가지 핵심 개발 원칙을 강제 준수해야 한다.
-1. **Think Before Coding**: 코딩 전 가정과 설계를 `plan.md`에 명시하고, 모호함이 있다면 즉시 정지 후 질문할 것
-2. **Simplicity First**: 불필요한 추상화, 예외 래퍼, 미지정 라이브러리 추가 엄금
-3. **Surgical Changes**: 타겟 함수 본문만 정교하게 수정하며, 주변 스타일(Pydantic V2 등)을 100% 모방할 것
-4. **Goal-Driven**: "자가 테스트" 단계의 검증을 통과하는 것만을 목표로 삼을 것
-5. **plan.md 수립**: 코드를 작성하기 전, 반드시 plan mode에서 전체 개발 마일스톤과 마주할 가정을 명시한 plan.md를 선제 작성하여 검수받아라. student_parts/week03_build_nanas_logbook.py 상단에 명시된 [3주차 수강생 구현 가이드] 및 코드 내부의 TODO 지시문을 완벽하게 파싱하여 기획에 통합하라.
-6. **dev-log.md 실시간 체크리스트 및 상세 원리 기록**: 개발 과정에서 계획의 단계가 끝날 때마다 dev-log.md에 수립해 둔 체크리스트를 업데이트[x]하라.
-사용자가 이 문서만 보고도 처음부터 끝까지 똑같이 코드를 구현하고 기술적으로 완벽히 이해흘 수 있는 수준으로 상술하라. 
-7. **발생한 모든 에러는 dev-log.md에 기록하고, 어떻게 해결하였는지 흐름을 명시하라.**
+1. **Think Before Coding**: 코딩 전 `plan.md`에 설계와 가정을 밝히고 검수 요청할 것.
+2. **Simplicity First & Surgical Changes**: 불필요한 추상화 금지, 타겟 함수 본문만 최소/정교 수정.
+3. **Goal-Driven & Self Validation**: 테스트 통과를 목표로 자가 검증 수행.
+4. **Test & Feedback Loop**: 코드 수정 후 반드시 `./run.sh --week4`를 실행하여 Trace 상의 도구 호출 및 에러 유무를 직접 검증하고 피드백 루프를 수행할 것.
+5. **Error Log 작성 필수**: 발생한 모든 에러, 예외 처리, 원인 및 해결 과정은 `error-log.md` 파일에 실시간으로 명확히 기록할 것.
 
-## SQLite 물리 테이블 스키마 규격 (Hard constraint)
-AppSQLiteStore 연동 및 쿼리 제어 시, 파이썬 파일 내에 드러나지 않는 아래의 실제 SQLite 스키마 구성을 엄격히 참조하여 쿼리 불일치 에러를 원천 봉쇄하라.
-- structured_requests (원본 메타 저장소)
-    - request_id (TEXT, PRIMARY KEY)  
-    - source_text (TEXT, NOT NULL)  
-    - kind (TEXT, NOT NULL)  
-    - payload_json (TEXT, NOT NULL)  
-    - created_at (TEXT, NOT NULL)  
-    
-- schedules (일정 데이터 테이블)
-   - id (INTEGER PRIMARY KEY AUTOINCREMENT) 
-   - request_id (TEXT, FOREIGN KEY REFERENCES structured_requests)  
-   - title (TEXT, NOT NULL)  
-   - date (TEXT), start_time (TEXT), end_time (TEXT)  
-   - members_json (TEXT, NOT NULL)  
-   - reason (TEXT), schedule_type (TEXT, NOT NULL)  
+## 구현 대상 도구 및 헬퍼 규격
 
-- todos (할 일 데이터 테이블)
-  - id (INTEGER PRIMARY KEY AUTOINCREMENT)  
-  - request_id (TEXT, FOREIGN KEY REFERENCES structured_requests)  
-  - title (TEXT, NOT NULL)  
-  - due_date (TEXT), priority (TEXT), reason (TEXT)  
-  
-- reminders (알림 데이터 테이블)
-  - id (INTEGER PRIMARY KEY AUTOINCREMENT)  
-  - request_id (TEXT, FOREIGN KEY REFERENCES structured_requests)  
-  - title (TEXT, NOT NULL)  
-  - date (TEXT), start_time (TEXT), reason (TEXT) 
+### 1. 개인 참고자료 도구
+- **`add_personal_reference`** (`add_personal_reference_dict` 헬퍼)
+  - `title`, `content`, `tags` 수신. `tags`가 `None`이면 빈 리스트(`[]`)로 변환.
+  - `REFERENCE_STORE.add_personal_reference` 호출 후 `reference_backend` 및 `reference` dict 포함 응답 반환.
+  - top-level 키 제약이 없는 도구이므로, Week 1~3과 동일하게 `week03_build_nanas_logbook.tool_result(...)`로
+    감싸 `{"ok": true, "tool_name": "add_personal_reference", ...}` 형태로 반환한다(세 검색 도구와 달리
+    `ok`/`tool_name`을 추가해도 계약 위반이 아니다).
+- **`search_personal_references`** (`search_personal_reference_hits` 헬퍼)
+  - `query`, `top_k` 수신. `top_k` 범위는 `SearchPersonalReferencesInput`의 `Field(ge=1, le=20)`이
+    이미 검증하므로, helper 안에서 `safe_limit`을 또 호출해 중복 클램프하지 않는다.
+  - 결과는 반드시 **top-level 키 `{"hits": [...]}`** 형태의 JSON으로 반환.
+  - 각 hit 요소: `id`, `content`, `distance`, `metadata` (title/tags 포함).
 
- 
+### 2. SQLite 저장 기록 검색 도구
+- **`search_saved_requests`** (`search_saved_request_rows` 헬퍼)
+  - `query`, `top_k` 수신. `top_k` 범위는 `SearchSavedRequestsInput`의 `Field(ge=1, le=50)`이
+    이미 검증하므로, helper 안에서 `safe_limit`을 또 호출하지 않는다.
+  - `SQLITE_STORE.search_saved_requests(query, limit=top_k)` 호출.
+  - 결과는 반드시 **top-level 키 `{"rows": [...]}`** 형태의 JSON으로 반환. 데이터 없으면 `{"rows": []}`.
 
-## 절대 금지 / 반드시 지킬 것 (Known gotchas)
-- 코드 베이스 가이드 최우선 참조: student_parts/week03_build_nanas_logbook.py 내부의 SaveStructuredRequestInput 스키마 설계 방식, 각종 조회/수정/삭제 입력 스펙(SavedRequestListInput 등) 및 각 함수의 TODO 제약 조건을 실시간으로 직접 읽고 한 자도 빠짐없이 지켜 구현하라. 
-- Pydantic 재생성 금지: 도구 본문(특히 save_structured_request) 내부에서는 Pydantic 클래스 인스턴스를 직접 불필요하게 다시 생성하지 말 것 (이미 @tool(args_schema=...)가 유효성 검증을 완료함).  
-- 임시 래퍼 직접 저장 금지: DB의 payload_json 등에 원본 구조화 정보를 저장할 때, ok, tool_name, base_date와 같은 임시 결과 래퍼 필드를 원시 데이터에 적재하지 말 것.  
-- 안전한 삭제 제어: 무조건적인 전체 삭제를 예방하기 위해, 모든 필터 인자가 비어있는 상태로 들어올 때 삭제를 안전하게 거절하는 Guard 규칙을 _delete_saved_schedules에 반드시 구현하라.  
-- 조회 실패 대응: DB 단건 및 목록 조회 과정에서 매칭되는 데이터 레코드가 없더라도 예외나 에러를 발생시키지 말고, 단건은 row=None, 목록은 rows=[] 형태를 반환하여 에러 전파를 방지하라.  
-- 유니코드 보존: 한글이 깨지거나 유실되지 않도록 모든 도구의 JSON 문자열 직렬화 시 json_payload 함수(ensure_ascii=False 설정 적용)를 거쳐서 리턴하라.   
-- 프롬프트 누적: week03_prompt_parts() 구현 시 기존 Week 1, 2 프롬프트 리스트 위에 Week 3 규칙(SQLITE_MEMORY_PROMPT, WEEK03_TOOL_CALL_PROMPT 지침)을 누적(Append)하여 조립하라 (덮어쓰기 금지).  
-- Pydantic V2 문법 고수: Pydantic V2 양식을 준수하여 @model_validator(mode="before") 및 .model_dump() 형식을 일관되게 활용하라.  
+### 3. 대화 이력 RAG 도구
+- **`search_conversation_messages`** (`search_conversation_messages_dict` 헬퍼)
+  - 대화 기록을 `ConversationRAGStore`에 lazy sync 후 현재 대화를 제외하여 검색.
+  - `top_k` 범위는 `SearchConversationMessagesInput`의 `Field(ge=1, le=50)`이 이미 검증하므로,
+    helper 안에서 `safe_limit`을 또 호출하지 않는다.
+  - 결과를 **`{"hits": [...]}`** JSON으로 반환.
+
+### 4. 프롬프트 및 에이전트 조립
+- **`week04_prompt_parts()`**: 기존 Week 1~3 프롬프트 위에 Week 4 RAG 지침 누적(Append).
+- **`build_week04_agent()`**: Week 1~4 도구를 모아 에이전트 생성.
+
+## 절대 금지 / 핵심 주의사항 (Known Gotchas)
+- **Top-level JSON 키 반환 규격 준수**:
+  - 개인 참고자료 검색: `{"hits": [...]}`
+  - SQLite 기록 검색: `{"rows": [...]}`
+- **안전한 Limit 제한**: `top_k`/`limit`의 범위는 tool의 Pydantic `args_schema`에 선언한
+  `Field(ge=.., le=..)`가 1차로 강제한다. helper의 유일한 호출 경로가 이 Pydantic 검증을 거친
+  tool뿐이라면, helper 안에서 `safe_limit(limit/top_k)`을 또 호출해 중복 클램프하지 않는다.
+  Pydantic 검증 없이 helper가 직접 호출될 수 있는 경로가 생기는 경우에만 `safe_limit()`을 쓴다.
+- **`tags` 처리**: `tags=None` 입력 시 예외 방지를 위해 `tags = tags or []` 처리.
+- **유니코드 한글 보존**: JSON 반환 시 반드시 `json_payload(...)` 헬퍼를 사용하여 직렬화.
+- **프롬프트 덮어쓰기 금지**: `week04_prompt_parts()` 작성 시 이전 주차 프롬프트를 덮어쓰지 말고 리스트에 추가(Append).
