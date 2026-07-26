@@ -292,26 +292,7 @@ def search_conversation_messages_dict(
         conversation_id=conversation_id,
         exclude_conversation_id=current_conversation_id,
     )
-
-    hits: list[dict[str, Any]] = []
-    for conversation_hit in conversation_hits:
-        matched_conversation_id = str(conversation_hit.get("conversation_id") or "")
-        if not matched_conversation_id:
-            continue
-        for message in sqlite_store.load_conversation(matched_conversation_id):
-            hits.append(
-                {
-                    "conversation_id": matched_conversation_id,
-                    "conversation_title": conversation_hit.get("title") or "",
-                    "role": message.get("role") or "",
-                    "content": message.get("content") or "",
-                    "distance": conversation_hit.get("distance"),
-                }
-            )
-            if len(hits) >= top_k:
-                break
-        if len(hits) >= top_k:
-            break
+    hits = conversation_hits    
 
     return {
         "hits": hits,
