@@ -643,14 +643,7 @@ def week03_tools() -> list[Any]:
 def week03_system_prompt() -> str:
     """3주차 단일 agent가 따르는 시스템 프롬프트입니다."""
 
-    return join_system_prompt(
-        [
-            *week03_prompt_parts(),
-            # Week 3 한정 범위 규칙: 재사용되는 prompt_parts에 두면 Week 4+가 "RAG 안 함"을
-            # 상속한 뒤 "RAG 하라"로 부정하는 모순이 생기므로, Week 3 최종 조립에서만 추가한다.
-            "지금은 기록의 저장·조회·수정·삭제까지 담당하고, 기억 검색(RAG)과 외부 멤버 일정 조율은 아직 하지 않는다.",
-        ]
-    )
+    return join_system_prompt(week03_prompt_parts())
 
 
 def week03_prompt_parts() -> list[str]:

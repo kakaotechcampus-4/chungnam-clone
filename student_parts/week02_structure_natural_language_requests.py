@@ -293,12 +293,6 @@ def week02_system_prompt() -> str:
     return join_system_prompt(
         [
             *week02_prompt_parts(),
-            # Week 2 한정 범위 규칙: 재사용되는 prompt_parts에 두면 Week 3+가 모순 지시를
-            # 상속하므로, Week 2 agent의 최종 조립에서만 추가한다.
-            (
-                "지금은 요청을 StructuredRequest로 구조화하는 것까지만 담당하고, "
-                "SQLite 저장·RAG 검색·외부 멤버 일정 조율은 하지 않는다."
-            ),
             (
                 "최종 답변은 반드시 StructuredRequestBatch 형태의 structured_response로 반환한다.\n"
                 "- 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담는다.\n"

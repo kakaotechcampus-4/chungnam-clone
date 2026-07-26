@@ -436,8 +436,7 @@ def week04_prompt_parts() -> list[str]:
             "- search_personal_references는 top-level hits, search_saved_requests는 top-level rows, "
             "search_conversation_messages는 top-level hits를 근거로 삼고, 검색에 없는 내용을 지어내지 않는다.\n"
             "- 대화 RAG 결과에서 assistant(너 자신)의 과거 발화만으로 사실을 확정하지 말고, 사용자 발화나 저장된 기록으로 교차 확인한다.\n"
-            "- search_conversation_messages는 기본적으로 현재 대화를 제외하므로, '방금 한 말'은 검색이 아니라 현재 대화 맥락에서 답한다.\n"
-            "지금은 기억 검색까지 담당하고, 외부 멤버 일정 조율은 아직 하지 않는다."
+            "- search_conversation_messages는 기본적으로 현재 대화를 제외하므로, '방금 한 말'은 검색이 아니라 현재 대화 맥락에서 답한다."
         ),
     ]
 
