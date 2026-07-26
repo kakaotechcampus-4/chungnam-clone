@@ -27,9 +27,8 @@ _WEEK04_AGENT: Any | None = None
 #   관련 있는 질의 0.77~1.13 / 경계 1.46 / 무관한 질의 1.62 이상
 REFERENCE_RELEVANCE_MAX_DISTANCE = 1.5
 # 필요한 메모가 4위로 밀려 top_k=2에서 잘린 사례가 있어, 최소 후보 수를 확보한다.
+# 이것은 "순위에서 잘리는 문제"에 대한 대응이고, 아래 임계값 판단과는 다른 문제를 다룬다.
 REFERENCE_MIN_CANDIDATES = 4
-# 근거가 약하다고 판단되면 이 개수까지 넓혀 한 번 더 검색한다.
-REFERENCE_WIDENED_CANDIDATES = 8
 
 
 # [4주차 수강생 구현 가이드]
@@ -350,33 +349,24 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     requested = max(safe_limit(top_k, default=2, maximum=20), REFERENCE_MIN_CANDIDATES)
     hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=requested)
 
-    # ② 최상위 distance로 "근거가 충분한가"를 판단한다. distance가 클수록 의미가 먼 문서다.
+    # ② 최상위 distance로 "이 결과를 근거로 써도 되는가"를 판단한다. distance가 클수록 의미가 먼 문서다.
+    #    ①(최소 후보 확보)이 순위에서 잘리는 문제를 다룬다면, 이 판단은 결과의 사용 가능 여부를 다룬다.
     best_distance = hits[0]["distance"] if hits else None
     sufficient = best_distance is not None and best_distance <= REFERENCE_RELEVANCE_MAX_DISTANCE
 
-    # ③ 근거가 약하면 후보를 넓혀 한 번 더 검색한다(같은 질의라 최상위 거리는 그대로지만,
-    #    순위에서 밀린 관련 메모가 함께 올라올 수 있다).
-    widened = False
-    if not sufficient and requested < REFERENCE_WIDENED_CANDIDATES:
-        hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=REFERENCE_WIDENED_CANDIDATES)
-        widened = True
-        best_distance = hits[0]["distance"] if hits else None
-        sufficient = best_distance is not None and best_distance <= REFERENCE_RELEVANCE_MAX_DISTANCE
+    # ③ 근거가 약할 때 같은 질의로 개수만 늘리면 최상위 품질은 그대로이고 무관한 자료만 늘어난다.
+    #    (측정: best 1.382 → 확장 후에도 1.382, 무관 자료 0건 → 1건 / 질의 재작성 시 best 0.547)
+    #    그래서 여기서 확장하지 않고, 판단 결과만 돌려주어 질의 재작성이나 "못 찾음" 답변으로 이어지게 한다.
+    retrieval: dict[str, Any] = {
+        "requested_top_k": requested,
+        "returned": len(hits),
+        "best_distance": best_distance,
+        "sufficient": sufficient,
+    }
+    if not sufficient:
+        retrieval["hint"] = "관련도가 낮습니다. 질의를 더 구체적으로 바꿔 다시 검색하거나, 근거를 찾지 못했다고 답하세요."
 
-    # ④ hits와 함께 검색 품질 정보를 반환한다. sufficient=false면 LLM이 근거 부족을 인지하고
-    #    단정하지 않거나 질의를 바꿔 재검색할 수 있고, trace에서도 검색 상태를 확인할 수 있다.
-    return json_payload(
-        {
-            "hits": hits,
-            "retrieval": {
-                "requested_top_k": requested,
-                "returned": len(hits),
-                "best_distance": best_distance,
-                "sufficient": sufficient,
-                "widened": widened,
-            },
-        }
-    )
+    return json_payload({"hits": hits, "retrieval": retrieval})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -467,8 +457,9 @@ def week04_prompt_parts() -> list[str]:
             "제목·내용의 키워드로 찾아야 하면 search_saved_requests를 쓴다. "
             "⑦ 참고자료 검색 질의에는 사용자 문장의 구체 조건(요일·시간대·대상 등)을 그대로 남긴다. "
             "'선호 시간'처럼 일반적인 표현으로 바꾸면 정작 필요한 메모가 상위에 오지 않는다. "
-            "⑧ 참고자료 검색 결과의 retrieval.sufficient가 false면 근거가 약하다는 뜻이다. "
-            "단정해서 답하지 말고, 질의를 사용자 표현에 가깝게 바꿔 한 번 더 검색하거나 근거를 찾지 못했다고 답한다."
+            "⑧ 참고자료 검색 결과의 retrieval.sufficient가 false면 지금 결과를 근거로 쓰기 어렵다는 뜻이다. "
+            "같은 질의로 개수만 늘려 다시 부르지 말고, 질의를 더 구체적으로 바꿔(사용자 문장의 조건을 되살려) 한 번 더 검색한다. "
+            "그래도 sufficient가 false면 지어내지 말고 근거를 찾지 못했다고 답한다."
         ),
     ]
 

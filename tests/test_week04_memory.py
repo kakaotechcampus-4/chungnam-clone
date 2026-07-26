@@ -22,7 +22,6 @@ from student_parts.week04_retrieve_nanas_memory import (  # noqa: E402
     REFERENCE_MIN_CANDIDATES,
     REFERENCE_RELEVANCE_MAX_DISTANCE,
     REFERENCE_STORE,
-    REFERENCE_WIDENED_CANDIDATES,
     SQLITE_STORE,
     AddPersonalReferenceInput,
     SearchConversationMessagesInput,
@@ -546,36 +545,45 @@ def test_ref_tool_finance_query(seeded_references):
 
 @pytest.mark.parametrize("top_k", [1, 2, 3])
 def test_ref_tool_enforces_min_candidates(seeded_references, top_k):
-    # 작은 top_k로도 최소 후보 수를 확보하고, 반환 개수는 요청/확장 상한 안에 있는지
+    # 작은 top_k로도 최소 후보 수를 확보하고, 요청 개수를 넘겨 반환하지 않는지
     out = json.loads(search_personal_references.invoke({"query": "업무", "top_k": top_k}))
     retrieval = out["retrieval"]
     assert retrieval["requested_top_k"] == max(top_k, REFERENCE_MIN_CANDIDATES)
-    cap = REFERENCE_WIDENED_CANDIDATES if retrieval["widened"] else retrieval["requested_top_k"]
-    assert len(out["hits"]) <= cap
+    assert len(out["hits"]) <= retrieval["requested_top_k"]
     assert retrieval["returned"] == len(out["hits"])
 
 
 def test_ref_tool_retrieval_report_structure(seeded_references):
     # 검색 품질 정보(retrieval)가 기대한 키를 갖는지
     out = json.loads(search_personal_references.invoke({"query": "커피", "top_k": 2}))
-    assert set(out["retrieval"]) == {"requested_top_k", "returned", "best_distance", "sufficient", "widened"}
+    assert set(out["retrieval"]) >= {"requested_top_k", "returned", "best_distance", "sufficient"}
 
 
 def test_ref_tool_marks_relevant_query_sufficient(seeded_references):
-    # 관련 있는 질의는 근거 충분으로 판단하고 확장 재검색을 하지 않는지
+    # 관련 있는 질의는 근거 충분으로 판단하고 안내(hint)를 붙이지 않는지
     out = json.loads(search_personal_references.invoke({"query": "아메리카노 즐겨 마신다", "top_k": 2}))
     assert out["retrieval"]["best_distance"] <= REFERENCE_RELEVANCE_MAX_DISTANCE
     assert out["retrieval"]["sufficient"] is True
-    assert out["retrieval"]["widened"] is False
+    assert "hint" not in out["retrieval"]
 
 
-def test_ref_tool_widens_when_evidence_weak(seeded_references):
-    # 무관한 질의는 근거 부족으로 판단하고 후보를 넓혀 재검색하는지
+def test_ref_tool_marks_weak_evidence_without_widening(seeded_references):
+    # 무관한 질의는 근거 부족으로 표시하되, 같은 질의로 후보를 늘리지는 않는지
+    # (같은 질의를 확장해도 최상위 품질은 그대로이고 무관한 자료만 늘어나기 때문)
     out = json.loads(search_personal_references.invoke({"query": "양자컴퓨터 논문 초록 요약", "top_k": 2}))
-    assert out["retrieval"]["best_distance"] > REFERENCE_RELEVANCE_MAX_DISTANCE
-    assert out["retrieval"]["sufficient"] is False
-    assert out["retrieval"]["widened"] is True
-    assert out["retrieval"]["requested_top_k"] < REFERENCE_WIDENED_CANDIDATES
+    retrieval = out["retrieval"]
+    assert retrieval["best_distance"] > REFERENCE_RELEVANCE_MAX_DISTANCE
+    assert retrieval["sufficient"] is False
+    assert retrieval["requested_top_k"] == REFERENCE_MIN_CANDIDATES
+    assert len(out["hits"]) <= REFERENCE_MIN_CANDIDATES
+    assert "hint" in retrieval
+
+
+def test_ref_tool_rewritten_query_improves_best_distance(seeded_references):
+    # 근거가 약할 때의 해법: 같은 개수로 두고 질의를 구체적으로 바꾸면 최상위 관련도가 좋아지는지
+    vague = json.loads(search_personal_references.invoke({"query": "메모 알려줘", "top_k": 2}))
+    specific = json.loads(search_personal_references.invoke({"query": "아메리카노 오후에 마신다", "top_k": 2}))
+    assert specific["retrieval"]["best_distance"] < vague["retrieval"]["best_distance"]
 
 
 def test_ref_tool_min_candidates_surface_lower_ranked_hit(seeded_references):
