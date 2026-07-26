@@ -1,14 +1,14 @@
 ## 과제 목표
 
-- Week 2에서 만든 StructuredRequest를 Pydantic 입력 스키마로 검증한 뒤 SQLite에 저장하기
-- 저장된 요청/일정을 다시 조회/수정/삭제하기
+- Nana가 "내가 적어 둔 참고자료"와 "SQLite에 저장된 일정/할 일 기록"을 구분해서 검색하게 합니다.
+- Week 4의 핵심은 RAG를 하나의 마법 함수로 보지 않고, 데이터 출처별 검색 tool을 분리하는 것입니다.
 
 ---
 
 ## 과제 위치
 
-- 작업 브랜치 : `parkjeonghyeon/week3` → 본인 통합 브랜치 `parkjeonghyeon/final` 로 PR
-- 주요 파일 : `student_parts/week03_build_nanas_logbook.py`
+- 작업 브랜치 : `parkjeonghyeon/week4` → 본인 통합 브랜치 `parkjeonghyeon/final` 로 PR
+- 주요 파일 : `student_parts/week04_retrieve_nanas_memory.py`
 
 ---
 
@@ -16,153 +16,121 @@
 
 이번 PR 에서 어디까지 했는지 체크해요. (해당하는 곳에 모두)
 
-- [x] 메인 과제 완료
-- [x] 심화 과제까지 완료
+- [x] 1차 과제 완료
+- [ ] 2차 과제 완료
 
 ---
 
 ## 구현한 기능
 
-- [x] save_structured_request() 함수 구현하기
-- [x] list_saved_requests(), get_saved_request() 함수 구현하기
-- [x] personal_list_saved_schedules() 함수 구현하기
-- [x] build_week03_agent(), week03_prompt_parts() 함수 및 Week 3 프롬프트 구현하기
+- [x] add_personal_reference() 함수 구현하기
+- [x] search_personal_references() 함수 구현하기
+- [x] search_saved_requests() 함수 구현하기
 
 ---
 
 ## 도전 기능
 
-- [x] structured_request_from_week01_schedule(), personal_create_schedule() 함수 구현하기
-- [x] \_delete_saved_schedules(), delete_saved_schedules_dict(), personal_delete_saved_schedules() 함수 구현하기 (B. 삭제)
-- [x] personal_update_saved_schedule() 함수 구현하기 (C. 수정)
-- [x] unwrap_legacy_payload(), \_save_input_from(), save_structured_request_payload() 함수 구현하기 (D. 레거시 정규화)
+(수정사항과 피드백 남겨주시면 2차 PR 때 구현해보도록 하겠습니다 ㅜㅜ)
 
 ---
 
-### save_structured_request() 함수 구현하기
-
-- AI 활용 내용 : 따로 AI를 활용하지 않았다.
-- 직접 수정한 부분 : args_schema로 검증된 함수의 인자들을 그대로 payload dict로 모아서 저장했다. 이전 주차처럼members or []로 members가 항상 리스트가 되게 했고, 이어서 dict comprehension {k: v for k, v in payload.items() if v is not None}으로 None 값을 제외한 뒤 \_store().save_structured_request(payload)로 저장했으며, 그 결과를 tool_result로 감싸서 JSON 문자열로 반환했다.
-- 수정 이유 : 노트북처럼 본문에서 Pydantic 클래스를 다시 만들면 args_schema가 이미 한 검증을 중복하게 되므로, 굳이 그렇게 하지 않고 이미 검증된 인자를 바로 딕셔너리로 정리했다. None 값을 빼는 것은 store가 payload.get으로 읽어 빈 값을 굳이 넣을 필요가 없고, DB에 불필요한 null 값이 남지 않게 하기 위해서다.
-
-### list_saved_requests(), get_saved_request() 함수 구현하기
+### add_personal_reference() 함수 구현하기
 
 - AI 활용 내용 :
 
 ```
-list_saved_requests는 SQLite 데이터를 kind, date_from, date_to로 필터링해서 가져오니까,
-이거를 쿼리문을 직접 써야 하는지 알려 줘. 단건 조회인 get_saved_request도 한번 같이 봐 줘.
+add_personal_reference는 REFERENCE_STORE.add_personal_reference가 반환하는 딕셔너리에서
+backend 정보를 분리해야 하는데 여기서 반환값 구조가 어떻게 생겼는지 알려 줘.
 ```
 
-위의 프롬프트로 실제 SQL은 이미 AppSQLiteStore 안에 들어 있고, tool은 필터를 store 메서드에 그대로 넘기는 얇은 입구 역할만 하면 된다는 것을 확인한 뒤, 설계 방향을 간단히 설명 듣고나서 구현하였다.
+위의 프롬프트로 PersonalReferenceStore.add_personal_reference 가 {reference_id, title, content, tags, backend} 형태의 dict를 반환하고, 이 중 backend 는 vector store 메타 정보이므로 나머지 참고자료 본문과 분리해서 reference_backend / reference 두 키로 나눠 담으면 된다는 것을 확인한 뒤, 설계 방향을 간단히 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : list_saved_requests는 받은 kind, date_from, date_to를 별도 가공 없이 \_store().list_saved_requests에 그대로 넘겨서 결과를 rows로 감쌌다. get_saved_request는 request_id로 \_store().get_saved_request를 호출하고, 결과가 없을 때에도 row=None을 그대로 유지해 반환했다.
-- 수정 이유 : SQL 쿼리문 역할은 store 함수가 담당하므로 tool에서 쿼리를 직접 쓸 필요가 없고, 필터가 None이면 store 쪽에서 알아서 조건에서 빠지기 때문이다. 또 조회 결과가 없어도 예외를 던지지 않고 rows=[] 또는 row=None을 유지해야 이후 흐름이 안전하게 이어지기 때문이다.
+- 직접 수정한 부분 : tags가 None으로 들어올 수 있으므로 tags or [] 로 빈 리스트 보정을 먼저 한 뒤 REFERENCE_STORE.add_personal_reference(title, content, tags) 에 넘겼다. 반환된 dict에서 backend 키만 reference_backend 로 빼고, 나머지 키들은 dict comprehension으로 걸러서 reference 에 담았다.
+- 수정 이유 : tags가 None인 채로 store에 넘어가면 내부에서 ",".join(None) 으로 문제가생기기 때문에 tool 진입 시점에 비어있는 리스트로 바꿔야 한다. 또 backend 정보는 저장 결과 확인용 메타데이터이고 참고자료 본문과 성격이 다르므로, LLM이 응답 근거와 저장소 정보를 혼동하지 않도록 top level에서 분리해야 하기 때문이다.
 
-### personal_list_saved_schedules() 함수 구현하기
+### search_personal_references() 함수 구현하기
 
 - AI 활용 내용 :
 
 ```
-저장된 일정 목록을 조회하는 personal_list_saved_schedules를 구현하고 싶어. rows로 조회하는 부분까지는 했는데 그 뒤를 어떻게 해야 할지 알려 줘.
+search_personal_references는 store 검색 결과가 id, title, content, tags, distance로 flat하게 오는데,
+이걸 tool 반환용으로 재정리하려면 어떤 구조가 좋은지 알려 줘. 추가로 top-level 키는 hits로 감싸야 하는 건지도 같이 봐 줘.
 ```
 
-위의 프롬프트로 store의 메서드 이름이 list_saved_schedules가 아니라 list_schedules라는 점(오류)과, 반환에 filters와 schedules를 함께 담아야 한다는 점을 확인한 뒤 직접 구현하였다.
+위의 프롬프트로 store hit의 flat 구조에서 title 과 tags 는 문서 메타데이터 성격이므로 metadata 하위로 묶고, id/content/distance 는 검색 결과 자체이므로 top-level에 두면 된다는 것을 확인한 뒤, course repo 계약에 맞게 {"hits": [...]} 형태로 감싸는 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : 잘못 호출하던 list_saved_schedules를 store에 실제로 있는 list_schedules로 고쳤다. 기본 kind를 kind or "personal_schedule"로 계산해 kind_tmp 변수에 담고, 이 값을 store 호출과 filters dict에 똑같이 사용했다. 반환은 rows 대신, 조회 조건을 담은 filters와 결과 목록인 schedules를 함께 넣어 JSON 문자열로 만들었다.
-- 수정 이유 : store에 없는 메서드를 부르면 실행 시 AttributeError로 프로그램이 죽기 때문에 이름을 정확히 맞췄다. kind 기본값을 변수 하나로 계산해 재사용한 것은 store 인자와 filters에 서로 다른 값이 들어가 어긋나는 것을 막기 위해서다. filters를 함께 반환하는 것은 trace에서 "어떤 조건으로 무엇을 조회했는지" 확인할 수 있게 하기 위해서다.
+- 직접 수정한 부분 : REFERENCE_STORE.search_personal_references(query, limit=top_k) 호출 전에 safe_limit(top_k, default=2, maximum=20) 으로 top_k를 보정했다. 반환된 각 hit에서 id , content , distance 는 그대로 꺼내고, title 과 tags 는 metadata dict 안에 넣어서 재구성한 뒤, 최종 결과를 {"hits": hits} 로 감싸 반환했다.
+- 수정 이유 : LLM이 top_k에 비정상적인 값을 넘길 수 있으므로 safe_limit으로 1~20 범위를 보장해야 한다. 또 store가 반환하는 flat 구조를 그대로 쓰면 검색 근거(content)와 부가 정보(title, tags)가 같은 레벨에 섞여서 LLM이 답변 근거를 파싱하기 어려워지므로, metadata로 분리하고 top-level hits 키로 감싸서 계약을 준수해야 하기 때문이다.
 
-### build_week03_agent(), week03_prompt_parts() 함수 및 Week 3 프롬프트 구현하기
+### search_saved_requests() 함수 구현하기
 
 - AI 활용 내용 :
 
 ```
-2주차에 만든 build_week02_agent와 week02_prompt_parts를 가져와서 3주차용 함수인 build_week03_agent, week03_prompt_parts를 작성해 줘.
-단, week02를 고려해서 3주차에 빠져야 하는 내용(structured output용 response_format, "SQLite 저장은 이 agent 역할이 아니다"라는 지시)은 빼고,
-현재 3주차의 SQLite 저장/조회 흐름에 맞게 반영해 줘.
+search_saved_requests는 SQLITE_STORE.search_saved_requests를 호출하면 되는 건지, 시그니처가 (query, limit)인지 (query, kind, limit)인지도 같이 알려 줘.
 ```
 
-위의 프롬프트를 활용하여 조금 빠르게 구현하였다.
+```
+결과가 비어 있을 때 빈 배열을 그대로 두면 되는지도 어떻게 되는거지??
+```
 
-- 직접 수정한 부분 : build_week03_agent()에서는 week02처럼 create_agent를 쓰되 structured output용 response_format 인자는 빼고 model=chat_model(), tools=week03_tools(), system_prompt=week03_system_prompt()만 연결했다. 비어 있던 SQLITE_MEMORY_PROMPT와 WEEK03_TOOL_CALL_PROMPT 상수에는 각각 "저장 내용은 DB에서 도구로 조회하라"는 규칙과 "extract_schedule_request -> save_structured_request 순서로 저장하라"는 규칙을 직접 작성했고, 특히 "이번 주차에서는 SQLite 저장이 이 agent의 역할"이라는 문구를 명시적으로 추가했다. 또 week03_prompt_parts()의 TODO 자리에는 "구조화로 끝내지 말고 저장까지 수행"하라는 지시와 함께 current_app_date_iso() 값을 f-string으로 삽입한 오늘 날짜, 주차 범위 안내를 넣었다.
-- 수정 이유 : week03은 week02처럼 structured output을 반환하는 agent가 아니라 tool 호출로 SQLite에 저장/조회하는 agent이므로 response_format이 불필요하기 때문이다. 또한 week03_prompt_parts()가 week02_prompt_parts()를 상속하는데 2주차 프롬프트에 "SQLite 저장은 이 agent 역할이 아니다"라는 문구가 있어 그대로 두면 LLM이 저장을 하지 않으므로, 이번 주차에서는 저장이 agent의 역할임을 명시해 상속된 지시를 뒤집고 오직 구조화 후 저장·조회하는 역할만을 명확히 알리기 위해서다.
+위의 프롬프트로 AppSQLiteStore.search_saved_requests 의 실제 시그니처가 (query, kind=None, limit=5) 이고, tool에서는 kind 없이 (query, limit=top_k) 만 넘기면 store 쪽에서 kind 조건을 알아서 빼준다는 것을 확인한 뒤, 설계 방향을 간단히 설명 듣고나서 구현하였다.
 
-### structured_request_from_week01_schedule(), personal_create_schedule() 함수 구현하기
+- 직접 수정한 부분 : safe_limit(top_k, default=3, maximum=50) 으로 top_k를 보정한 뒤, SQLITE_STORE.search_saved_requests(query, limit=top_k) 를 호출해서 결과를 rows 에 담았다. 검색 결과가 비어 있어도 빈 리스트를 그대로 유지하고, 최종 반환은 {"rows": rows} 로 감쌌다.
+- 수정 이유 : SQL 쿼리 조립과 LIKE 검색 로직은 store 메서드가 전부 처리하므로 tool에서 쿼리를 직접 쓸 필요가 없고, kind 필터도 store 기본값 None이 조건에서 빠지게 해준다. 또 결과가 없을 때 예외를 던지거나 None을 반환하면 LLM이 오류로 오해할 수 있으므로, rows=[] 를 유지해서 "검색했지만 없다"를 정상 응답으로 전달해야 하기 때문이다.
+
+### search_conversation_messages() 함수 구현하기
 
 - AI 활용 내용 :
 
 ```
-structured_request_from_week01_schedule(), personal_create_schedule() 함수에서,
-Week 1과 호환되도록 저장 로직을 어떻게 구현해야 하는지 알려 줘.
-week01_wake_up_nana.py 파일도 참고해서, Week 1의 personal_create_schedule 결과를 structured_request_from_week01_schedule로 변환한 뒤 SQLite에도 저장하는 흐름을 설명해 줘.
+search_conversation_messages를 구현하려는데 ConversationRAGStore의 API가 어떻게 되는지 알려 줘.
+SQLite 대화를 ChromaDB에 sync하는 메서드랑 검색 메서드 시그니처,
 ```
 
-위의 프롬프트로 Week 1 tool의 반환 구조(created_schedule dict)와 필드 매핑(attendees을 members로, id를 source_schedule_id로.)을 파악한 뒤 직접 구현하였다.
+```
+자꾸 오류가 나서 그러는데 conversation_id를 안 줬을 때
+"지금 하고 있는 대화"를 검색에서 빼려면 어떻게 해야 하는지도 같이 봐 줘.
+반환 JSON에 어떤 키들을 둬야 하는지도 알려 줘.
+```
 
-- 직접 수정한 부분 : structured_request_from_week01_schedule에서는 kind를 "personal_schedule"로 고정하고 attendees를 members로, id를 source_schedule_id로 매핑했다.
-- 수정 이유 : kind를 personal_schedule로 두면 members가 있을 때 StructuredRequest의 validator가 자동으로 group_schedule로 승격해 주고, source_schedule_id에 Week 1 임시 id를 넣어야 store가 중복 저장을 막고 같은 일정으로 연결하기 때문이다.
+위의 프롬프트로 ConversationRAGStore가 sync_from_sqlite(sqlite_store) 로 lazy sync를 하고, search(query, top_k, exclude_conversation_id, conversation_id) 로 검색하며, context_from_hits(hits) 와 backend_info() 로 근거 문자열/백엔드 정보를 만든다는 것을 확인하였다. 특히 conversation_id를 명시하지 않았을 때는 exclude_conversation_id=current_session_scope() 를 넘기면 search 내부에서 현재 대화 청크만 걸러 준다는 것을 확인한 뒤, "헬퍼가 정리하고 tool이 json_payload로 감싼다"는 설계 방향을 설명 듣고나서 구현하였다.
 
-### \_delete_saved_schedules(), delete_saved_schedules_dict(), personal_delete_saved_schedules() 함수 구현하기
+- 직접 수정한 부분 : AI가 너무 잘 구ㅕㄴ해서 따로 수정할 부분이 없었다 ㅜㅜ
+
+### search_nana_memory() 함수 구현하기
 
 - AI 활용 내용 :
 
 ```
-수강생 구현 가이드 주석을 잘 참고하여,
-_delete_saved_schedules(), delete_saved_schedules_dict(), personal_delete_saved_schedules()
-저장 일정 삭제 함수 3개를 구현해 줘. 조건 없이 전체가 삭제되지 않게 안전 규칙을 넣고, delete_all이나 명시 필터에 따라 store의 삭제 메서드를 호출하는 구조로 만들어 줘.
+search_nana_memory는 이전 버전 호환용 통합 검색 tool이라던데, 이 repo에 이걸 참조하는 테스트나 코드가 있어서
+꼭 맞춰야 하는 응답 구조가 있는지 먼저 확인해 줘. 없다면 개인 참고자료 hit랑 SQLite 일정 chunk를 어떻게 묶어서
+context 문자열로 만들면 되는지, 일정은 어떤 store 메서드로 가져와야 attendees까지 디코딩돼서 나오는지도 알려 줘.
 ```
 
-위의 프롬프트를 활용하여 helper(\_delete_saved_schedules)부터 tool(personal_delete_saved_schedules)까지 아래에서 위 순서로 빠르게 구현하였다.
+위의 프롬프트로 이 레포에는 search_nana_memory를 참조하는 테스트나 다른 코드가 없어 엄격히 맞춰야 할 기존의 구조는 없다는 것을 확인하였다. 또 list_schedules(limit, kind, date_from, date_to) 가 decode_schedule_row를 거쳐 attendees를 이미 list로 디코딩한 row를 돌려주므로 attendee 필터를 파이썬에서 바로 걸 수 있다는 것을 확인한 뒤, 참고자료 hit와 일정 chunk를 하나의 context 문자열로 묶는 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : 이 부분은 따로 수정하지 않았다. 기능 테스트 시 잘 통과하였다..!
-
-### personal_update_saved_schedule() 함수 구현하기
-
-- AI 활용 내용 :
-
-```
-personal_update_saved_schedule() 저장 일정 수정 tool을 구현해 줘. None으로 들어온 필드는 수정하지 않고, ID를 못 찾으면 실패로 응답하고, 성공하면 수정된 일정과 공유 일정 동기화 결과를 함께 반환하게 해 줘.
-```
-
-위의 프롬프트를 활용하여 store의 update_schedule을 감싸는 형태로 구현하였다.
-
-- 직접 수정한 부분 : title/date/start_time/end_time/attendees를 그대로 \_store().update_schedule에 넘기고, 결과가 None이면 ok=False와 reason을, 있으면 updated_schedule과 shared_sync를 담아 JSON으로 반환하도록 했다. 구현 뒤 임시 디비로 "시간만 수정 시 나머지 필드 유지"와 "없는 ID -> None" 동작을 확인했다.
-- 수정 이유 : store의 update_schedule이 이미 None을 "수정하지 않음"으로 처리하므로 그냥 인자를 그대로 넘기면 되고, 공유 저장소 동기화 결과까지 반환해야 이후 여러 사람 일정 조율에서 '나'의 일정이 일관되게 보이기 때문이다.
-
-### unwrap_legacy_payload(), \_save_input_from(), save_structured_request_payload() 함수 구현하기
-
-- AI 활용 내용 :
-
-```
-unwrap_legacy_payload(), _save_input_from(), save_structured_request_payload() 함수 3개의 payload 정규화를 각각 구현해 줘.
-dict, json 문자열, 자연어, StructuredRequest 등 어떤 형태로 들어오든간에 SaveStructuredRequestInput 하나로 맞춰 저장할 수 있게 해 줘.
-```
-
-위의 프롬프트를 활용하여 unwrap_legacy_payload -> \_save_input_from -> save_structured_request_payload 순서로 구현하였다.
-
-- 직접 수정한 부분 : 해당 부분의 구현을 정확하게 다 이해하지 못하였다ㅜㅜ 따로 수정하지는 않았지만, 추가 기능 테스트는 잘 통과하였다.
+- 직접 수정한 부분 : safe_limit(limit, default=5, maximum=20) 으로 limit을 보정하고, search_personal_reference_hits로 참고자료 hit를 가져왔다. 일정은 SQLITE_STORE.list_schedules 로 받아온 후 attendee가 있으면 attendees 리스트에 포함된 row만 남기도록 필터링했다.
+- 수정 이유 : 이전 trace/테스트 호환을 위해 tool 자체는 남기되, 출처별 tool이 실제 핵심이므로 week04_tools()에는 노출하지 않았다. 두 출처를 한 번에 묶은 context 문자열이 있어야 LLM이 통합 근거를 한눈에 읽을 수 있고, list_schedules가 SQL 필터(date_from/date_to)와 attendees 디코딩을 이미 처리하므로 tool에서 쿼리를 직접 작성하지 않고 attendee만 파이썬에서 걸러 코드를 단순하게 유지할 수 있기 때문이다..
 
 ---
 
 ## 구현하면서 고민한 점
 
-고민한 점 : Week 3 저장·조회 도구를 완성한 뒤 실제로 "저장 -> 조회"가 동작하게 만드는 과정에서 두 가지 문제에 직면했다.
+고민한 점 : Week 4 RAG 도구를 완성한 뒤 실제로 "출처별 검색"이 동작하게 만드는 과정에서 한가지 문제에 직면했다.
 
-1. 저장 일정 조회 도구(personal_list_saved_schedules)를 구현할 때, 저장소에 존재하지 않는 list_saved_schedules 메서드를 호출하도록 작성하여 실행 시 AttributeError가 발생하는 문제.
-   위의 문제는 요청 조회 메서드 이름(list_saved_requests)과 헷갈린 것이었고, 저장소에 실제로 정의된 일정 조회 메서드 이름은 list_schedules였다.
-2. 저장/조회 도구를 모두 정상적으로 구현했음에도 불구하고 agent가 실제로는 SQLite에 저장하지 않는 문제.
-   이 문제의 원인은 두 가지였는데, build_week03_agent가 create_agent로 agent를 생성하지 않고 계속 None을 반환하던 것과, week03_prompt_parts()가 Week 2 프롬프트를 상속하면서 "SQLite 저장은 이 agent의 역할이 아니다"라는 지시까지 함께 물려받아 LLM이 저장 도구를 호출하지 않도록 지시받고 있던 구조적 충돌이었다.
-
-해결 방법 : 우선적으로 클로드 코드에게 질문하였고, 저장소(fixed/app_store.py)의 실제 메서드 시그니처와 주차별 프롬프트 상속 구조를 분석해 코드를 수정했다.
-1번 문제는 존재하지 않던 list_saved_schedules 호출을 저장소에 실제 정의된 list_schedules로 바로잡아 해결했다.
-2번은 build_week03_agent에서 create_agent(model, tools, system_prompt)로 agent를 실제 생성하도록 채우되 Week 2와 달리 구조화 출력용 response_format은 제외했고,
-week03_prompt_parts()에 "이번 주차에서는 SQLite 저장이 이 agent의 역할"이라는 지시를 추가해 Week 2에서 상속된 "저장하지 말라"는 지시를 명시적으로 뒤집어 해결했다.
-마지막으로 SQLite DB를 직접 조회해 일정이 kind=personal_schedule로 structured_requests와 schedules 테이블에 정상 저장·조회되는지 확인함으로써, 저장 흐름이 끝까지 동작하는 것을 검증할 수 있었다.
+1. 개인 참고자료 검색 도구(search_personal_references)를 구현할 때, 저장소가 돌려주는 검색 결과 구조와 도구가 지켜야 하는 반환 계약이 서로 달라 저장소 결과를 그대로 반환하면 계약을 위반하는 문제이다.
+   이 문제는 PersonalReferenceStore.search_personal_references가 id/title/content/tags/distance를 평면 구조로 돌려주는 반면, course repo 계약은 각 hit이 id/content/distance/metadata(title/tags) 구조에 top-level 키가 hits여야 한다는 점을 놓친 것이었고, 여기에 더해 저장소 조회 메서드는 limit 인자를 받는데 도구는 top_k 인자를 노출하는 이름 불일치도 함께 있었다.
+   해결 방법 : 우선적으로 클로드 코드에게 질문하였고, 저장소 reference_store.py, app_store.py (fixed 폴더의 저장소 코드들)의 실제 메서드 시그니처와 주차별 프롬프트 상속 구조를 분석해 코드를 수정했다.
+   1번 문제는 '헬퍼가 조회 결과를 정리하고 도구가 json payload로 감싸 반환한다'는 설계 분리를 지키면서, search_personal_reference_hits에서 저장소의 평면 결과를 id/content/distance/metadata(title/tags) 구조로 재조립하고 top-level 키를 hits로 맞춰 해결했다.
+   같은 맥락에서 add_personal_reference는 저장소가 돌려준 dict를 reference_backend와 reference로 분리했고, search_saved_requests는 도구의 top_k를 저장소의 limit 인자로 매핑하며 결과를 top-level 키 rows로 감싸도록 바로잡았으며, top_k/limit 보정은 safe_limit()으로 도구 안에서 처리했다.
+   마지막으로 각 도구가 돌려주는 JSON의 top-level 키가 각각 hits, rows인지 확인하고, 참고자료성 질문과 저장 일정성 질문에 대해 trace에서 search_personal_references와 search_saved_requests가 각각 호출되는지 확인함으로써, 출처별 검색 흐름이 끝까지 동작하는 것을 검증할 수 있었다.
 
 ---
 
 ## 과제 회고 (KPT)
 
-- **Keep** (좋았고 계속 유지할 점) : 스키마나 함수를 직접 손으로 작성하기 위해 노력했다.
-- **Problem** (아쉬웠거나 막혔던 점) : 추가 과제 부분에서 구현하고 싶다는 욕심에 AI를 너무 많이 사용한 것 같다..
-- **Try** (다음에 시도해볼 점) : 멘토님 피드백에 따라서 코드를 더 면밀하게 분석하고 이해하기
+- **Keep** (좋았고 계속 유지할 점) : AI-first로 문제해결을 맡기고, 직접 판단하는 시간을 가졌는데 나쁘지 않았던 것 같다..
+- **Problem** (아쉬웠거나 막혔던 점) : 강사님이 실시간 라이브에서 설명해주시는 내용들을 뭔가 적용해서 이해해보고 싶은데 그게 조금 어려운 것 같다.
+- **Try** (다음에 시도해볼 점) : 2차 과제 구현하기
