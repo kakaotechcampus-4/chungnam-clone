@@ -23,6 +23,10 @@ node_modules/
 dist/
 
 # Keep later-week student files local until their assignment is published.
-student_parts/week04_retrieve_nanas_memory.py
 student_parts/week05_load_kanas_past_conversations.py
 student_parts/week06_kanamate_decides_schedule.py
+
+# Personal working-memory copies (TODO/guide/## comments kept for my own reference).
+# Never submitted; only student_parts/weekNN_*.py is the actual deliverable.
+student_parts/*_impl.py
+docs/questions_*.md
