@@ -1,7 +1,3 @@
-# 안녕하세요 멘토님, 드릴 질문이 몇 개 있어 아래에 남깁니다. 항상 감사합니다.
-# 1. 4주차 스켈레톤 코드엔 tool_result 같은게 없는데, tool의 json 반환값에 tool_name이나 ok를 넣지 말라는 뜻인가요? 제 생각엔 일관성있게 넣어야 할 것 같긴합니다.
-# 2. 과제를 진행할수록 과제 방식이 그저 llm과 이미 구현된 도구 사이에서 제가 서빙하는 코드만 작성하는 느낌입니다. sqlite나 rag가 구현된 코드도 직접 읽어서 이해해야할까요?
-
 from __future__ import annotations
 
 import json
@@ -280,7 +276,6 @@ def search_conversation_messages_dict(
 ) -> dict[str, Any]:
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
-    # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
     ...
     sync = conversation_rag_store.sync_from_sqlite(sqlite_store=sqlite_store)
     top_k = safe_limit(top_k)
@@ -302,7 +297,6 @@ def search_conversation_message_rows(
 ) -> list[dict[str, Any]]:
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
-    # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
     ...
     result = search_conversation_messages_dict(sqlite_store=sqlite_store, conversation_rag_store=CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
     hits = result['hits']
@@ -353,7 +347,6 @@ def search_conversation_messages(
 ) -> str:
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
     ...
     res = search_conversation_messages_dict(sqlite_store=SQLITE_STORE, conversation_rag_store=CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
     result = tool_result(tool_name='search_conversation_messages', ok=True, hits=res['hits'], rows=res['rows'], sync=res['sync'], rag_backend=res['rag_backend'], context=res['context'])
@@ -405,8 +398,9 @@ def week04_prompt_parts() -> list[str]:
         ),
         (
             '저장된 정보를 다시 찾을 때는 사용자의 입력에 맞는 검색 도구를 고른다.'
-            '일정/할 일/알림을 키워드로 찾는 질문은 search_saved_requests로 검색한다.'
-            '메모, 참고할 내용 등을 찾는 질문은 search_personal_references로 의미 기반 검색을 한다.'
+            '일정/할 일/알림을 키워드로 찾는 질문은 search_saved_requests로 검색한다. like 검색이므로 query에는 핵심어를 넣도록 한다.'
+            '메모, 참고할 내용 등을 찾는 질문은 search_personal_references로 의미 기반 검색을 한다. 의미 기반 검색이므로 query에는 짧은 구를 넣어도 된다.'
+            '이 외에 예전에 했던 일반 대화를 찾는 질문은 search_conversation_messages로 의미 기반 검색을 한다. 의미 기반 검색이므로 query에는 짧은 구를 넣어도 된다.'
         ),
         (
             '사용자가 말하지 않는 값은 억지로 지어내지 않는다.'
