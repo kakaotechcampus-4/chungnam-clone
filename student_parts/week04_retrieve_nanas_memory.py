@@ -318,6 +318,7 @@ def search_conversation_messages_dict(
     )
     return {
         "hits": hits,
+        "rows": hits,
         "context": conversation_rag_store.context_from_hits(hits),
         "rag_backend": conversation_rag_store.backend_info(),
         "sync": sync,
@@ -395,16 +396,7 @@ def search_conversation_messages(
         top_k=safe_limit(top_k, default=5, maximum=50),
         conversation_id=conversation_id,
     )
-    hits = result.get("hits", [])
-    return json_payload(
-        {
-            "hits": hits,
-            "rows": hits,
-            "context": result.get("context", ""),
-            "rag_backend": result.get("rag_backend", {}),
-            "sync": result.get("sync", {}),
-        }
-    )
+    return json_payload(result)
 
 
 @tool(args_schema=SearchNanaMemoryInput)
