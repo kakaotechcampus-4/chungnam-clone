@@ -119,7 +119,7 @@ _WEEK04_AGENT: Any | None = None
 #
 #   - [메인] search_saved_request_rows(...)
 #     AppSQLiteStore의 저장 요청 검색 결과를 rows 배열로 반환합니다. 일정/할 일/알림 구조화 기록을 찾을 때 사용합니다.
-#
+#   
 #   - [추가] search_conversation_messages_dict(...)
 #     SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 ChromaDB 검색을 수행합니다.
 #     현재 대화는 기본적으로 제외해 "방금 한 말"이 과거 검색 결과처럼 섞이지 않게 합니다.
@@ -237,18 +237,23 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     hits = reference_store.search_personal_references(query, limit=top_k)
-    return [
-        {
-            "id": hit["id"],
-            "content": hit["content"],
-            "distance": hit["distance"],
-            "metadata": {
-                "title": hit["title"],
-                "tags": [tag for tag in hit["tags"].split(",") if tag],
-            },
-        }
-        for hit in hits
-    ]
+    cleaned_hits: list[dict[str, Any]] = []
+    for hit in hits:
+        try:
+            cleaned_hits.append(
+                {
+                    "id": hit["id"],
+                    "content": hit["content"],
+                    "distance": hit["distance"],
+                    "metadata": {
+                        "title": hit["title"],
+                        "tags": [tag for tag in hit["tags"].split(",") if tag],
+                    },
+                }
+            )
+        except (KeyError, AttributeError):
+            continue
+    return cleaned_hits
 
 
 def search_saved_request_rows(
@@ -294,6 +299,11 @@ def add_personal_reference(title: str, content: str, tags: list[str] | None = No
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     added = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
+    if "backend" not in added:
+        raise ValueError(
+            "add_personal_reference_dict()가 'backend' 키 없이 payload를 반환했습니다. "
+            f"실제 반환 키: {list(added)}. reference_store 구현을 확인하세요."
+        )
     reference_backend = added.pop("backend")
     return json_payload(
         {
