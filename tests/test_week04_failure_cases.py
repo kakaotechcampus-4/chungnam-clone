@@ -7,10 +7,11 @@
   python -m unittest discover -s tests
   python -m unittest tests.test_week04_failure_cases
 
-임베딩/LLM에 의존하는 스토어 메서드는 stub으로 대체해 테스트 로직은 네트워크를
-타지 않습니다. week04는 import 시점에 전역 store를 생성하므로, 모듈 import "전에"
-CONFIG의 저장소 경로를 임시 디렉터리로 돌립니다(아래). 그래서 import 중 만들어지는
-파일까지 임시 폴더에만 생기고 실제 앱 데이터(data/)는 전혀 건드리지 않습니다.
+테스트 assertion은 stub store만 사용하므로 LLM/임베딩을 타지 않습니다. week04는
+import 시점에 전역 store를 생성하므로, 모듈 import "전에" CONFIG의 저장소 경로를 임시
+디렉터리로 돌립니다(아래). 그래서 import 중 만들어지는 파일까지 임시 폴더에만 생기고
+실제 앱 데이터(data/)는 전혀 건드리지 않습니다. (PROXY_TOKEN이 있으면 import 시 임시
+참고자료 스토어 초기화로 임베딩 1회 호출이 있을 수 있으나 임시 폴더에만 영향을 줍니다.)
 """
 
 from __future__ import annotations
@@ -28,12 +29,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fixed.config as _cfg
 
 _TMP = Path(tempfile.mkdtemp(prefix="week4_failure_"))
+# 경로만 임시로 돌리고 토큰은 그대로 둔다. (토큰까지 바꾸면 같은 프로세스에서 함께 도는
+# 다른 테스트 파일의 CONFIG 바인딩이 오염돼 실제 키가 필요한 스모크 테스트가 깨진다.)
 _cfg.CONFIG = dataclasses.replace(
     _cfg.CONFIG,
     chroma_dir=_TMP / "chroma",
     app_db_path=_TMP / "app.sqlite3",
     external_db_path=_TMP / "external.sqlite3",
-    proxy_token=_cfg.PROXY_TOKEN_PLACEHOLDER,  # has_openai_key=False → import 시 seed(네트워크) 방지
 )
 
 from fixed.app_store import AppSQLiteStore
