@@ -289,7 +289,6 @@ def week02_prompt_parts() -> list[str]:
         "personal_create_schedule 같은 도구가 반환한 JSON(created_schedule 키가 든 payload)을 "
         "이미 받은 경우 같은 도구를 다시 호출하지 않고 그 payload 의 title, date, "
         "start_time 값으로 필드를 채운다.",
-        "Week 2 에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다.",
     ]
 
 
