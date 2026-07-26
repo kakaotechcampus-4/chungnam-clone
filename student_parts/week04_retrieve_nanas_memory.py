@@ -282,6 +282,14 @@ def search_conversation_messages_dict(
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
     ...
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store=sqlite_store)
+    top_k = safe_limit(top_k)
+    hits = conversation_rag_store.search(query=query, top_k=top_k, exclude_conversation_id=conversation_id)
+    return { 
+        'hits': hits, 'rows': hits, 'sync': sync, 
+        'rag_backend': conversation_rag_store.backend_info(),
+        'context': conversation_rag_store.context_from_hits(hits)
+    }
 
 #   - [추가] search_conversation_message_rows(...)
 #     search_conversation_messages_dict(...)에서 hits만 꺼내는 내부 helper입니다.
@@ -296,6 +304,10 @@ def search_conversation_message_rows(
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
     ...
+    result = search_conversation_messages_dict(sqlite_store=sqlite_store, conversation_rag_store=CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    hits = result['hits']
+    return hits
+    
 
 #   - [메인] add_personal_reference(...)
 #     참고자료 추가 tool입니다. title/content/tags를 받아 vector store에 저장하고 JSON 문자열을 반환합니다.
@@ -316,7 +328,7 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
     top_k = safe_limit(top_k)
     hits = search_personal_reference_hits(reference_store=REFERENCE_STORE, query=query, top_k=top_k)
 
-    result = tool_result(tool_name='search_personal_references', ok=True, hits=hits)
+    result = tool_result(tool_name='search_personal_references', ok=(len(hits) > 0), hits=hits)
     return json_payload(result)
 
 #   - [메인] search_saved_requests(...)
@@ -343,6 +355,10 @@ def search_conversation_messages(
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
     ...
+    res = search_conversation_messages_dict(sqlite_store=SQLITE_STORE, conversation_rag_store=CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    result = tool_result(tool_name='search_conversation_messages', ok=True, hits=res['hits'], rows=res['rows'], sync=res['sync'], rag_backend=res['rag_backend'], context=res['context'])
+    return json_payload(result)
+    
 
 #   - [추가] search_nana_memory(...)
 #     이전 버전 호환용 통합 검색 tool입니다. 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
