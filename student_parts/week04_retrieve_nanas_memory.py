@@ -261,8 +261,8 @@ def search_personal_reference_hits(
             "content": hit["content"],
             "distance": hit["distance"],
             "metadata": {
-                "title": hit["title"],
-                "tags": hit["tags"],
+                "title": hit.get("title", ""),
+                "tags": hit.get("tags", []),
             }
         }
 
@@ -385,7 +385,6 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
     ]
 
 
