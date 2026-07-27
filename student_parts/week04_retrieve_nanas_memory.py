@@ -15,7 +15,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools, tool_result
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -224,9 +224,19 @@ def add_personal_reference_dict(
     tags: list[str] | None = None,
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
-
+    # 로직 명확화 + None인 경우 명확히 처리
+    # clean_tags = tags if tags is not None else []
     # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    saved = reference_store.add_personal_reference(title, content, tags if tags is not None else [])
+    return {
+        "reference_backend": saved["backend"],
+        "reference" : {
+            "id": saved["reference_id"],
+            "title": saved["title"],
+            "content": saved["content"],
+            "tags": saved["tags"],
+        }
+    }
 
 
 def search_personal_reference_hits(
@@ -238,7 +248,17 @@ def search_personal_reference_hits(
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
     # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    top_k = safe_limit(top_k, default=2, maximum=20)
+    raw_hits = reference_store.search_personal_references(query, top_k)
+    return [
+        {
+            "id": hit["id"],
+            "content": hit["content"],
+            "distance": hit["distance"],
+            "metadata": {"title": hit["title"], "tags": hit["tags"]}
+        }
+        for hit in raw_hits
+    ]
 
 
 def search_saved_request_rows(
@@ -250,7 +270,8 @@ def search_saved_request_rows(
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    top_k = safe_limit(top_k, default=3, maximum=50)
+    return sqlite_store.search_saved_requests(query, limit=top_k)
 
 
 def search_conversation_messages_dict(
@@ -264,9 +285,21 @@ def search_conversation_messages_dict(
     """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
 
     # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
-
-
+    top_k = safe_limit(top_k, default=5, maximum=50)
+    sync_info = conversation_rag_store.sync_from_sqlite(sqlite_store)
+    # 현재 대화 범위를 scope 변수에 담기
+    scope = current_session_scope()
+    # 이후 exclude_id 변수에 안전 검사 뒤 scope 넣어주기 -> 현재 진행 중인 대화를 제외하여 검색으로 들어오지 않게 함.
+    exclude_id = None if conversation_id else (scope if scope != DEFAULT_SESSION_SCOPE else None)
+    # 그 후 검색 진행
+    hits = conversation_rag_store.search(query=query, top_k=top_k, exclude_conversation_id=exclude_id, conversation_id=conversation_id)
+    return {
+        "hits": hits,
+        "rows": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync_info
+    }
 def search_conversation_message_rows(
     sqlite_store: AppSQLiteStore,
     *,
@@ -277,23 +310,29 @@ def search_conversation_message_rows(
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
     # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
-
+    result = search_conversation_messages_dict(sqlite_store, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return result["hits"]
 
 @tool(args_schema=AddPersonalReferenceInput)
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
     # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
-
-
+    payload = add_personal_reference_dict(
+        REFERENCE_STORE,
+        title = title,
+        content = content,
+        tags = tags or []
+    )
+    return json_payload(tool_result("add_personal_reference", **payload))
+    
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
     # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
+    return json_payload(tool_result("search_personal_references", hits=hits))
 
 
 @tool(args_schema=SearchSavedRequestsInput)
@@ -301,7 +340,8 @@ def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
     # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
+    return json_payload(tool_result("search_saved_requests", rows=rows))
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -313,8 +353,8 @@ def search_conversation_messages(
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
-
+    payload = search_conversation_messages_dict(SQLITE_STORE, CONVERSATION_RAG_STORE, query=query, top_k=top_k, conversation_id=conversation_id)
+    return json_payload(tool_result("search_conversation_messages", **payload))
 
 @tool(args_schema=SearchNanaMemoryInput)
 def search_nana_memory(
@@ -353,6 +393,19 @@ def week04_prompt_parts() -> list[str]:
     return [
         *week03_prompt_parts(),
         # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        "이번 Week 4에서는 기억을 하나로 뭉뚱그리지 말고, 질문의 성격에 따라 출처별 검색 도구를 골라 쓴다.",
+        "사용자가 미리 적어 둔 개인 참고자료(메모해 둔 배경지식·기준·노트 등)를 물으면 "
+        "search_personal_references로 개인 참고자료(ChromaDB)를 검색한다.",
+        "사용자가 앞으로 참고할 만한 선호·습관·기준·배경정보를 말하면, "
+        "'기억하겠다'고 답만 하지 말고 곧바로 add_personal_reference를 호출해 실제로 저장한다.",
+        "저장된 일정·할 일·알림처럼 구조화되어 SQLite에 남은 기록을 물으면 "
+        "search_saved_requests로 검색한다. query에는 일정/할 일/알림의 핵심어만 넣는다.",
+        "선호(참고자료)와 저장된 일정이 함께 필요한 질문이면 두 도구를 모두 호출해 근거를 모은 뒤 답한다. ",
+        "답할 때는 어떤 근거에서 나온 정보인지 함께 밝힌다. "
+        "개인 참고자료는 metadata의 title(예: '~ 참고자료'), "
+        "저장된 일정·할 일은 해당 기록의 핵심 내용을 근거로 짧게 인용한다. "
+        "검색 결과에 실제로 있는 내용만 인용하고, 없는 출처를 지어내지 않는다.",
+        "검색 결과가 비어 있으면 지어내지 말고 기록이 없다고 답한다.",
     ]
 
 
