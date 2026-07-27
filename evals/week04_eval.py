@@ -4,9 +4,11 @@ Week 3 eval(evals/week03_eval.py)의 7단계 골격을 그대로 이식하되, W
 (질문 성격 → 개인 참고자료 / 저장 일정 / 일반 대화 중 맞는 RAG tool 선택)에 맞춘다.
 
   1. 입력 고정   — 시계·상태(temp SQLite + temp ChromaDB)·**호출 채널**을 못 박는다
-  2. 검사 항목   — CASES 골든셋(출처별 라우팅 + 현재 대화 제외)
+  2. 검사 항목   — CASES 골든셋(출처별 라우팅 + 답변 정확성 + 근거 규칙 + 현재 대화 제외)
   3. 반복        — --n (기본 3)
-  4. 판정        — tool 호출 목록(어느 출처 tool을 골랐나) + 대화 제외는 helper 직접 단정
+  4. 판정        — 세 축: (a) tool 호출 목록(어느 출처 tool을 골랐나)
+                          (b) 최종 답변 본문(맞는 tool을 부르고도 틀린 답을 내는가)
+                          (c) 대화 제외 안전규칙은 helper 직접 단정(LLM 무관)
   5. 집계        — 케이스별 통과율 n/N
   6. 비교        — --baseline out.json 저장 / 다음 실행과 diff
   7. 게이트      — critical 케이스 1회 실패 = 전체 실패, non-zero exit
@@ -21,6 +23,11 @@ search_conversation_messages)을 골랐는가 — 이다. build_week04_agent()(�
 ⚠️ 상태 격리가 핵심이다. 반복마다 새 temp SQLite + 새 temp ChromaDB dir을 만들어
 m.SQLITE_STORE / m.REFERENCE_STORE / m.CONVERSATION_RAG_STORE 를 재바인딩한다.
 tool 본문이 호출 시점에 이 모듈 전역들을 읽으므로 매 반복 새 store가 반영된다.
+week04 전역만으로는 부족하다 — Week 1-3 tool과 외부 MCP subprocess까지 temp로 돌린다.
+자세한 경로는 rebind_temp_stores() 참고.
+
+⚠️ 판정축이 tool 이름 하나였을 때의 사각지대: '맞는 tool을 부르고 틀린 답'을 통과시켰다.
+saved_answer_correct / evidence_assistant_only 케이스가 답변 본문을 직접 본다.
 
 이 파일은 `student_parts/`·`fixed/`를 **import만** 한다. 과제 코드는 수정하지 않는다.
 
@@ -34,9 +41,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from pathlib import Path
 from typing import Any, Callable
@@ -57,6 +65,7 @@ from fixed.conversation_rag_store import ConversationRAGStore  # noqa: E402
 from fixed.reference_store import PersonalReferenceStore  # noqa: E402
 from fixed.session_scope import conversation_session_scope  # noqa: E402
 import fixed.app_store as store_mod  # noqa: E402
+import student_parts.week03_build_nanas_logbook as w3  # noqa: E402
 import student_parts.week04_retrieve_nanas_memory as m  # noqa: E402
 
 TODAY = rc.current_app_date_iso()  # 2026-03-04
@@ -68,11 +77,32 @@ def rebind_temp_stores() -> Path:
 
     PersonalReferenceStore 생성 시 has_openai_key면 DEFAULT_REFERENCES를 seed하므로
     개인 참고자료 라우팅 케이스는 별도 seed 없이 성립한다.
+
+    ⚠️ week04 전역만 바꾸면 격리가 샌다. Week 1-3 tool은 이 모듈 전역을 쓰지 않고
+    호출 시점에 `AppSQLiteStore(CONFIG.app_db_path)`를 새로 열며(week03_build_nanas_logbook.py:234-235),
+    개인/그룹 일정 저장은 외부 MCP subprocess로도 복사된다(fixed/external_mcp.py).
+    그래서 아래 세 경로를 모두 temp로 돌린다:
+      (a) week04 모듈 전역 세 store
+      (b) week03 모듈이 import 시점에 바인딩한 CONFIG (`_store()`가 호출마다 읽는다)
+      (c) MCP subprocess가 읽는 KANANA_EXTERNAL_DB_PATH (fixed/mcp_client.py가 호출 시점에 os.environ 복사)
+    이 격리가 없으면 add_reminder_guard 케이스가 실행마다 사용자 실 DB
+    (data/kanana_app.sqlite3)에 '약 먹기' reminder를 쓰고, multi_source 케이스가 인정하는
+    personal_list_saved_schedules는 temp seed를 보지 못한다.
     """
     tmp = Path(tempfile.mkdtemp())
     m.SQLITE_STORE = store_mod.AppSQLiteStore(tmp / "app.sqlite3")
     m.REFERENCE_STORE = PersonalReferenceStore(tmp / "chroma")          # seed됨
     m.CONVERSATION_RAG_STORE = ConversationRAGStore(tmp / "chroma")
+
+    temp_config = replace(
+        CONFIG,
+        app_db_path=tmp / "app.sqlite3",
+        external_db_path=tmp / "external.sqlite3",
+        chroma_dir=tmp / "chroma",
+    )
+    w3.CONFIG = temp_config   # Week 1-3 tool이 보는 앱 DB
+    m.CONFIG = temp_config
+    os.environ["KANANA_EXTERNAL_DB_PATH"] = str(tmp / "external.sqlite3")  # 외부 공유 저장소
     return tmp
 
 
@@ -90,6 +120,29 @@ def seed_conversation(*, title: str, turns: list[tuple[str, str]]) -> str:
     for role, content in turns:
         m.SQLITE_STORE.append_message(cid, role, content)
     return cid
+
+
+def seed_restaurant_conversation() -> str:
+    """--- 1. 입력 고정: '12시 오픈'을 assistant만 말한 과거 대화. ---
+
+    user는 묻기만 했고 사실 주장은 assistant 발화에만 있다 → 근거 규칙 케이스의 함정.
+    """
+    return seed_conversation(
+        title="맛집 추천",
+        turns=[
+            ("user", "회사 근처 점심 뭐가 좋아?"),
+            ("assistant", "회사 앞 '한빛식당'이 12시에 문을 열고 김치찌개가 유명합니다"),
+        ],
+    )
+
+
+def seed_workshop_two_sources() -> None:
+    """--- 1. 입력 고정: 시각은 저장 일정에, 장소는 과거 대화에만 있다. ---"""
+    seed_saved_request(title="워크샵", date_iso="2026-03-27", start_time="13:00")
+    seed_conversation(
+        title="워크샵 잡담",
+        turns=[("user", "워크샵 장소는 양평 펜션으로 하자고 했잖아")],
+    )
 
 
 @dataclass
@@ -147,6 +200,47 @@ def _c_add_reminder_guard(out, tools):
     return ok, f"tools={tools}"
 
 
+def _c_conversation_routing_implicit(out, tools):
+    # 대화 출처 단서가 '대화'라는 단어 없이 주어질 때도 대화 RAG로 가야 한다.
+    # conversation_routing 케이스는 "예전 대화에서"라는 표현 하나에만 의존해 통과하므로,
+    # "예전에 얘기했던"처럼 어휘가 바뀌면 못 잡는 사각지대가 있었다(0/3 관측).
+    ok = "search_conversation_messages" in tools
+    return ok, f"tools={tools}"
+
+
+def _c_multi_saved_conversation(out, tools):
+    # 다중출처 결합 2: 저장 일정(언제) + 과거 대화(장소)를 함께 엮어야 답이 완성된다.
+    # multi_source_combine은 saved+reference 조합만 재므로 saved+conversation 축은 비어 있었다.
+    saved_source = {"search_saved_requests", "personal_list_saved_schedules"} & set(tools)
+    ok = bool(saved_source) and "search_conversation_messages" in tools
+    return ok, f"tools={tools} saved_source={sorted(saved_source)}"
+
+
+def _c_saved_answer_correct(out, tools):
+    # --- 4. 판정축 확장: tool을 골랐는가가 아니라 저장된 값이 실제로 답변에 나왔는가. ---
+    # AppSQLiteStore.search_saved_requests는 query 문자열 전체를 하나의 LIKE로 쓴다
+    # (fixed/app_store.py:467). 그래서 LLM이 '치과 진료 일정'처럼 구(phrase)를 넣으면
+    # 0건이 나오고 agent는 "저장된 일정이 없습니다"라고 오답한다 — 그런데도 tool 이름
+    # 판정만 보면 saved_routing은 PASS로 집계된다. 이 케이스가 그 간극을 막는다.
+    answer = answer_of(out)
+    ok = any(token in answer for token in ("03-20", "3월 20", "20일"))
+    return ok, f"answer={answer[:90]!r} tools={tools}"
+
+
+def _c_evidence_assistant_only(out, tools):
+    # 가이드 line 135 / 프롬프트 '근거 규칙': assistant가 예전에 한 말만으로 사실을 확정하지 않는다.
+    # 시드된 과거 대화에서 '12시 오픈'은 assistant만 한 말이다(user는 물어보기만 했다).
+    # 그 값을 단정하려면 최소한 확인이 필요하다는 단서를 함께 줘야 한다.
+    # (heuristic 판정이다. valid한 답변을 FAIL시키면 cue 목록을 넓히는 쪽이 맞다.)
+    answer = answer_of(out)
+    states_fact = "12" in answer
+    verification_cue = any(
+        cue in answer for cue in ("확인", "확실", "정확", "제가 추천", "제가 말씀", "assistant", "직접")
+    )
+    ok = (not states_fact) or verification_cue
+    return ok, f"answer={answer[:110]!r}"
+
+
 def _c_reference_rule_routing(out, tools):
     # 내가 적어둔 규칙/선호를 확인하는 질문("점심에 회의 잡지 말라 했던 거 맞아?")은
     # 개인 참고자료(search_personal_references)로 가야 시드된 '점심 시간 보호'를 찾는다.
@@ -181,12 +275,43 @@ CASES: list[Case] = [
             ],
         ),
     ),
+    # --- 답변 정확성 — saved_routing과 같은 입력이지만 판정축이 '최종 답변'이다 ---
+    # saved_routing이 PASS인데도 사용자에게는 "저장된 일정이 없습니다"가 나가는 것을 잡는다.
+    Case(
+        "saved_answer_correct",
+        "내가 저장해둔 치과 진료 일정 언제였는지 찾아줘",
+        _c_saved_answer_correct,
+        seed=lambda: seed_saved_request(title="치과 진료", date_iso="2026-03-20"),
+        critical=True,
+    ),
+    # --- 대화 라우팅 — '대화'라는 단어 없이 과거 발화를 가리킬 때 ---
+    Case(
+        "conversation_routing_implicit",
+        "예전에 얘기했던 회사 앞 식당 몇 시에 열어?",
+        _c_conversation_routing_implicit,
+        seed=seed_restaurant_conversation,
+    ),
+    # --- 근거 규칙 — assistant 단독 발화를 확인 없이 사실로 확정하지 않는지 ---
+    Case(
+        "evidence_assistant_only",
+        "예전 대화에서 회사 앞 식당 얘기했었는데, 거기 몇 시에 열어?",
+        _c_evidence_assistant_only,
+        seed=seed_restaurant_conversation,
+        critical=True,
+    ),
     # --- 다중출처 결합 — 저장 일정 소스 + 개인 참고자료 소스를 둘 다 엮는지 (probe에서 승격) ---
     Case(
         "multi_source_combine",
         "다음 주 팀 회의 일정 알려주고, 회의 잡을 때 내가 선호한다고 적어둔 것도 같이 알려줘",
         _c_multi_source,
         seed=lambda: seed_saved_request(title="팀 회의", date_iso="2026-03-25"),
+    ),
+    # --- 다중출처 결합 2 — 저장 일정(언제) + 과거 대화(장소) ---
+    Case(
+        "multi_source_saved_conversation",
+        "워크샵 언제고 장소는 어디로 얘기했었지?",
+        _c_multi_saved_conversation,
+        seed=seed_workshop_two_sources,
     ),
     # --- add 라우팅 — 지속적 선호/메모를 적어 두라는 요청은 참고자료 추가로 (수동 테스트에서 발굴) ---
     Case(
@@ -216,35 +341,44 @@ CASES: list[Case] = [
 
 
 # --------------------------------------------------------------------- 현재 대화 제외 (helm 직접, 비-LLM)
-def check_current_conversation_excluded(n: int) -> dict:
+def _excluded_once(conversation_id_arg: str | None) -> tuple[bool, str, set]:
+    """현재 대화 제외 안전규칙 1회 측정. conversation_id 인자값만 바꿔 재사용한다."""
+    rebind_temp_stores()
+    seed_conversation(
+        title="지난 회고",
+        turns=[("user", "지난주 스프린트 회고에서 배포 자동화를 논의했어")],
+    )
+    current_id = seed_conversation(
+        title="오늘 대화",
+        turns=[("user", "방금 배포 자동화 얘기 다시 꺼냈어")],
+    )
+    with conversation_session_scope(current_id):
+        res = m.search_conversation_messages_dict(
+            m.SQLITE_STORE,
+            m.CONVERSATION_RAG_STORE,
+            query="배포 자동화",
+            top_k=5,
+            conversation_id=conversation_id_arg,
+        )
+    hit_ids = {h.get("conversation_id") for h in res.get("hits", [])}
+    return (current_id not in hit_ids), current_id, hit_ids
+
+
+def check_current_conversation_excluded(n: int, conversation_id_arg: str | None = None) -> dict:
     """가이드 line 129·155: conversation_id 미지정 시 현재 대화는 검색에서 제외되어야 한다.
 
     LLM 없이 helper를 직접 부른다: 과거 대화와 '현재' 대화 둘 다 같은 주제를 담고,
-    conversation_session_scope(current_id) 안에서 conversation_id=None으로 검색했을 때
-    현재 대화가 hit에 섞이지 않아야 한다(데이터 안전규칙).
+    conversation_session_scope(current_id) 안에서 검색했을 때 현재 대화가 hit에
+    섞이지 않아야 한다(데이터 안전규칙).
+
+    `conversation_id_arg=''`는 "LLM이 선택 인자를 빈 문자열로 채운" 경우다. 이것도
+    '미지정'이므로 같은 규칙이 걸려야 한다. 빈 문자열은 ConversationRAGStore.search에서
+    where 필터로도 쓰이지 않으므로(falsy), 제외까지 풀리면 필터도 제외도 없는 상태가 된다.
     """
     passed, notes = 0, []
     for _ in range(n):
-        rebind_temp_stores()
-        seed_conversation(
-            title="지난 회고",
-            turns=[("user", "지난주 스프린트 회고에서 배포 자동화를 논의했어")],
-        )
-        current_id = seed_conversation(
-            title="오늘 대화",
-            turns=[("user", "방금 배포 자동화 얘기 다시 꺼냈어")],
-        )
         try:
-            with conversation_session_scope(current_id):
-                res = m.search_conversation_messages_dict(
-                    m.SQLITE_STORE,
-                    m.CONVERSATION_RAG_STORE,
-                    query="배포 자동화",
-                    top_k=5,
-                    conversation_id=None,
-                )
-            hit_ids = {h.get("conversation_id") for h in res.get("hits", [])}
-            ok = current_id not in hit_ids
+            ok, current_id, hit_ids = _excluded_once(conversation_id_arg)
             passed += bool(ok)
             if not ok:
                 notes.append(f"현재 대화 {current_id} 가 hits에 섞임: {hit_ids}")
@@ -256,6 +390,15 @@ def check_current_conversation_excluded(n: int) -> dict:
 # --------------------------------------------------------------------- 3~5. 실행·집계
 def tool_calls_of(out: dict) -> list[str]:
     return [c["name"] for msg in out.get("messages", []) for c in (getattr(msg, "tool_calls", []) or [])]
+
+
+def answer_of(out: dict) -> str:
+    """--- 4. 판정: tool 이름 축만으로는 '맞는 tool을 부르고 틀린 답'을 놓친다. ---
+
+    최종 assistant 답변 본문. 답변 정확성/근거 규칙 케이스가 이 축을 쓴다.
+    """
+    messages = out.get("messages", [])
+    return str(getattr(messages[-1], "content", "")) if messages else ""
 
 
 def run(n: int) -> dict[str, dict]:
@@ -282,6 +425,8 @@ def run(n: int) -> dict[str, dict]:
     # 비-LLM 결정적 안전규칙
     results["current_conversation_excluded"] = check_current_conversation_excluded(n)
     _print_row("current_conversation_excluded", results["current_conversation_excluded"])
+    results["current_conversation_excluded_blank_id"] = check_current_conversation_excluded(n, conversation_id_arg="")
+    _print_row("current_conversation_excluded_blank_id", results["current_conversation_excluded_blank_id"])
     return results
 
 
