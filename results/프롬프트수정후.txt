@@ -1,0 +1,487 @@
+label: prompt-fix-v3
+run_id: 20260726034537_34353df9
+created_at: 2026-07-26T03:48:50.938948+09:00
+overall: 50/50 (100.00%)
+errors: 0
+average_seconds: 3.809
+
+[checks]
+route: 50/50 (100.00%)
+evidence: 50/50 (100.00%)
+answer: 50/50 (100.00%)
+context_call: 50/50 (100.00%)
+context_content: 50/50 (100.00%)
+
+[by_source]
+conversation: 25/25 (100.00%)
+none: 5/5 (100.00%)
+reference: 10/10 (100.00%)
+structured: 10/10 (100.00%)
+
+[results]
+================================================================================
+PASS conversation-01-song repeat=1
+question: 내가 가장 좋아한다고 했던 노래 제목이 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 6.452
+error: None
+answer: 당신이 가장 좋아한다고 했던 노래 제목은 "윤슬 행성"입니다.
+================================================================================
+PASS conversation-02-cafe repeat=1
+question: 내가 자주 들른다고 했던 카페 이름 기억나?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.444
+error: None
+answer: 자주 들르시는 카페 이름은 모과정원 카페입니다.
+================================================================================
+PASS conversation-03-food repeat=1
+question: 전에 내가 싫어한다고 한 음식이 뭐였어?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.806
+error: None
+answer: 전에 말씀하신 것 중에 청포묵 튀김의 식감을 싫어하신다고 하셨어요.
+================================================================================
+PASS conversation-04-travel repeat=1
+question: 예전에 말한 내 여행 취향이 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.992
+error: None
+answer: 예전에 말씀하신 여행 취향은 "비 오는 항구 도시를 걷는 것"입니다.
+================================================================================
+PASS conversation-05-book repeat=1
+question: 내가 읽는 중이라고 했던 책 제목을 알려줘.
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.449
+error: None
+answer: 당신이 읽고 있다고 말한 책 제목은 "유리 파도 지도"입니다.
+================================================================================
+PASS conversation-06-hiking repeat=1
+question: 내가 누구와 등산하고 싶다고 했더라?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.581
+error: None
+answer: 서하와 함께 등산하고 싶다고 하셨습니다.
+================================================================================
+PASS conversation-07-presentation repeat=1
+question: 내가 발표할 때 고민이라고 했던 부분이 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 5.246
+error: None
+answer: 발표할 때 말하는 속도가 너무 빨라지는 점이 고민이라고 하셨습니다.
+================================================================================
+PASS conversation-08-laptop repeat=1
+question: 내가 사용한다고 했던 노트북 모델이 뭐야?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.196
+error: None
+answer: 사용하신 노트북 모델은 루멘북 Z14입니다.
+================================================================================
+PASS conversation-09-snack repeat=1
+question: 내가 제일 좋아한다고 말한 간식은 뭐였어?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.289
+error: None
+answer: 당신이 제일 좋아한다고 말한 간식은 밤크림 베이글입니다.
+================================================================================
+PASS conversation-10-pet repeat=1
+question: 전에 말했던 내 반려견 이름이 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.976
+error: None
+answer: 전에 말씀하신 반려견 이름은 '토리'입니다.
+================================================================================
+PASS conversation-11-exercise repeat=1
+question: 내가 꾸준히 한다고 했던 운동이 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.214
+error: None
+answer: 당신은 월요일마다 새벽 수영을 꾸준히 하고 있다고 하셨습니다.
+================================================================================
+PASS conversation-12-tea repeat=1
+question: 내가 저녁에 즐겨 마신다고 한 차는 뭐였어?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.647
+error: None
+answer: 당신이 저녁에 즐겨 마신다고 한 차는 복숭아 우롱차입니다.
+================================================================================
+PASS conversation-13-game repeat=1
+question: 내가 최근 재미있게 했다고 말한 게임 제목은?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 5.366
+error: None
+answer: 최근에 재미있게 하셨다고 말씀하신 게임 제목은 "별의 항해"입니다.
+================================================================================
+PASS conversation-14-seat repeat=1
+question: 내가 일할 때 선호한다고 했던 자리는 어디야?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.023
+error: None
+answer: 사무실에서 일할 때는 햇빛이 드는 동쪽 창가 좌석을 선호하십니다.
+================================================================================
+PASS conversation-15-language repeat=1
+question: 내가 배우기 시작했다고 했던 외국어가 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.634
+error: None
+answer: 당신이 배우기 시작한 외국어는 포르투갈어입니다. 이번 달부터 포르투갈어를 배우기 시작했다고 하셨어요.
+================================================================================
+PASS conversation-16-music repeat=1
+question: 집중할 때 어떤 음악을 듣는다고 했더라?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.736
+error: None
+answer: 집중할 때는 첼로 독주곡을 들으신다고 했습니다.
+================================================================================
+PASS conversation-17-weather repeat=1
+question: 내가 좋아한다고 말한 날씨는 어떤 날씨야?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.92
+error: None
+answer: 당신이 좋아한다고 말한 날씨는 바람 부는 흐린 날씨입니다.
+================================================================================
+PASS conversation-18-movie repeat=1
+question: 내가 다시 보고 싶다고 했던 영화가 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.173
+error: None
+answer: 당신이 다시 보고 싶다고 했던 영화는 "겨울 등대"입니다.
+================================================================================
+PASS conversation-19-breakfast repeat=1
+question: 내가 아침마다 먹는다고 했던 메뉴가 뭐야?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.914
+error: None
+answer: 아침마다 드시는 메뉴는 사과 땅콩버터 토스트입니다.
+================================================================================
+PASS conversation-20-commute repeat=1
+question: 내가 출근할 때 이용한다고 한 교통수단은?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.011
+error: None
+answer: 출근할 때 이용하는 교통수단은 초록색 마을버스입니다.
+================================================================================
+PASS context-01-deploy repeat=1
+question: 제피르 프로젝트에서 카나리 배포로 결론 내린 이유가 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory', 'load_conversation_context']
+elapsed_seconds: 5.454
+error: None
+answer: 제피르 프로젝트가 카나리 배포로 결론 난 이유는 파란 경보가 사흘 연속 울렸던 사건 때문입니다. 그 사건 때문에 카나리 배포를 선택하게 되었습니다.
+================================================================================
+PASS context-02-meeting repeat=1
+question: 오르빗 팀 회의를 금요일이 아니라 화요일로 정한 이유가 뭐였어?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory', 'load_conversation_context']
+elapsed_seconds: 5.568
+error: None
+answer: 오르빗 팀 회의를 금요일이 아니라 화요일로 정한 이유는 금요일이 은색 우산을 맡기는 날이라 자리를 비워야 하기 때문입니다. 그래서 참석자 명단은 그대로 두고 화요일로 회의 요일을 변경했습니다.
+================================================================================
+PASS context-03-library repeat=1
+question: 노바 자료 조사를 중앙도서관 대신 서쪽 자료실에서 하기로 한 이유는?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory', 'load_conversation_context']
+elapsed_seconds: 5.833
+error: None
+answer: 노바 자료 조사를 중앙도서관 대신 서쪽 자료실에서 하기로 한 이유는 중앙도서관에 노란 상자들이 통로를 막고 있어서 통로 이용이 어려웠기 때문입니다. 그래서 그 상황 때문에 서쪽 자료실에서 하기로 했습니다.
+================================================================================
+PASS context-04-device repeat=1
+question: 미라지 시연 장비를 태블릿으로 바꾼 이유가 뭐였지?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory', 'load_conversation_context']
+elapsed_seconds: 5.811
+error: None
+answer: 미라지 시연 장비를 태블릿으로 바꾼 이유는 기존 노트북의 보라색 케이블 연결이 계속 끊겨서 연결이 안정적이지 않았기 때문입니다. 그래서 그 문제 때문에 태블릿으로 변경하셨습니다.
+================================================================================
+PASS context-05-launch repeat=1
+question: 루나 서비스 공개를 오전에서 저녁으로 미룬 이유가 뭐였어?
+source: expected=conversation actual=conversation
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory', 'load_conversation_context']
+elapsed_seconds: 5.343
+error: None
+answer: 루나 서비스 공개를 오전에서 저녁으로 미룬 이유는 오전 내내 이어지는 유리 종 점검 일정 때문입니다. 그래서 그 일정과 겹치지 않도록 공개 시간을 조정한 것입니다.
+================================================================================
+PASS reference-01-python repeat=1
+question: 개인 참고자료에서 파이썬 가상환경 생성 명령을 찾아줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.418
+error: None
+answer: 파이썬 가상환경 생성 명령은 다음과 같습니다.
+python -m venv .venv
+이 명령으로 파이썬 가상환경을 만들 수 있습니다.
+================================================================================
+PASS reference-02-branch repeat=1
+question: 개인 참고자료에 저장한 기능 브랜치 이름 규칙을 찾아줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.113
+error: None
+answer: 개인 참고자료에 저장된 기능 브랜치 이름 규칙은 "기능 브랜치 이름은 feature/issue-number 형식을 사용한다."입니다.
+================================================================================
+PASS reference-03-review repeat=1
+question: 개인 참고자료에서 코드 리뷰 최대 변경 줄 수를 알려줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.481
+error: None
+answer: 한 번의 코드 리뷰는 변경량을 최대 350줄로 제한합니다.
+================================================================================
+PASS reference-04-api repeat=1
+question: 개인 참고자료에 적어둔 재시도 대상 HTTP 상태 코드는?
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.263
+error: None
+answer: 개인 참고자료에 따르면, 외부 API 호출 시 재시도 대상 HTTP 상태 코드는 429와 503입니다.
+================================================================================
+PASS reference-05-log repeat=1
+question: 개인 참고자료에서 로그 보관 기간을 찾아줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.728
+error: None
+answer: 개발 환경의 애플리케이션 로그는 21일 동안 보관합니다.
+================================================================================
+PASS reference-06-cache repeat=1
+question: 개인 참고자료에 저장한 사용자 프로필 캐시 TTL은?
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.157
+error: None
+answer: 사용자 프로필 캐시의 TTL(Time To Live)은 17분으로 설정되어 있습니다.
+================================================================================
+PASS reference-07-db repeat=1
+question: 개인 참고자료에서 로컬 백업 파일 이름을 찾아줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.083
+error: None
+answer: 로컬 데이터베이스 백업 파일 이름은 orbit-backup.sqlite3입니다.
+================================================================================
+PASS reference-08-design repeat=1
+question: 개인 참고자료에 적힌 기본 강조 색상 코드를 알려줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.787
+error: None
+answer: 개인 참고자료에 적힌 기본 강조 색상 코드는 #5B7CFA입니다.
+================================================================================
+PASS reference-09-deploy repeat=1
+question: 개인 참고자료에서 배포 전 확인할 헬스체크 경로는?
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.96
+error: None
+answer: 배포 전 확인할 헬스체크 경로는 /health/ready 입니다.
+================================================================================
+PASS reference-10-meeting repeat=1
+question: 개인 참고자료에 저장한 회의록 파일 형식을 찾아줘.
+source: expected=reference actual=reference
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 4.075
+error: None
+answer: 개인 참고자료에 저장된 회의록 파일 형식은 "YYYYMMDD-topic.md" 형식으로 작성합니다.
+================================================================================
+PASS structured-01-todo repeat=1
+question: 저장된 할 일에서 청록 보고서 초안 항목을 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.437
+error: None
+answer: 저장된 할 일 중에 "청록 보고서 초안" 항목이 있습니다. 날짜는 2026년 8월 3일이고, 우선순위는 높음이며, 분기 검토 준비를 위한 할 일입니다. 더 필요한 작업이 있나요?
+================================================================================
+PASS structured-02-todo repeat=1
+question: 저장된 todo에서 자주색 부품 주문을 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.415
+error: None
+answer: 저장된 할 일 중 '자주색 부품 주문'이 2026년 8월 4일에 시제품 조립을 위해 우선순위 중간으로 등록되어 있습니다. 더 필요한 정보나 다른 요청 있으신가요?
+================================================================================
+PASS structured-03-todo repeat=1
+question: 저장해둔 할 일 중 북쪽 창고 재고 확인 항목을 보여줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.788
+error: None
+answer: 저장된 할 일 중 "북쪽 창고 재고 확인" 항목이 있습니다. 날짜는 2026년 8월 5일이고, 우선순위는 낮음이며, 월간 재고 조사와 관련된 할 일입니다. 더 필요한 작업이 있으면 알려주세요.
+================================================================================
+PASS structured-04-todo repeat=1
+question: 저장된 요청에서 세모 계약서 검토를 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['retrieve_memory']
+elapsed_seconds: 3.531
+error: None
+answer: 저장된 요청 중에 "세모 계약서 검토"라는 할 일이 있습니다. 날짜는 2026년 8월 6일이고, 우선순위는 높으며 법무 회신 준비를 위한 것입니다. 더 필요한 정보가 있나요?
+================================================================================
+PASS structured-05-todo repeat=1
+question: 저장된 할 일 중 해오름 설문 정리 항목이 있나?
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.946
+error: None
+answer: 저장된 할 일 중에 "해오름 설문 정리" 항목이 있습니다. 날짜는 2026년 8월 7일이고, 우선순위는 중간이며, 이유는 "사용자 조사 분석"입니다. 더 필요한 정보나 다른 요청 있으신가요?
+================================================================================
+PASS structured-06-reminder repeat=1
+question: 저장된 알림에서 은하수 서버 점검을 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.665
+error: None
+answer: 저장된 알림 중에 "은하수 서버 점검"이 있습니다. 날짜는 2026년 8월 8일 오전 9시 30분이며, 정기 보안 패치 관련 알림입니다. 더 필요한 정보나 다른 요청 있으신가요?
+================================================================================
+PASS structured-07-reminder repeat=1
+question: 저장한 reminder에서 유리문 비밀번호 변경을 검색해줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.584
+error: None
+answer: 저장된 reminder 중 "유리문 비밀번호 변경"이라는 제목의 알림이 있습니다. 날짜는 2026년 8월 9일 14:00이고, 이유는 분기 보안 작업입니다. 더 필요한 정보나 다른 요청 있으신가요?
+================================================================================
+PASS structured-08-reminder repeat=1
+question: 저장된 알림 중 단풍 보험 갱신 항목을 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.568
+error: None
+answer: 저장된 알림 중 "단풍 보험 갱신" 항목이 있습니다. 날짜는 2026년 8월 10일 오전 11시이며, 만료 전 갱신을 위한 알림입니다. 더 필요한 조치가 있을까요?
+================================================================================
+PASS structured-09-reminder repeat=1
+question: 저장한 알림에서 파랑새 도메인 만료 확인을 보여줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 2.698
+error: None
+answer: 저장된 알림 중 "파랑새 도메인 만료 확인" 알림은 2026년 8월 11일 16시 30분에 예정되어 있으며, 서비스 중단 방지를 위한 알림입니다. 더 필요한 정보나 다른 알림도 확인할까요?
+================================================================================
+PASS structured-10-reminder repeat=1
+question: 저장된 reminder에서 여름빛 인증서 교체를 찾아줘.
+source: expected=structured actual=structured
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: ['list_saved_requests']
+elapsed_seconds: 3.095
+error: None
+answer: 저장된 reminder 중 "여름빛 인증서 교체"는 2026년 8월 12일 10시 15분에 예정되어 있으며, 인증서 만료 대응을 위한 알림입니다. 더 필요한 정보나 다른 요청 있으신가요?
+================================================================================
+PASS none-01-general repeat=1
+question: 파이썬 리스트와 튜플의 차이를 간단히 설명해줘.
+source: expected=none actual=none
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: []
+elapsed_seconds: 2.506
+error: None
+answer: 파이썬에서 리스트(list)와 튜플(tuple)의 주요 차이는 다음과 같습니다:
+
+1. 변경 가능성:
+   - 리스트는 변경 가능(mutable)해서 요소를 추가, 삭제, 수정할 수 있습니다.
+   - 튜플은 변경 불가능(immutable)해서 생성 후 요소를 변경할 수 없습니다.
+
+2. 문법:
+   - 리스트는 대괄호 [ ]로 감싸서 만듭니다.
+   - 튜플은 소괄호 ( )로 감싸서 만듭니다.
+
+3. 용도:
+   - 리스트는 요소가 자주 변경되는 경우에 사용합니다.
+   - 튜플은 요소가 고정되어 변경되지 않아야 할 때 사용합니다.
+
+간단히 말해, 리스트는 수정 가능한 컬렉션, 튜플은 수정 불가능한 컬렉션입니다.
+================================================================================
+PASS none-02-writing repeat=1
+question: 오늘도 힘내라는 짧은 문장을 하나 써줘.
+source: expected=none actual=none
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: []
+elapsed_seconds: 1.427
+error: None
+answer: 오늘도 힘내! 당신의 하루가 빛나길 응원할게요.
+================================================================================
+PASS none-03-math repeat=1
+question: 17 곱하기 8은 얼마야?
+source: expected=none actual=none
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: []
+elapsed_seconds: 1.207
+error: None
+answer: 17 곱하기 8은 136입니다.
+================================================================================
+PASS none-04-translation repeat=1
+question: 좋은 아침을 영어로 번역해줘.
+source: expected=none actual=none
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: []
+elapsed_seconds: 1.174
+error: None
+answer: "좋은 아침"은 영어로 "Good morning"입니다.
+================================================================================
+PASS none-05-code repeat=1
+question: 파이썬에서 문자열 길이를 구하는 함수 이름만 알려줘.
+source: expected=none actual=none
+checks: {'route': True, 'evidence': True, 'answer': True, 'context_call': True, 'context_content': True}
+tools: []
+elapsed_seconds: 1.258
+error: None
+answer: 파이썬에서 문자열 길이를 구하는 함수 이름은 len입니다.

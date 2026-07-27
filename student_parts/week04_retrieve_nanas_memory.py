@@ -1,26 +1,47 @@
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from langchain.agents import create_agent
-from langchain_core.tools import tool
-from pydantic import BaseModel, Field
 
 from fixed.config import CONFIG
-from fixed.conversation_rag_store import ConversationRAGStore
 from fixed.llm import chat_model
-from fixed.runtime_clock import current_app_date_iso
-from fixed.app_store import AppSQLiteStore
-from fixed.reference_store import PersonalReferenceStore
-from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
-from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import week03_tools
+from student_parts.week04.common import json_payload, safe_limit
+from student_parts.week04.conversations import (
+    search_conversation_message_rows,
+    search_conversation_messages,
+    search_conversation_messages_dict,
+)
+from student_parts.week04.legacy_memory import search_nana_memory,_decode_attendees
+from student_parts.week04.prompts import week04_prompt_parts, week04_system_prompt
+from student_parts.week04.references import (
+    add_personal_reference,
+    add_personal_reference_dict,
+    search_personal_reference_hits,
+    search_personal_references,
+)
+from student_parts.week04.saved_requests import (
+    search_saved_request_rows,
+    search_saved_requests,
+)
+from student_parts.week04.schemas import (
+    AddPersonalReferenceInput,
+    SearchConversationMessagesInput,
+    SearchNanaMemoryInput,
+    SearchPersonalReferencesInput,
+    SearchSavedRequestsInput,
+)
+from student_parts.week04.stores import (
+    CONVERSATION_RAG_STORE,
+    REFERENCE_STORE,
+    SQLITE_STORE,
+)
+from student_parts.week04.state import Week04AgentState
+from student_parts.week04.conversation_context import (load_conversation_context,)
+from student_parts.week04.middleware import (ConversationContextToolMiddleware,)
+from student_parts.week04.memory import retrieve_memory
 
-
-REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
-SQLITE_STORE = AppSQLiteStore(CONFIG.app_db_path)
-CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
 _WEEK04_AGENT: Any | None = None
 
 
@@ -182,207 +203,14 @@ _WEEK04_AGENT: Any | None = None
 #     Week 1~4 tool을 가진 agent를 만들고 재사용합니다.
 
 
-def _decode_attendees(raw_attendees: str | None) -> list[str]:
-    try:
-        decoded = json.loads(raw_attendees or "[]")
-    except Exception:
-        return []
-    return decoded if isinstance(decoded, list) else []
-
-
-def json_payload(payload: dict[str, Any]) -> str:
-    """도구 반환용 dict를 한글이 깨지지 않는 JSON 문자열로 변환합니다."""
-
-    return json.dumps(payload, ensure_ascii=False)
-
-
-def safe_limit(limit: int, default: int = 5, maximum: int = 50) -> int:
-    """사용자/LLM이 넘긴 limit 값을 안전한 양의 정수 범위로 보정합니다."""
-
-    try:
-        value = int(limit)
-    except (TypeError, ValueError):
-        value = default
-    return max(1, min(value, maximum))
-
-
-class AddPersonalReferenceInput(BaseModel):
-    """개인 참고자료 추가 입력입니다."""
-
-    title: str
-    content: str
-    tags: list[str] | None = None
-
-
-class SearchPersonalReferencesInput(BaseModel):
-    """개인 참고자료 검색 입력입니다."""
-
-    query: str
-    top_k: int = Field(default=2, ge=1, le=20)
-
-
-class SearchSavedRequestsInput(BaseModel):
-    """SQLite 저장 요청 검색 입력입니다."""
-
-    query: str
-    top_k: int = Field(default=3, ge=1, le=50)
-
-
-class SearchConversationMessagesInput(BaseModel):
-    """앱 대화 RAG 검색 입력입니다."""
-
-    query: str
-    top_k: int = Field(default=5, ge=1, le=50)
-    conversation_id: str | None = None
-
-
-class SearchNanaMemoryInput(BaseModel):
-    """Week 4 호환 통합 검색 입력입니다."""
-
-    query: str
-    date_from: str | None = None
-    date_to: str | None = None
-    attendee: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
-
-
-def add_personal_reference_dict(
-    reference_store: PersonalReferenceStore,
-    *,
-    title: str,
-    content: str,
-    tags: list[str] | None = None,
-) -> dict[str, Any]:
-    """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
-
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
-
-
-def search_personal_reference_hits(
-    reference_store: PersonalReferenceStore,
-    *,
-    query: str,
-    top_k: int = 2,
-) -> list[dict[str, Any]]:
-    """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
-
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
-
-
-def search_saved_request_rows(
-    sqlite_store: AppSQLiteStore,
-    *,
-    query: str,
-    top_k: int = 3,
-) -> list[dict[str, Any]]:
-    """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
-
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
-
-
-def search_conversation_messages_dict(
-    sqlite_store: AppSQLiteStore,
-    conversation_rag_store: ConversationRAGStore,
-    *,
-    query: str,
-    top_k: int = 5,
-    conversation_id: str | None = None,
-) -> dict[str, Any]:
-    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
-
-    # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
-
-
-def search_conversation_message_rows(
-    sqlite_store: AppSQLiteStore,
-    *,
-    query: str,
-    top_k: int = 5,
-    conversation_id: str | None = None,
-) -> list[dict[str, Any]]:
-    """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
-
-    # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
-
-
-@tool(args_schema=AddPersonalReferenceInput)
-def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
-    """개인 참고자료를 ChromaDB에 추가합니다."""
-
-    # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
-
-
-@tool(args_schema=SearchPersonalReferencesInput)
-def search_personal_references(query: str, top_k: int = 2) -> str:
-    """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
-
-    # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
-
-
-@tool(args_schema=SearchSavedRequestsInput)
-def search_saved_requests(query: str, top_k: int = 3) -> str:
-    """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
-
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
-
-
-@tool(args_schema=SearchConversationMessagesInput)
-def search_conversation_messages(
-    query: str,
-    top_k: int = 5,
-    conversation_id: str | None = None,
-) -> str:
-    """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
-
-    # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
-
-
-@tool(args_schema=SearchNanaMemoryInput)
-def search_nana_memory(
-    query: str,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    attendee: str | None = None,
-    limit: int = 5,
-) -> str:
-    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
-
-    # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
-    ...
-
 def week04_tools() -> list[Any]:
-    """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
+    """3주차 도구에 4주차 통합 기억 검색 도구를 누적합니다."""
 
     return [
         *week03_tools(),
         add_personal_reference,
-        search_personal_references,
-        search_saved_requests,
-        search_conversation_messages,
-    ]
-
-
-def week04_system_prompt() -> str:
-    """4주차 단일 agent가 따르는 시스템 프롬프트입니다."""
-
-    return join_system_prompt(week04_prompt_parts())
-
-
-def week04_prompt_parts() -> list[str]:
-    """1~4주차 system prompt 조각을 누적합니다."""
-
-    return [
-        *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        retrieve_memory,
+        load_conversation_context,
     ]
 
 
@@ -397,6 +225,8 @@ def build_week04_agent() -> object:
             model=chat_model(),
             tools=week04_tools(),
             system_prompt=week04_system_prompt(),
+            middleware=[ConversationContextToolMiddleware()],
+            state_schema=Week04AgentState
         )
     return _WEEK04_AGENT
 
