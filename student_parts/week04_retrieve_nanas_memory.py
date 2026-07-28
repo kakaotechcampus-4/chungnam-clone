@@ -315,8 +315,10 @@ def add_personal_reference(
 
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
-    """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
-
+    """
+    사용자가 저장한 선호, 규칙, 메모, 개인 참고자료를 검색합니다.
+    실제로 등록된 일정,할 일,알림 검색에는 사용하지 않습니다.
+    """
     top_k = safe_limit(top_k, default=2, maximum=20)
     hits: list[dict[str, Any]] = search_personal_reference_hits(
         REFERENCE_STORE,
@@ -329,7 +331,10 @@ def search_personal_references(query: str, top_k: int = 2) -> str:
 
 @tool(args_schema=SearchSavedRequestsInput)
 def search_saved_requests(query: str, top_k: int = 3) -> str:
-    """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
+    """
+    SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다.
+    사용자가 저장한 선호, 규칙, 메모, 개인 참고자료 검색에는 사용하지 않습니다.
+    """
 
     top_k = safe_limit(top_k, default=3, maximum=50)
     rows: list[dict[str, Any]] = search_saved_request_rows(
@@ -347,7 +352,10 @@ def search_conversation_messages(
     top_k: int = 5,
     conversation_id: str | None = None,
 ) -> str:
-    """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
+    """
+    앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다.
+    개인 참고자료나 구조화된 일정 기록을 검색하는 Tool이 아닙니다.
+    """
 
     # SQLite 대화 목록을 대화 단위(conversation_id)로 ChromaDB RAG에 검색하고 JSON 문자열로 반환.
     result = search_conversation_messages_dict(
