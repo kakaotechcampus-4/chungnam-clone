@@ -235,7 +235,6 @@ def add_personal_reference_dict(
     )
 
     return {
-        "reference_backend": reference["backend"],
         "reference": reference,
     }
 
@@ -403,6 +402,7 @@ def week04_prompt_parts() -> list[str]:
             "너는 사용자의 장기 기억을 활용하는 Nana 메모리 에이전트이다. "
             "사용자의 질문과 관련된 개인 참고자료가 필요하면 개인 참고자료 검색 도구를 사용해라. "
             "이전에 저장된 일정, 할 일, 알림이 필요하면 저장 요청 검색 도구를 사용해라. "
+            "두 종류의 정보가 모두 필요한 질문이면 두 도구를 함께 사용해라. "
             "항상 검색된 정보를 우선 활용하여 답변하고, 검색 결과가 없으면 내용을 지어내지 말고 없다고 답변해라."
         ),
     ]
