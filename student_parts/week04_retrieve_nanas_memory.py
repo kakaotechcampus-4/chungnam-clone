@@ -13,15 +13,51 @@ from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
 from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
-from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
+from fixed.session_scope import current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import json_payload, tool_result, week03_prompt_parts, week03_tools
 
 
-REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
-SQLITE_STORE = AppSQLiteStore(CONFIG.app_db_path)
-CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
 _WEEK04_AGENT: Any | None = None
+_REFERENCE_STORE: PersonalReferenceStore | None = None
+_CONVERSATION_RAG_STORE: ConversationRAGStore | None = None
+
+
+def _reference_store() -> PersonalReferenceStore:
+    """PersonalReferenceStore를 첫 호출 시점에만 만들어 재사용합니다.
+
+    import 시점에 전역으로 붙잡아 두면 이 모듈을 import하기만 해도
+    ChromaDB/embedding seed 호출이 실행되는 문제가 있어 즉시 초기화는
+    피하되, 매 호출마다 새로 만들지도 않습니다. 실측(python -m timeit 상당)
+    결과 ChromaDB PersistentClient 생성이 호출당 약 25~40ms(같은 프로세스
+    기준)가 들어, week03의 _store()(AppSQLiteStore, 호출당 약 2ms)처럼
+    매번 새로 만들면 tool 호출마다 그 비용이 누적됩니다. 그래서
+    _WEEK04_AGENT와 같은 lazy singleton 패턴을 씁니다.
+    """
+
+    global _REFERENCE_STORE
+    if _REFERENCE_STORE is None:
+        _REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
+    return _REFERENCE_STORE
+
+
+def _sqlite_store() -> AppSQLiteStore:
+    """AppSQLiteStore를 호출마다 새로 만듭니다. week03의 _store()와 같은 패턴입니다.
+
+    AppSQLiteStore 생성 비용은 실측 기준 호출당 약 2ms로 ChromaDB 기반
+    store보다 한 자릿수 이상 저렴해, 캐싱 없이 매번 새로 만들어도 됩니다.
+    """
+
+    return AppSQLiteStore(CONFIG.app_db_path)
+
+
+def _conversation_rag_store() -> ConversationRAGStore:
+    """ConversationRAGStore를 첫 호출 시점에만 만들어 재사용합니다. _reference_store()와 같은 이유입니다."""
+
+    global _CONVERSATION_RAG_STORE
+    if _CONVERSATION_RAG_STORE is None:
+        _CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
+    return _CONVERSATION_RAG_STORE
 
 
 # [4주차 1회차 수강생 구현 가이드]
@@ -34,9 +70,9 @@ _WEEK04_AGENT: Any | None = None
 #   - 이 파일(student_parts/week04_retrieve_nanas_memory.py)의 개인 참고자료 저장/검색 tool과
 #     SQLite 저장 요청 검색 tool을 구현합니다.
 #   - 개인 참고자료 저장소는 fixed/reference_store.py의 PersonalReferenceStore이며,
-#     이 파일 상단의 REFERENCE_STORE가 CONFIG.chroma_dir 기준 인스턴스입니다.
+#     _reference_store()가 첫 호출 시점에 CONFIG.chroma_dir 기준으로 만들어 재사용합니다.
 #   - SQLite 저장 요청 검색은 fixed/app_store.py의 AppSQLiteStore를 사용하고,
-#     이 파일 상단의 SQLITE_STORE가 CONFIG.app_db_path 기준 인스턴스입니다.
+#     _sqlite_store()가 호출마다 CONFIG.app_db_path 기준으로 새로 만듭니다(생성 비용이 작아 캐싱하지 않음).
 #   - 각 tool 입력은 Pydantic args_schema로 검증하고,
 #     search_personal_reference_hits(), search_saved_request_rows()에서 조회 결과를 정리합니다.
 #   - tool 함수 add_personal_reference/search_personal_references/search_saved_requests는
@@ -45,7 +81,7 @@ _WEEK04_AGENT: Any | None = None
 #
 # 구현 대상
 #   1. add_personal_reference
-#      - title/content/tags를 REFERENCE_STORE.add_personal_reference에 넘깁니다.
+#      - title/content/tags를 _reference_store().add_personal_reference에 넘깁니다.
 #      - tags가 None이면 빈 list로 바꿉니다.
 #      - 이 tool 안에서 reference_backend와 reference가 있는 JSON payload를 완성합니다.
 #
@@ -56,7 +92,7 @@ _WEEK04_AGENT: Any | None = None
 #      - hit에는 id, content, distance, metadata(title/tags)가 들어가야 답변 근거로 쓰기 쉽습니다.
 #
 #   3. search_saved_requests
-#      - SQLITE_STORE.search_saved_requests(query, limit)를 호출합니다.
+#      - _sqlite_store().search_saved_requests(query, limit)를 호출합니다.
 #      - top_k는 이 tool 안에서 안전한 범위로 정리합니다.
 #      - 검색 결과가 없으면 rows=[]를 그대로 반환합니다.
 #      - course repo 기준 계약에 맞게 top-level {"rows": [...]} JSON을 반환합니다.
@@ -116,10 +152,9 @@ _WEEK04_AGENT: Any | None = None
 #
 # 구현 위치와 사용할 코드
 #   - 일반 채팅 발화 검색은 fixed/conversation_rag_store.py의 ConversationRAGStore를 사용하고,
-#     이 파일 상단의 CONVERSATION_RAG_STORE가 CONFIG.chroma_dir 기준 인스턴스입니다.
+#     _conversation_rag_store()가 첫 호출 시점에 CONFIG.chroma_dir 기준으로 만들어 재사용합니다.
 #   - search_conversation_messages_dict(), search_conversation_message_rows()에서 앱 대화 RAG 조회 결과를 정리합니다.
 #   - search_conversation_messages는 helper 결과를 json_payload()로 감싼 JSON 문자열로 반환합니다.
-#   - search_nana_memory는 이전 버전 호환용 통합 검색 helper입니다.
 #   - week04_tools()는 student_parts/week03_build_nanas_logbook.py의 week03_tools() 위에
 #     Week 4 RAG tool을 누적해 agent에 공개합니다.
 #
@@ -134,12 +169,7 @@ _WEEK04_AGENT: Any | None = None
 #      - 반환 JSON에는 hits와 rows에 같은 결과를 넣고, context/rag_backend/sync도 함께 둡니다.
 #      - assistant 발화만으로 사실을 확정하지 않도록 prompt와 응답 근거를 분리합니다.
 #
-#   3. search_nana_memory
-#      - 이전 버전 호환용 통합 검색 tool입니다.
-#      - 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
-#      - 새 구현의 핵심은 출처별 tool이지만, 기존 테스트/trace 호환을 위해 응답 구조를 유지합니다.
-#
-#   4. week04_system_prompt / week04_prompt_parts
+#   3. week04_system_prompt / week04_prompt_parts
 #      - "참고자료", "저장된 일정/할 일", "일반 채팅 발화"를 서로 다른 출처로 설명합니다.
 #      - 질문 성격에 따라 search_personal_references, search_saved_requests,
 #        search_conversation_messages 중 맞는 tool을 선택하도록 지시합니다.
@@ -156,8 +186,8 @@ _WEEK04_AGENT: Any | None = None
 #   결과 JSON에 hits, rows, context, rag_backend, sync가 유지되는지 확인합니다.
 #
 # 함수별 동작 설명
-#   - SearchConversationMessagesInput / SearchNanaMemoryInput
-#     앱 대화 RAG 검색과 기존 호환용 통합 검색 tool의 입력 스키마입니다.
+#   - SearchConversationMessagesInput
+#     앱 대화 RAG 검색 tool의 입력 스키마입니다.
 #
 #   - search_conversation_messages_dict(...)
 #     SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 ChromaDB 검색을 수행합니다.
@@ -168,9 +198,6 @@ _WEEK04_AGENT: Any | None = None
 #
 #   - search_conversation_messages(...)
 #     앱에 저장된 일반 대화 발화를 검색하는 RAG tool입니다. 일정 DB 검색과 다른 출처임을 context/rag_backend/sync로 함께 보여줍니다.
-#
-#   - search_nana_memory(...)
-#     이전 버전 호환용 통합 검색 tool입니다. 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
 #
 #   - week04_tools()
 #     Week 3까지의 tool에 Week 4 RAG tool들을 누적해 agent에 공개합니다.
@@ -190,12 +217,6 @@ def _decode_attendees(raw_attendees: str | None) -> list[str]:
     return decoded if isinstance(decoded, list) else []
 
 
-def json_payload(payload: dict[str, Any]) -> str:
-    """도구 반환용 dict를 한글이 깨지지 않는 JSON 문자열로 변환합니다."""
-
-    return json.dumps(payload, ensure_ascii=False)
-
-
 def safe_limit(limit: int, default: int = 5, maximum: int = 50) -> int:
     """사용자/LLM이 넘긴 limit 값을 안전한 양의 정수 범위로 보정합니다."""
 
@@ -204,6 +225,23 @@ def safe_limit(limit: int, default: int = 5, maximum: int = 50) -> int:
     except (TypeError, ValueError):
         value = default
     return max(1, min(value, maximum))
+
+
+def _safe_tool_error(exc: Exception, action: str) -> str:
+    """예외 원문 대신 agent가 다음 행동을 판단할 수 있는 안전한 메시지를 만듭니다.
+
+    이 파일에서 예측 가능한 유일한 예외는 fixed/reference_store.py의
+    OpenAIEmbeddingFunction._openai_client()가 PROXY_TOKEN 누락 시 던지는
+    RuntimeError뿐이다(참고자료/대화 RAG 검색 모두 이 embedding function을
+    공유한다). 이 경우는 원인 문구 자체에 DB 경로나 API 응답 본문이 없어
+    그대로 보여줘도 안전하고, agent에게 ".env 설정을 확인하라"는 구체적인
+    행동을 알려줄 수 있다. 그 외 예외(ChromaDB/SQLite 등 라이브러리가 던지는
+    것)는 내부 정보가 섞여 있을 수 있으므로 원문을 감추고 재시도를 유도한다.
+    """
+
+    if isinstance(exc, RuntimeError):
+        return f"{action} 중 설정 문제가 발생했습니다: {exc}"
+    return f"{action} 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요."
 
 
 class AddPersonalReferenceInput(BaseModel):
@@ -236,16 +274,6 @@ class SearchConversationMessagesInput(BaseModel):
     conversation_id: str | None = None
 
 
-class SearchNanaMemoryInput(BaseModel):
-    """Week 4 호환 통합 검색 입력입니다."""
-
-    query: str
-    date_from: str | None = None
-    date_to: str | None = None
-    attendee: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
-
-
 def add_personal_reference_dict(
     reference_store: PersonalReferenceStore,
     *,
@@ -255,8 +283,9 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    saved = reference_store.add_personal_reference(title, content, tags or [])
+    backend = saved.pop("backend", {})
+    return {"backend": backend, "reference": saved}
 
 
 def search_personal_reference_hits(
@@ -267,8 +296,16 @@ def search_personal_reference_hits(
 ) -> list[dict[str, Any]]:
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    raw_hits = reference_store.search_personal_references(query, limit=top_k)
+    return [
+        {
+            "id": hit.get("id", ""),
+            "content": hit.get("content", ""),
+            "distance": hit.get("distance"),
+            "metadata": {"title": hit.get("title", ""), "tags": hit.get("tags", "")},
+        }
+        for hit in raw_hits
+    ]
 
 
 def search_saved_request_rows(
@@ -279,8 +316,13 @@ def search_saved_request_rows(
 ) -> list[dict[str, Any]]:
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    raw_rows = sqlite_store.search_saved_requests(query, limit=top_k)
+    rows: list[dict[str, Any]] = []
+    for row in raw_rows:
+        item = dict(row)
+        item["members"] = _decode_attendees(item.pop("members_json", None))
+        rows.append(item)
+    return rows
 
 
 def search_conversation_messages_dict(
@@ -291,10 +333,35 @@ def search_conversation_messages_dict(
     top_k: int = 5,
     conversation_id: str | None = None,
 ) -> dict[str, Any]:
-    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다."""
+    """SQLite 대화 목록을 lazy sync한 뒤 ChromaDB conversation RAG 결과를 반환합니다.
 
-    # TODO: SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 현재 대화를 제외하고 검색하세요.
-    ...
+    conversation_id 정책: None, "", 공백만 있는 문자열은 모두 "미지정"으로
+    취급해 현재 대화를 제외한 검색을 한다. 공백 문자열도 파이썬에서는 참
+    (truthy)이라 strip 없이 `if conversation_id`만 보면 현재 대화가 제외되지
+    않고 존재하지 않는 공백 ID로 검색되어 조용히 빈 결과만 나온다.
+    """
+
+    sync = conversation_rag_store.sync_from_sqlite(sqlite_store)
+
+    normalized_conversation_id = (conversation_id or "").strip()
+    if not normalized_conversation_id:
+        hits = conversation_rag_store.search(
+            query=query, top_k=top_k, exclude_conversation_id=current_session_scope()
+        )
+        return {
+            "hits": hits,
+            "context": conversation_rag_store.context_from_hits(hits),
+            "rag_backend": conversation_rag_store.backend_info(),
+            "sync": sync,
+        }
+
+    hits = conversation_rag_store.search(query=query, top_k=top_k, conversation_id=normalized_conversation_id)
+    return {
+        "hits": hits,
+        "context": conversation_rag_store.context_from_hits(hits),
+        "rag_backend": conversation_rag_store.backend_info(),
+        "sync": sync,
+    }
 
 
 def search_conversation_message_rows(
@@ -306,32 +373,67 @@ def search_conversation_message_rows(
 ) -> list[dict[str, Any]]:
     """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
 
-    # TODO: search_conversation_messages_dict(...) 결과에서 hits만 반환하세요.
-    ...
+    result = search_conversation_messages_dict(
+        sqlite_store,
+        _conversation_rag_store(),
+        query=query,
+        top_k=top_k,
+        conversation_id=conversation_id,
+    )
+    return result["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
-    # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    try:
+        saved = add_personal_reference_dict(_reference_store(), title=title, content=content, tags=tags or [])
+    except Exception as exc:
+        return json_payload(
+            tool_result(
+                "add_personal_reference",
+                ok=False,
+                reference_backend=None,
+                reference=None,
+                error=_safe_tool_error(exc, "참고자료 저장"),
+            )
+        )
+    return json_payload(
+        tool_result(
+            "add_personal_reference",
+            reference_backend=saved["backend"],
+            reference=saved["reference"],
+        )
+    )
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
-    # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=2, maximum=20)
+    try:
+        hits = search_personal_reference_hits(_reference_store(), query=query, top_k=top_k)
+    except Exception as exc:
+        return json_payload(
+            tool_result("search_personal_references", ok=False, hits=[], error=_safe_tool_error(exc, "참고자료 검색"))
+        )
+    return json_payload(tool_result("search_personal_references", hits=hits))
 
 
 @tool(args_schema=SearchSavedRequestsInput)
 def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=3, maximum=50)
+    try:
+        rows = search_saved_request_rows(_sqlite_store(), query=query, top_k=top_k)
+    except Exception as exc:
+        return json_payload(
+            tool_result("search_saved_requests", ok=False, rows=[], error=_safe_tool_error(exc, "저장된 요청 검색"))
+        )
+    return json_payload(tool_result("search_saved_requests", rows=rows))
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -342,22 +444,37 @@ def search_conversation_messages(
 ) -> str:
     """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: 앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색하고 JSON 문자열로 반환하세요.
-    ...
+    top_k = safe_limit(top_k, default=5, maximum=50)
+    try:
+        result = search_conversation_messages_dict(
+            _sqlite_store(),
+            _conversation_rag_store(),
+            query=query,
+            top_k=top_k,
+            conversation_id=conversation_id,
+        )
+    except Exception as exc:
+        return json_payload(
+            tool_result(
+                "search_conversation_messages",
+                ok=False,
+                hits=[],
+                rows=[],
+                context="",
+                error=_safe_tool_error(exc, "대화 기록 검색"),
+            )
+        )
+    return json_payload(
+        tool_result(
+            "search_conversation_messages",
+            hits=result["hits"],
+            rows=result["hits"],
+            context=result["context"],
+            rag_backend=result["rag_backend"],
+            sync=result["sync"],
+        )
+    )
 
-
-@tool(args_schema=SearchNanaMemoryInput)
-def search_nana_memory(
-    query: str,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    attendee: str | None = None,
-    limit: int = 5,
-) -> str:
-    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
-
-    # TODO: compatibility 통합 검색이 필요하면 개인 참고자료와 SQLite 일정 chunk를 함께 구성하세요.
-    ...
 
 def week04_tools() -> list[Any]:
     """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
@@ -382,7 +499,12 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        "서로 다른 세 출처를 구분해서 검색한다. "
+        "'내가 적어 둔 참고자료/선호/메모'처럼 사용자가 미리 남긴 정보를 찾을 때는 search_personal_references를 쓴다. "
+        "'저장한 일정/할 일/알림을 찾아줘'처럼 구조화된 기록을 찾을 때는 search_saved_requests를 쓴다. "
+        "'예전에 내가/네가 뭐라고 했었지'처럼 과거 채팅 발화 자체를 찾을 때는 search_conversation_messages를 쓴다. "
+        "질문이 여러 출처에 걸치면 관련된 tool을 모두 호출해 근거를 모은 뒤 답하고, "
+        "assistant의 과거 발화만으로 사실을 단정하지 않는다.",
     ]
 
 
