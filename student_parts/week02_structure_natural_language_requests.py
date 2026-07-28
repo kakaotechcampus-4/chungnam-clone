@@ -216,7 +216,7 @@ class StructuredRequest(BaseModel):
     original_text: str = Field(
         default="",
         description=(
-            "구조화의 근거가 된 사용자 원문(또는 Week 1 도구가 반환한 JSON) 조각을 그대로 보존한다. "
+            "구조화의 근거가 된 사용자 원문(또는 일정 생성 도구가 반환한 JSON) 조각을 그대로 보존한다. "
             "기본값은 빈 문자열."
         ),
     )
@@ -293,12 +293,6 @@ def week02_system_prompt() -> str:
     return join_system_prompt(
         [
             *week02_prompt_parts(),
-            # Week 2 한정 범위 규칙: 재사용되는 prompt_parts에 두면 Week 3+가 모순 지시를
-            # 상속하므로, Week 2 agent의 최종 조립에서만 추가한다.
-            (
-                "Week 2에서는 SQLite 저장, RAG 검색, 외부 멤버 일정 조율을 하지 않는다. "
-                "요청을 StructuredRequest로 구조화하는 것까지만 담당한다."
-            ),
             (
                 "최종 답변은 반드시 StructuredRequestBatch 형태의 structured_response로 반환한다.\n"
                 "- 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담는다.\n"
@@ -316,8 +310,8 @@ def week02_prompt_parts() -> list[str]:
     return [
         *week01_prompt_parts(),
         (
-            "이제 너는 Week 2 요청 구조화 에이전트다. 사용자의 한국어 자연어 요청이나 "
-            "Week 1 도구가 만든 일정 JSON을 앱이 저장·처리할 수 있는 구조화된 형태로 변환하는 것이 역할이다.\n"
+            "사용자의 한국어 자연어 요청이나 일정 생성 도구가 만든 일정 JSON을 "
+            "앱이 저장·처리할 수 있는 구조화된 형태(StructuredRequest)로 변환한다.\n"
             f"현재 날짜는 {current_app_date_iso()}이며, 모든 날짜 계산은 이 날짜를 기준으로 한다."
         ),
         (
@@ -335,7 +329,7 @@ def week02_prompt_parts() -> list[str]:
             "None으로 두고, 언급된 멤버가 없으면 members는 빈 목록으로 둔다."
         ),
         (
-            "personal_create_schedule 같은 Week 1 도구가 반환한 JSON(created_schedule)을 이미 입력으로 받은 경우에는 "
+            "personal_create_schedule 도구가 반환한 JSON(created_schedule)을 이미 입력으로 받은 경우에는 "
             "도구를 다시 호출하지 말고, 그 payload의 필드를 그대로 읽어 structured_response로 구조화한다."
         ),
     ]

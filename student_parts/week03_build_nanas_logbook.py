@@ -652,9 +652,8 @@ def week03_prompt_parts() -> list[str]:
     return [
         *week02_prompt_parts(),
         (
-            "이제 너는 Week 3 기록장 agent다. "
-            "Week 2 방식으로 구조화한 결과를 최종 답변으로 끝내지 말고, "
-            "extract_schedule_request로 얻은 structured_request를 save_structured_request로 SQLite에 저장하는 것까지 수행한다."
+            "요청을 구조화하는 데서 멈추지 말고, extract_schedule_request로 얻은 structured_request를 "
+            "save_structured_request로 SQLite에 저장해 기록으로 남긴다."
         ),
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
@@ -664,7 +663,6 @@ def week03_prompt_parts() -> list[str]:
             "일정 조회=personal_list_saved_schedules, 구조화 원본 기록=list_saved_requests/get_saved_request, "
             "수정=personal_update_saved_schedule, 삭제=personal_delete_saved_schedules, "
             "인자가 이미 분해된 개인 일정 생성=personal_create_schedule(임시 메모리+SQLite 이중 기록).\n"
-            "Week 3 범위: RAG 검색과 외부 멤버 일정 조율은 아직 하지 않는다. "
             "최종 답변은 tool 결과 JSON을 근거로 한국어로 간결하게 작성한다."
         ),
     ]
