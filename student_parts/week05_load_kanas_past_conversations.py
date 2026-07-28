@@ -190,7 +190,8 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
     store = AppSQLiteStore(CONFIG.app_db_path)
-    saved = store.list_schedules(limit=200)
+    # 임시 일정 중복 제거를 저장 목록 전체와 대조해야 해서 넉넉한 상한으로 읽는다.
+    saved = store.list_schedules(limit=10000)
     saved_ids = {row.get("schedule_id") for row in saved}
 
     scope = current_session_scope()
@@ -296,7 +297,8 @@ def _collect_member_schedules(
     rows: list[dict[str, Any]] = []
     for schedule in personal_schedules:
         request = _structured_request_from_schedule_row(schedule)
-        if request.date is not None and not (date_from <= request.date <= date_to):
+        # 날짜가 없는 일정은 특정 범위에 바쁘다고 단정할 수 없으므로 조율 후보에서 제외한다.
+        if request.date is None or not (date_from <= request.date <= date_to):
             continue
         rows.append(
             {
@@ -317,7 +319,8 @@ def _collect_member_schedules(
             "date_to": date_to,
         },
     )
-    for row in external.get("rows", []):
+    external_rows = external.get("rows") if isinstance(external, dict) else None
+    for row in external_rows or []:
         rows.append(
             {
                 "member_name": row.get("member_name"),
@@ -353,6 +356,8 @@ def load_conversation_messages(conversation_id: str) -> str:
     payload = call_external_tool_payload(
         "load_conversation_messages", {"conversation_id": conversation_id}
     )
+    if not isinstance(payload, dict):
+        payload = {"ok": False, "tool_name": "load_conversation_messages", "rows": []}
     return json_payload(payload)
 
 
@@ -472,13 +477,14 @@ def week05_prompt_parts() -> list[str]:
         "다른 사람(외부 멤버)의 이전 대화와 일정은 이 주차의 MCP wrapper 도구로 처리한다.",
         "다른 사람의 일정 질문에는 personal_list_saved_schedules 나 search_saved_requests 같은 "
         "내 일정 도구를 쓰지 않는다. 그 도구들은 내 일정만 다룬다.",
-        "다른 사람의 지난 대화를 찾을 때는 search_previous_conversations 로 검색하고, "
-        "특정 대화 전체 내용이 필요하면 load_conversation_messages 로 불러온다.",
+        "다른 사람(이름이 있는 사람)과 관련된 지난 대화를 찾을 때는 search_previous_conversations 로 "
+        "검색한다. 내가 이 앱에서 나눈 대화는 search_conversation_messages, 다른 사람과 얽힌 대화는 "
+        "search_previous_conversations 로 구분한다. "
+        "검색으로 특정 대화를 찾은 뒤 그 전체 내용이 필요하면 load_conversation_messages 로 불러온다.",
         "다른 사람이 언제 바쁜지 물어보면, 한 명이든 여러 명이든 collect_member_schedules 로 "
         "일정을 모은다. 이 도구는 내 일정과 외부 멤버 일정을 같은 구조로 합쳐서 준다. "
         "extract_schedules_from_history 는 collect_member_schedules 가 내부에서 쓰는 하위 도구다.",
         "공유 일정 저장소를 직접 확인할 때는 list_shared_schedules 를 쓴다.",
-        "여러 사람의 일정을 모아 보여줄 수는 있지만, 최종 회의 시간을 골라 확정하는 일은 아직 하지 않는다.",
     ]
 
 
