@@ -599,7 +599,7 @@ def week03_prompt_parts() -> list[str]:
         "구조화는 extract_schedule_request 가, 저장과 조회는 SQLite tool 이 담당한다.",
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
-        "다른 멤버의 일정 조율은 아직 하지 않는다.",
+        "여러 사람의 일정을 맞춰 최종 회의 시간을 결정하는 일은 아직 하지 않는다.",
     ]
 
 
