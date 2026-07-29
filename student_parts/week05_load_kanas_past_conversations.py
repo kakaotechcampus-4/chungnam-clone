@@ -294,8 +294,14 @@ def search_previous_conversations(
 ) -> str:
     """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: call_mcp_tool_sync("search_previous_conversations", args)를 호출하고 결과 문자열을 반환하세요.
-    ...
+    # member_names는 받은 값을 그대로 넘긴다. 외부 저장소는 None과 빈 리스트를 다르게 해석한다:
+    # None이면 "멤버 필터 없음"이라 전체 멤버에서 찾고, []이면 "대상 멤버가 없음"이라 0건을 돌려준다.
+    # 여기서 member_names or [] 같은 기본값을 주면 멤버를 언급하지 않은 질문이 전부 0건이 된다.
+    args = {"query": query, "member_names": member_names, "limit": limit}
+
+    # 멤버 이름 정규화는 외부 저장소 경계에서 이미 한 번 처리하므로 이 wrapper에서 다시 변환하지 않는다.
+    # MCP tool은 JSON 문자열을 돌려주므로 json_payload()로 다시 감싸지 않고 그대로 반환한다.
+    return call_mcp_tool_sync("search_previous_conversations", args)
 
 
 @tool(args_schema=LoadConversationMessagesInput)
