@@ -27,10 +27,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fixed.config as _cfg
 
 _TMP = Path(tempfile.mkdtemp(prefix="week3_failure_"))
-# 경로만 임시로 돌리고 토큰은 그대로 둔다. (토큰까지 바꾸면 같은 프로세스에서 함께 도는
-# 다른 테스트 파일의 CONFIG 바인딩이 오염돼 실제 키가 필요한 스모크 테스트가 깨진다.)
+# 논리적 격리: 결정적 테스트이므로 경로를 임시로 돌리는 것에 더해 토큰도 비운다.
+# 그러면 import 중 어떤 외부 호출(임베딩 등)도 일어나지 않는다. 실제 호출이 필요한
+# smoke 테스트는 자기 setUp에서 실제 토큰 설정을 따로 만든다.
 _cfg.CONFIG = dataclasses.replace(
     _cfg.CONFIG,
+    proxy_token=None,
     chroma_dir=_TMP / "chroma",
     app_db_path=_TMP / "app.sqlite3",
     external_db_path=_TMP / "external.sqlite3",
