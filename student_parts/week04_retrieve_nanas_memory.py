@@ -85,7 +85,6 @@ _WEEK04_AGENT: Any | None = None
 #   LLM이 질문 성격에 따라 둘 중 하나 또는 둘 다 선택하도록 prompt가 준비되어 있습니다.
 #
 # 참고 코드
-#   search_nana_memory는 reference_backend와 context를 함께 확인하는 compatibility helper입니다.
 #   학생 핵심 구현 대상은 add_personal_reference, search_personal_references,
 #   search_saved_requests, search_conversation_messages 4개입니다.
 #   week04_tools()는 Week 1-3 도구에 이 RAG 도구들을 누적합니다.
@@ -108,8 +107,8 @@ _WEEK04_AGENT: Any | None = None
 #   - [메인] AddPersonalReferenceInput / SearchPersonalReferencesInput / SearchSavedRequestsInput
 #     개인 참고자료 추가, 개인 참고자료 검색, SQLite 저장 요청 검색 tool의 입력 스키마입니다.
 #
-#   - [추가] SearchConversationMessagesInput / SearchNanaMemoryInput
-#     앱 대화 RAG 검색과 기존 호환용 통합 검색 tool의 입력 스키마입니다.
+#   - [추가] SearchConversationMessagesInput
+#     앱 대화 RAG 검색 tool의 입력 스키마입니다.
 #
 #   - [메인] add_personal_reference_dict(...)
 #     PersonalReferenceStore에 참고자료를 저장하고, 어떤 backend에 저장됐는지와 저장된 reference row를 dict로 반환합니다.
@@ -135,9 +134,6 @@ _WEEK04_AGENT: Any | None = None
 #
 #   - [추가] search_conversation_messages(...)
 #     앱에 저장된 일반 대화 발화를 검색하는 RAG tool입니다. 일정 DB 검색과 다른 출처임을 context/rag_backend/sync로 함께 보여줍니다.
-#
-#   - [추가] search_nana_memory(...)
-#     이전 버전 호환용 통합 검색 tool입니다. 개인 참고자료 hit와 SQLite 일정 chunk를 한 번에 묶어 context 문자열을 만듭니다.
 #
 #   - [공통] week04_tools()
 #     Week 3까지의 tool에 Week 4 RAG tool들을 누적해 agent에 공개합니다.
@@ -201,16 +197,6 @@ class SearchConversationMessagesInput(BaseModel):
     query: str
     top_k: int = Field(default=5, ge=1, le=50)
     conversation_id: str | None = None
-
-
-class SearchNanaMemoryInput(BaseModel):
-    """Week 4 호환 통합 검색 입력입니다."""
-
-    query: str
-    date_from: str | None = None
-    date_to: str | None = None
-    attendee: str | None = None
-    limit: int = Field(default=5, ge=1, le=20)
 
 
 def add_personal_reference_dict(
@@ -337,47 +323,6 @@ def search_conversation_messages(
     )
     return json_payload({"ok": True, "tool_name": "search_conversation_messages", **result})
 
-
-@tool(args_schema=SearchNanaMemoryInput)
-def search_nana_memory(
-    query: str,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    attendee: str | None = None,
-    limit: int = 5,
-) -> str:
-    """개인 참고자료와 SQLite 저장 일정을 한 번에 검색하고 일정 chunk를 반환합니다."""
-
-    top_k = safe_limit(limit, default=5, maximum=20)
-    reference_hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=top_k)
-    saved_rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=top_k)
-
-    lines = ["[Nana 통합 기억 검색 결과]"]
-    if reference_hits:
-        lines.append("[개인 참고자료]")
-        for index, hit in enumerate(reference_hits, start=1):
-            metadata = hit.get("metadata") or {}
-            lines.append(f"[ref {index}] {metadata.get('title', '')} | {str(hit.get('content') or '').strip()}")
-    if saved_rows:
-        lines.append("[저장된 일정/할 일/알림]")
-        for index, row in enumerate(saved_rows, start=1):
-            title = row.get("title") or "제목 없음"
-            date = row.get("date") or "날짜 미정"
-            start_time = row.get("start_time") or ""
-            lines.append(f"[req {index}] {row.get('kind', '')} | {title} | {date} {start_time}".rstrip())
-    if not reference_hits and not saved_rows:
-        lines.append("- 검색된 기억이 없습니다.")
-
-    return json_payload(
-        {
-            "ok": True,
-            "tool_name": "search_nana_memory",
-            "reference_backend": REFERENCE_STORE.backend_info(),
-            "hits": reference_hits,
-            "rows": saved_rows,
-            "context": "\n".join(lines),
-        }
-    )
 
 def week04_tools() -> list[Any]:
     """3주차까지의 도구에 4주차 RAG 도구를 누적한 목록입니다."""
