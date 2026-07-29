@@ -347,8 +347,24 @@ def create_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
-    # TODO: call_mcp_tool_sync("create_shared_schedule", args)로 공유 일정 row를 생성/갱신하세요.
-    ...
+    # schedule_id와 source_conversation_id를 그대로 실어 보낸다. 이 두 값이 나중에 이 row를 다시
+    # 찾는 유일한 손잡이다. schedule_id가 같으면 저장소가 새로 만들지 않고 갱신(UPSERT)하므로,
+    # 같은 요청을 두 번 보내도 일정이 두 개로 늘어나지 않는다. 반대로 id를 비워 보내면 매번 새 row가
+    # 생겨서 재시도할 때마다 중복이 쌓이고, 취소할 때 무엇을 지워야 할지 알 수 없게 된다.
+    args = {
+        "member_name": member_name,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "notes": notes,
+        "source_conversation_id": source_conversation_id,
+        "schedule_id": schedule_id,
+    }
+
+    # 결과의 shared_schedule에는 sync_status(created / updated)가 들어 있다. 새로 만들었는지
+    # 기존 일정을 고쳤는지가 답변에서 달라져야 하므로 걸러내지 않고 그대로 전달한다.
+    return call_mcp_tool_sync("create_shared_schedule", args)
 
 
 @tool(args_schema=DeleteSharedScheduleInput)
