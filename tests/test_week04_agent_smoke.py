@@ -5,24 +5,31 @@
   "agent가 실제 질문에서 맞는 tool을 골랐는지"와 "최종 답변이 검색 결과를 실제로
   근거로 썼는지"는 검증되지 않는다. 이 파일이 그 둘을 종단으로 확인한다.
 
-왜 별도 파일 + skipUnless 인가:
+왜 별도 파일 + 명시적 opt-in 인가:
   agent의 tool 선택은 LLM이라 비결정적이고 PROXY_TOKEN(네트워크)이 필요하다.
-  결정적이어야 하는 계약 검증(test_week04_failure_cases)과 섞으면 간헐 실패가
-  나므로 분리하고, 키가 없으면 skip 한다.
+  결정적 계약 검증(test_week04_failure_cases)과 섞으면 간헐 실패가 나므로 분리한다.
+  "토큰이 있으면 자동 실행"이 아니라 환경변수 RUN_LLM_TESTS=1 로 켤 때만 실행되도록
+  명시적으로 opt-in 한다. 켜지 않으면 기본 discover에서 이 테스트는 skip될 뿐 아니라
+  import 시점의 외부 호출(임베딩)도 일어나지 않는다.
 
 실행:
-  python -m unittest tests.test_week04_agent_smoke
-  python -m unittest discover -s tests   (키 없으면 이 파일만 skip)
+  # 결정적(코드) 테스트만 — 기본
+  python -m unittest discover -s tests
+  # 비결정론적 LLM 스모크까지 포함 — 명시적으로 켤 때만
+  RUN_LLM_TESTS=1 python -m unittest discover -s tests
+  RUN_LLM_TESTS=1 python -m unittest tests.test_week04_agent_smoke
 
 왜 임시 경로로 CONFIG를 돌리는가:
   agent가 실제 ChromaDB/SQLite(영구 저장소)에 읽고 쓰기 때문에, 실제 data/를
-  오염시키면 사용자 데이터가 더럽혀지고 재현성도 깨진다. 실제 토큰은 유지(임베딩/
-  LLM 필요)하되 저장 경로만 임시로 돌린다.
+  오염시키면 사용자 데이터가 더럽혀지고 재현성도 깨진다. 그래서 저장 경로는 임시로
+  돌린다. 실제 토큰은 opt-in 되어 실제로 도는 setUpClass에서만 적용한다(import 시점엔
+  토큰을 비워 어떤 외부 호출도 없게 한다).
 """
 
 from __future__ import annotations
 
 import dataclasses
+import os
 import sys
 import tempfile
 import unittest
@@ -35,10 +42,21 @@ from fixed.config import load_config
 
 _REAL = load_config()  # .env에서 실제 토큰을 새로 읽는다(다른 테스트의 CONFIG 오염과 무관)
 _HAS_KEY = _REAL.has_openai_key
+# 비결정론적 LLM 테스트는 "토큰이 있으면 자동"이 아니라 명시적 opt-in(RUN_LLM_TESTS=1)으로만 실행한다.
+_RUN_LLM = os.getenv("RUN_LLM_TESTS") == "1"
+if not _RUN_LLM:
+    _SKIP_REASON = "비결정론적 LLM 스모크: 기본 실행에서 제외됩니다. RUN_LLM_TESTS=1 로 명시적으로 켜세요."
+elif not _HAS_KEY:
+    _SKIP_REASON = "PROXY_TOKEN이 필요합니다."
+else:
+    _SKIP_REASON = ""
+
 _TMP = Path(tempfile.mkdtemp(prefix="week4_smoke_"))
+# import 시점에는 토큰을 비운다 → opt-in 하지 않으면 (discover 수집 단계 포함) 어떤 외부 호출도 없다.
+# 실제 토큰은 opt-in 되어 실제로 도는 setUpClass에서만 적용한다.
 _cfg.CONFIG = dataclasses.replace(
     _cfg.CONFIG,
-    proxy_token=_REAL.proxy_token,
+    proxy_token=None,
     chroma_dir=_TMP / "chroma",
     app_db_path=_TMP / "app.sqlite3",
     external_db_path=_TMP / "external.sqlite3",
@@ -54,7 +72,7 @@ def _calls_and_answer(result: dict) -> tuple[list[str], str]:
     return calls, (answer if isinstance(answer, str) else str(answer))
 
 
-@unittest.skipUnless(_HAS_KEY, "실제 LLM/임베딩이 필요합니다 (PROXY_TOKEN 없음 → skip)")
+@unittest.skipUnless(_RUN_LLM and _HAS_KEY, _SKIP_REASON)
 class Week04AgentSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
