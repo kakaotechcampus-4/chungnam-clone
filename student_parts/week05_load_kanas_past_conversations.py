@@ -408,8 +408,8 @@ def week05_tools() -> list[Any]:
         search_previous_conversations,
         load_conversation_messages,
         extract_schedules_from_history,
-        create_shared_schedule,
-        delete_shared_schedule,
+        #create_shared_schedule,
+        #delete_shared_schedule, 추가과제 미 구현으로 인한 임시 제외, 1차 PR 이후 구현 예정
         list_shared_schedules,
         collect_member_schedules,
     ]
@@ -426,7 +426,22 @@ def week05_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
-        # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
+        """
+외부 팀원의 이전 대화나 일정을 다룰 때는 다음 규칙을 따른다.
+
+- 질문에 "나" 이외의 사람 이름이 등장하면, 그 이름은 개인 저장 기록(search_saved_requests 등)이 아니라
+  외부 팀원으로 간주하고 이번 주 MCP 도구(search_previous_conversations, extract_schedules_from_history,
+  collect_member_schedules 등)를 우선 사용한다. 개인 저장 기록 도구는 "나"의 일정/할 일/알림에만 사용한다.
+- 팀원 이름을 이미 알고 있으면 search_previous_conversations 없이 바로 extract_schedules_from_history를 호출한다.
+- 팀원 이름을 모르거나 "누구랑 어떤 이야기가 있었는지" 먼저 찾아야 하면 search_previous_conversations로 대화 목록을 먼저 검색한다.
+- load_conversation_messages는 요약만으로 부족해 원문 확인이 꼭 필요할 때만 선택적으로 호출한다.
+- "나와 팀원의 시간을 맞춰줘"처럼 내 일정과 외부 멤버 일정을 함께 봐야 하는 요청은
+  search_previous_conversations/extract_schedules_from_history를 따로 부르지 말고
+  collect_member_schedules 하나로 처리한다.
+- "공유 일정", "등록된 팀 일정"을 조회할 때는 list_shared_schedules를 사용한다.
+- 개인 참고자료나 내가 저장한 기록은 이전 주차 도구(search_personal_references 등)를 사용하고,
+  팀원/외부 멤버가 언급된 요청에만 이번 주 MCP 도구를 사용한다.
+        """,
     ]
 
 
