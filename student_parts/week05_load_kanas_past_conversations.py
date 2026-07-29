@@ -329,15 +329,25 @@ def _collect_member_schedules(
         )
 
     # 2) 외부 멤버 busy-time을 MCP로 조회해 같은 구조로 추가한다.
-    external_payload = call_external_tool_payload(
-        "extract_schedules_from_history",
-        {
-            "member_names": normalized_members,
-            "date_from": normalized_from,
-            "date_to": normalized_to,
-        },
-    )
-    for row in external_payload.get("rows", []):
+    #    "나"는 이미 1단계에서 앱 SQLite로 직접 읽었고, 외부 공유 저장소에도 자동 동기화된
+    #    복사본이 있어 중복되므로 외부 조회 대상에서 제외한다.
+    external_members = [
+        name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME
+    ]
+
+    external_rows: list[dict[str, Any]] = []
+    if external_members:
+        external_payload = call_external_tool_payload(
+            "extract_schedules_from_history",
+            {
+                "member_names": external_members,
+                "date_from": normalized_from,
+                "date_to": normalized_to,
+            },
+        )
+        external_rows = external_payload.get("rows", [])
+
+    for row in external_rows:
         rows.append(
             {
                 "member_name": row.get("member_name"),
