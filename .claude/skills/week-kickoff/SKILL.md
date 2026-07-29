@@ -32,6 +32,16 @@ description: 새 주차 과제(student_parts/weekNN_*.py)를 시작할 때 따�
 - planner 계획대로 **메인 → 추가** 순으로 구현. 편집마다 hook가 구문 검사.
 - → **[게이트] 구현 결과 확인**
 
+### 1.5. 재사용 리뷰 — `/simplify` (5주차 반성)
+- 구현 직후, verifier로 넘기기 **전에** `/simplify`를 돌린다. 이 skill이 재사용·단순화 축을 전담한다.
+- **이 단계가 필요한 이유:** 5주차에 builder가 이미 존재하는 dedup 키 생성기(`_content_schedule_id`)를
+  재구현했고, 그 재구현이 곧 기능 결함(별개 일정 오합침)이었다. planner는 그 함수를 "문제의 원인"으로만
+  적고 재사용 자산 표에 넣지 않았고, 오케스트레이터가 알고리즘을 과잉 명세해 builder의 탐색 여지를 없앴다.
+  planner·builder·verifier 셋 다 통과시켰고 사후 사람 리뷰가 잡았다.
+- 특히 **새로 만든 helper 각각에 대해** "동일 목적의 기존 함수가 정말 없는가"를 확인한다.
+  파생 키·정규화·식별자 계산은 이전 주차나 `fixed/`에 이미 있을 가능성이 높다.
+- → **[게이트] 재사용 리뷰 반영 확인**
+
 ### 2. 계약 검증 — verifier + verify-weekNN
 - 스키마·반환 키·안전규칙 등 **결정적 계약** PASS/FAIL. "코드가 스펙대로인가"만 확인(1회면 충분).
 - → **[게이트] 검증 통과**
@@ -61,9 +71,11 @@ description: 새 주차 과제(student_parts/weekNN_*.py)를 시작할 때 따�
 |---|---|
 | `.claude/agents/`(planner·builder·verifier), `.claude/skills/`(kanana-conventions, prompt-engineering, week-kickoff), `.claude/hooks/`(protect_paths, check_syntax) | `verify-weekNN` skill(+`verifier.md` 등록), `evals/weekNN_eval.py`·`weekNN_baseline.json`, `docs/weekNN_*.md` |
 
-## 핵심 원칙 3줄
+## 핵심 원칙 4줄
 1. **eval을 0단계에서 먼저** 세우고, 프롬프트 판단은 eval/trace로만(정적 분석 X).
 2. **verify = 결정적 계약(1회), eval = 확률적 행동(N회 통과율)** 으로 역할을 나눈다.
-3. **각 단계 게이트에서 사용자 승인** 후 다음으로.
+3. **거르는 로직은 양방향으로 검사**한다 — 걸러야 할 것을 거르는가 + 걸러선 안 될 것을 남기는가
+   (`kanana-conventions` §6). 한 축만 두면 잘못된 구현이 통과한다.
+4. **각 단계 게이트에서 사용자 승인** 후 다음으로.
 
 상세 근거·표는 `docs/week03_orchestration_plan.md` §8 참조.
