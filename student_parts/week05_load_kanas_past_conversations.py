@@ -286,6 +286,10 @@ def _collect_member_schedules(
     ...
 
 
+#   1. search_previous_conversations
+#      - query, member_names, limit를 받습니다.
+#      - 이 파일의 call_mcp_tool_sync("search_previous_conversations", args)를 호출하고 결과 문자열을 그대로 반환합니다.
+#      - 멤버 이름 정규화는 외부 SQLite store/MCP 경계에서 한 번만 처리하므로 wrapper에서 중복 변환하지 않습니다.
 @tool(args_schema=SearchPreviousConversationsInput)
 def search_previous_conversations(
     query: str,
@@ -298,6 +302,10 @@ def search_previous_conversations(
     ...
 
 
+#   2. load_conversation_messages
+#      - conversation_id로 외부 SQLite/MCP helper에서 이전 대화 메시지를 조회합니다.
+#      - call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id})를 사용합니다.
+#      - 대화 메시지의 sender/content/created_at 순서가 보존되도록 결과를 가공하지 않습니다.
 @tool(args_schema=LoadConversationMessagesInput)
 def load_conversation_messages(conversation_id: str) -> str:
     """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
@@ -306,6 +314,11 @@ def load_conversation_messages(conversation_id: str) -> str:
     ...
 
 
+#   3. extract_schedules_from_history
+#      - member_names, date_from, date_to를 받습니다.
+#      - call_mcp_tool_sync("extract_schedules_from_history", args)를 호출합니다.
+#      - 날짜 형식 정리는 외부 SQLite store/MCP 경계에서 한 번만 처리합니다.
+#      - 결과 rows는 member_name/title/date/start_time/end_time/notes 필드를 유지해야 합니다.
 @tool(args_schema=ExtractSchedulesFromHistoryInput)
 def extract_schedules_from_history(member_names: list[str], date_from: str, date_to: str) -> str:
     """외부 SQLite 이전 대화에서 멤버별 일정을 추출합니다."""
@@ -342,6 +355,11 @@ def delete_shared_schedule(
     ...
 
 
+#   4. list_shared_schedules
+#      - call_mcp_tool_sync("list_shared_schedules", args)를 호출해 공유 일정 저장소 row를 조회합니다.
+#      - 공유 저장소 자체를 확인할 때는 "나"를 포함한 등록 row를 조회합니다.
+#      - 필터 없이 호출하면 외부 실습용 기본 공유 일정 row가 우선 반환될 수 있습니다.
+#      - Week 6 Kana 하위 agent가 공유 저장소 row 조회에 그대로 사용하는 tool입니다.
 @tool(args_schema=ListSharedSchedulesInput)
 def list_shared_schedules(
     member_names: list[str] | None = None,
@@ -356,6 +374,13 @@ def list_shared_schedules(
     ...
 
 
+#   5. collect_member_schedules
+#      - 3주차 이후 저장된 내 일정은 앱 SQLite에서 읽고, 현재 대화의 임시 일정만 추가로 합칩니다.
+#      - 외부 멤버 일정은 call_mcp_tool_sync("extract_schedules_from_history", args) 결과를 이 tool 안에서 읽습니다.
+#      - 두 출처를 member_name/title/date/start_time/end_time/notes가 있는 rows 배열로 직접 합칩니다.
+#      - schedule_summary도 함께 반환해 LLM이 바쁜 시간을 자연어로 설명할 수 있게 합니다.
+#      - PERSONAL_SCHEDULES는 현재 대화 범위의 아직 DB에 없는 임시 일정만 합치고, SQLite에 이미 저장된 일정과 중복하지 않습니다.
+#      - Week 6 추가 과제(find_common_available_slots)가 이 tool의 rows를 busy_rows 근거로 사용합니다.
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
