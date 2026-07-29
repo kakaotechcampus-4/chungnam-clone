@@ -297,7 +297,7 @@ def week02_system_prompt() -> str:
                 "최종 답변은 반드시 StructuredRequestBatch 형태의 structured_response로 반환한다.\n"
                 "- 요청이 하나뿐이어도 requests 목록에 StructuredRequest 하나를 담는다.\n"
                 "- 한 문장에 여러 일정·할 일·알림 의도가 섞여 있으면 각 의도를 별도의 StructuredRequest로 분리한다.\n"
-                "- personal_create_schedule 등 Week 1 도구 결과 JSON을 받은 경우 그 안의 created_schedule 값을 읽어 각 필드를 채운다.\n"
+                "- personal_create_schedule 등 일정 생성 도구 결과 JSON을 받은 경우 그 안의 created_schedule 값을 읽어 각 필드를 채운다.\n"
                 "- structured_response는 StructuredRequestBatch 객체 하나만 정확히 한 번 생성하고, 같은 내용을 반복하거나 JSON 뒤에 다른 텍스트를 덧붙이지 않는다."
             ),
         ]
