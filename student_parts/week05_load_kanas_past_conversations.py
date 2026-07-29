@@ -372,8 +372,22 @@ def list_shared_schedules(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다."""
 
-    # TODO: call_mcp_tool_sync("list_shared_schedules", args)로 공유 일정 저장소 rows를 조회하세요.
-    ...
+    # 필터 5개를 모두 받은 값 그대로 넘긴다. 여기서 기본값을 채워 넣으면 안 되는 이유가 두 가지다.
+    # 첫째, 필터가 하나도 없으면 외부 저장소가 "기본 실습 멤버 + 기본 날짜 구간"으로 스스로 대체한다.
+    #   wrapper가 임의로 값을 채우면 이 분기가 사라져서, 조건 없이 "공유 일정 보여줘"라고 물었을 때
+    #   비어 있는 결과가 나온다.
+    # 둘째, member_names는 None(필터 없음)과 []("대상 멤버 없음" → 0건)의 뜻이 다르다.
+    args = {
+        "member_names": member_names,
+        "date_from": date_from,
+        "date_to": date_to,
+        "source_conversation_id": source_conversation_id,
+        "limit": limit,
+    }
+
+    # 이 tool의 rows 구조는 6주차 Kana 하위 agent가 그대로 재사용한다. 여기서 키를 바꾸거나 골라내면
+    # 이 파일을 보지 않는 6주차 코드가 조용히 깨지므로, 서버가 준 모양을 그대로 넘긴다.
+    return call_mcp_tool_sync("list_shared_schedules", args)
 
 
 @tool(args_schema=CollectMemberSchedulesInput)
