@@ -187,8 +187,12 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
-    # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
-    ...
+    schedule_from_SQLite = AppSQLiteStore(CONFIG.app_db_path).list_schedules()
+    schedule_from_session = [schedule for schedule in PERSONAL_SCHEDULES if _schedule_scope(schedule) == current_session_scope()]
+    SQLite_schedule_id = {row["schedule_id"] for row in schedule_from_SQLite}
+    rows = schedule_from_SQLite + [schedule for schedule in schedule_from_session if schedule["id"] not in SQLite_schedule_id]
+
+    return rows
 
 
 def json_payload(payload: dict[str, Any]) -> str:
@@ -371,6 +375,8 @@ def list_shared_schedules(
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
+
+
 
     # TODO: 내 일정과 외부 멤버 busy-time rows를 모아 JSON 문자열로 반환하세요.
     ...
