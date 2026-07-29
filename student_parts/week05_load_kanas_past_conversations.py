@@ -604,6 +604,8 @@ def week05_prompt_parts() -> list[str]:
             "공유 일정 저장소에 일정을 새로 등록하거나 갱신해야 하면 create_shared_schedule을 사용하고, "
             "공유 일정 저장소에서 일정을 삭제해야 하면 delete_shared_schedule을 사용한다. "
             "도구 결과의 rows와 schedule_summary를 근거로 답하고, 확인하지 않은 외부 멤버 일정은 추측하지 않는다."
+            "사용자가 날짜 범위를 명시하지 않고 멤버 일정 조회를 요청하면, 현재 날짜부터 충분히 넓은 기본 범위로 조회한다."
+            "예: date_from=current_app_date_iso(), date_to=\"2099-12-31\". 오늘/내일로 나누어 여러 번 호출하지 않는다."
         ),
         (
             "Tool call examples:\n"
