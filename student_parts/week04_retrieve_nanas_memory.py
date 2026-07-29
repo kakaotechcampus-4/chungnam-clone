@@ -119,7 +119,7 @@ _WEEK04_AGENT: Any | None = None
 #
 #   - [메인] search_saved_request_rows(...)
 #     AppSQLiteStore의 저장 요청 검색 결과를 rows 배열로 반환합니다. 일정/할 일/알림 구조화 기록을 찾을 때 사용합니다.
-#
+#   
 #   - [추가] search_conversation_messages_dict(...)
 #     SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 ChromaDB 검색을 수행합니다.
 #     현재 대화는 기본적으로 제외해 "방금 한 말"이 과거 검색 결과처럼 섞이지 않게 합니다.
@@ -225,8 +225,7 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    return reference_store.add_personal_reference(title, content, tags or [])
 
 
 def search_personal_reference_hits(
@@ -237,8 +236,24 @@ def search_personal_reference_hits(
 ) -> list[dict[str, Any]]:
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    hits = reference_store.search_personal_references(query, limit=top_k)
+    cleaned_hits: list[dict[str, Any]] = []
+    for hit in hits:
+        try:
+            cleaned_hits.append(
+                {
+                    "id": hit["id"],
+                    "content": hit["content"],
+                    "distance": hit["distance"],
+                    "metadata": {
+                        "title": hit["title"],
+                        "tags": [tag for tag in hit["tags"].split(",") if tag],
+                    },
+                }
+            )
+        except (KeyError, AttributeError):
+            continue
+    return cleaned_hits
 
 
 def search_saved_request_rows(
@@ -249,8 +264,7 @@ def search_saved_request_rows(
 ) -> list[dict[str, Any]]:
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    return sqlite_store.search_saved_requests(query, limit=top_k)
 
 
 def search_conversation_messages_dict(
@@ -284,24 +298,39 @@ def search_conversation_message_rows(
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
-    # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    added = add_personal_reference_dict(REFERENCE_STORE, title=title, content=content, tags=tags)
+    if "backend" not in added:
+        raise ValueError(
+            "add_personal_reference_dict()가 'backend' 키 없이 payload를 반환했습니다. "
+            f"실제 반환 키: {list(added)}. reference_store 구현을 확인하세요."
+        )
+    reference_backend = added.pop("backend")
+    return json_payload(
+        {
+            "ok": True,
+            "tool_name": "add_personal_reference",
+            "reference_backend": reference_backend,
+            "reference": added,
+        }
+    )
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
-    # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    limit = safe_limit(top_k, default=2, maximum=20)
+    hits = search_personal_reference_hits(REFERENCE_STORE, query=query, top_k=limit)
+    return json_payload({"ok": True, "tool_name": "search_personal_references", "hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
 def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    limit = safe_limit(top_k, default=3, maximum=50)
+    rows = search_saved_request_rows(SQLITE_STORE, query=query, top_k=limit)
+    return json_payload({"ok": True, "tool_name": "search_saved_requests", "rows": rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -352,7 +381,18 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        """Week 4부터는 개인 참고자료와 저장된 요청/일정을 출처별로 구분해 검색하는 RAG tool이 있다.
+- search_personal_references: "나는 오전에 집중이 잘 된다", "점심시간은 비워둔다"처럼 개인적인
+  선호/메모/참고사항을 묻거나, "그건 어떻게 하기로 했었지?"처럼 과거에 적어 둔 메모를 되짚는
+  질문에 호출해 근거를 찾는다. "
+- search_saved_requests: "코칭 관련해서 저장한 거 있어?"처럼 일정에 관한 제목이나 키워드를 이용한
+  간단한 질문을에 대하여 사용한다. 날짜/기간으로 조회하는 질문은
+  personal_list_saved_schedules가 처리하는 영역이므로 혼동하지 않는다.
+- add_personal_reference: "이거 기억해 둬", "내 선호는 이거야"처럼 일정/할 일/알림이 아닌 자유
+  형식 메모를 새로 등록해 달라는 요청에 호출한다. 구조화된 일정/할 일/알림 저장은 여전히 Week 3의
+  save_structured_request를 사용한다.
+- search_personal_references/search_saved_requests 결과가 비어 있으면 근거 없이 답을 지어내지
+  않고, 참고자료나 저장 기록이 없다고 답한다. 또한 이전 프롬프트에 의존하지 않고, 툴을 실행하여서 확인한다.""",
     ]
 
 
