@@ -1,0 +1,181 @@
+{
+  "today": "2026-07-06",
+  "n": 5,
+  "results": {
+    "external_member_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "external_answer_correct": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_both_sources": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_answer_has_mine": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "previous_conversation_search": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "load_full_conversation": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "shared_store_listing": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "personal_only_guard": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_invented_member": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "shared_create": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "delete_shared_routing": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "extract_not_collect": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_double_collect": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "week6_boundary": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "search_member_names_arg": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_hallucinated_schedule": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "member_names_not_dropped": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "read_only_no_side_effect": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "own_conversation_not_external": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_without_cue": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "unspecified_period": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "week4_reference_regression": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_dedup": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_no_over_dedup": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_scope_isolation": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    }
+  }
+}
