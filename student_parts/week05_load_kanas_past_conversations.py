@@ -323,8 +323,15 @@ def load_conversation_messages(conversation_id: str) -> str:
 def extract_schedules_from_history(member_names: list[str], date_from: str, date_to: str) -> str:
     """외부 SQLite 이전 대화에서 멤버별 일정을 추출합니다."""
 
-    # TODO: call_mcp_tool_sync("extract_schedules_from_history", args)를 호출해 외부 멤버 busy-time rows를 반환하세요.
-    ...
+    # 날짜 형식 정리도 외부 저장소 경계에서 한 번만 하므로 여기서 다시 자르거나 바꾸지 않는다.
+    # member_names는 필수 인자다. 빈 리스트를 넘기면 "대상 멤버 없음"이라 0건이 돌아오므로,
+    # 대상이 정해지지 않았다면 이 tool을 호출하는 것 자체가 이르다.
+    args = {"member_names": member_names, "date_from": date_from, "date_to": date_to}
+
+    # 결과에는 rows와 함께 schedule_summary(사람이 읽는 요약)가 이미 들어 있다. 여기서 다시 만들지 않는다.
+    # 요약을 직접 만드는 곳은 collect_member_schedules 한 곳뿐이다. 그때는 내 일정까지 합친
+    # 목록이 기준이라 서버가 준 외부 멤버만의 요약을 그대로 쓸 수 없기 때문이다.
+    return call_mcp_tool_sync("extract_schedules_from_history", args)
 
 
 @tool(args_schema=CreateSharedScheduleInput)
