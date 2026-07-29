@@ -46,7 +46,7 @@ _WEEK04_AGENT: Any | None = None
 #   - 일반 채팅 발화 검색은 fixed/conversation_rag_store.py의 ConversationRAGStore를 사용하고,
 #     이 파일 상단의 CONVERSATION_RAG_STORE가 CONFIG.chroma_dir 기준 인스턴스입니다.
 #   - 각 tool 입력은 Pydantic args_schema로 검증하고,
-#     search_personal_reference_hits(), search_saved_request_rows(), search_conversation_message_rows()에서 조회 결과를 정리합니다.
+#     search_personal_reference_hits(), search_saved_request_rows(), search_conversation_messages_dict()에서 조회 결과를 정리합니다.
 #   - tool 함수 add_personal_reference/search_personal_references/search_saved_requests/search_conversation_messages는
 #     위 helper 결과를 json_payload()로 감싼 JSON 문자열로 반환합니다.
 #   - top_k/limit 보정은 이 파일의 safe_limit()를 사용해 tool 안에서 처리합니다.
@@ -123,9 +123,6 @@ _WEEK04_AGENT: Any | None = None
 #   - [추가] search_conversation_messages_dict(...)
 #     SQLite 대화 기록을 ConversationRAGStore에 lazy sync한 뒤 ChromaDB 검색을 수행합니다.
 #     현재 대화는 기본적으로 제외해 "방금 한 말"이 과거 검색 결과처럼 섞이지 않게 합니다.
-#
-#   - [추가] search_conversation_message_rows(...)
-#     search_conversation_messages_dict(...)에서 hits만 꺼내는 내부 helper입니다.
 #
 #   - [메인] add_personal_reference(...)
 #     참고자료 추가 tool입니다. title/content/tags를 받아 vector store에 저장하고 JSON 문자열을 반환합니다.
@@ -294,24 +291,6 @@ def search_conversation_messages_dict(
         "rag_backend": conversation_rag_store.backend_info(),
         "sync": sync,
     }
-
-
-def search_conversation_message_rows(
-    sqlite_store: AppSQLiteStore,
-    *,
-    query: str,
-    top_k: int = 5,
-    conversation_id: str | None = None,
-) -> list[dict[str, Any]]:
-    """앱 SQLite에 저장된 일반 채팅 대화 청크를 RAG 검색합니다."""
-
-    return search_conversation_messages_dict(
-        sqlite_store,
-        CONVERSATION_RAG_STORE,
-        query=query,
-        top_k=top_k,
-        conversation_id=conversation_id,
-    )["hits"]
 
 
 @tool(args_schema=AddPersonalReferenceInput)
