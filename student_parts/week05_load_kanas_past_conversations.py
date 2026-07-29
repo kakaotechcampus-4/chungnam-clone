@@ -308,8 +308,15 @@ def search_previous_conversations(
 def load_conversation_messages(conversation_id: str) -> str:
     """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
 
-    # TODO: call_external_tool_payload("load_conversation_messages", {"conversation_id": ...}) 결과를 JSON으로 반환하세요.
-    ...
+    # 이 tool만 call_external_tool_payload를 쓴다. 다른 wrapper가 쓰는 call_mcp_tool_sync는 JSON
+    # 문자열을 그대로 돌려주지만, 이 헬퍼는 json.loads까지 해서 dict를 돌려준다. 그래서 반환 직전에
+    # json_payload()로 다시 JSON 문자열로 만들어야 한다. dict를 그대로 반환하면 tool 결과가
+    # 파이썬 dict 표기(작은따옴표)로 전달돼 유효한 JSON이 아니게 된다.
+    payload = call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id})
+
+    # 메시지의 sender/content/created_at와 시간순 정렬은 그대로 둔다. 대화는 순서가 곧 맥락이라,
+    # 보기 좋게 재정렬하거나 필드를 골라내면 누가 먼저 무슨 말을 했는지가 흐려진다.
+    return json_payload(payload)
 
 
 @tool(args_schema=ExtractSchedulesFromHistoryInput)
