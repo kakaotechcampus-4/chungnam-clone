@@ -31,6 +31,11 @@ from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week
 
 _WEEK05_AGENT: Any | None = None
 
+# 앱 SQLite에서 내 일정을 읽어올 때 쓰는 상한. AppSQLiteStore.list_schedules의 기본값은 12건이고
+# 그 값을 그대로 SQL LIMIT에 넣기 때문에, 기본값에 맡기면 일정이 13건 이상일 때 조용히 잘려나간다.
+# 회의 조율은 "바쁜 시간을 하나도 빠뜨리지 않는 것"이 전제라, 빠진 일정 하나가 잘못된 후보를 만든다.
+PERSONAL_SCHEDULE_FETCH_LIMIT = 200
+
 
 # [5주차 수강생 구현 가이드]
 #
@@ -189,8 +194,28 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
-    # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
-    ...
+    # store를 모듈 전역 싱글턴으로 두지 않고 호출할 때마다 만든다. 테스트가 CONFIG를 갈아끼워
+    # 임시 DB를 보게 할 수 있고, 앱이 실행 중에 DB 경로를 바꿔도 다음 호출부터 반영된다.
+    store = AppSQLiteStore(CONFIG.app_db_path)
+
+    # kind 필터를 주지 않아 개인/그룹 일정을 모두 가져온다. 그룹 회의도 내가 바쁜 시간이므로
+    # 조율 후보에서 빼면 이미 약속이 있는 시간을 비어 있다고 답하게 된다.
+    saved_schedules = store.list_schedules(limit=PERSONAL_SCHEDULE_FETCH_LIMIT)
+
+    # 아직 DB에 저장되지 않은, 지금 대화에서만 만들어 둔 임시 일정을 덧붙인다.
+    # 두 저장소는 id를 담는 키 이름이 다르다. 앱 SQLite row는 schedule_id, Week 1 임시 일정은 id다.
+    # 그래서 dedup 기준을 한쪽 키로만 잡으면 방금 저장한 일정이 두 번 세어져 하루에 같은 회의가
+    # 두 개 있는 것처럼 보인다.
+    saved_ids = {schedule.get("schedule_id") for schedule in saved_schedules}
+    current_scope = current_session_scope()
+    pending_schedules = [
+        schedule
+        for schedule in PERSONAL_SCHEDULES
+        # 다른 대화에서 만든 임시 일정이 이 대화의 조율 결과로 새지 않도록 현재 대화 범위만 남긴다.
+        if _schedule_scope(schedule) == current_scope and schedule.get("id") not in saved_ids
+    ]
+
+    return [*saved_schedules, *pending_schedules]
 
 
 def json_payload(payload: dict[str, Any]) -> str:
