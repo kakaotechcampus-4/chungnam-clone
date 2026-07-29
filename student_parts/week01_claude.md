@@ -35,8 +35,8 @@
 
 - 이 agent 파이프라인(LangChain `create_agent`, tool calling 구조 등)은 2025.10부터 확립된 구성이다.
   학습된 기존 지식과 상충되는 부분이 있다면 추측하지 말고 검색해서 확인한다.
-- JSON 문자열 반환은 반드시 이 파일의 `_json(payload)` helper를 사용한다. (LangChain tool은 문자열
-  반환이 가장 안정적이므로, dict를 직접 만든 뒤 `_json(...)`으로 감싸서 반환한다.)
+- JSON 문자열 반환은 반드시 이 파일의 `_json(payload)` helper를 사용한다(`student_parts/claude.md`의
+  "tool 반환값이 깨지지 않도록 하는 방어" 참고).
 - 임시 저장소는 파일 상단에 정의된 `PERSONAL_SCHEDULES` 리스트를 사용한다. (새 저장소를 추가하지 않는다.)
 - 새 일정 ID 생성은 미리 정의된 `_new_personal_id()`를 사용한다. (직접 ID를 만들지 않는다.)
 - 생성 시각 파악은 `_now_iso()`를 사용한다.

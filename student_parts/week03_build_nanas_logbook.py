@@ -38,9 +38,9 @@ WEEK03_TOOL_CALL_PROMPT = """
 새 일정/할 일/알림을 저장하거나 과거에 저장한 내용을 조회할 때는 다음을 지킨다.
 - 저장: "일정 등록해줘", "기억해줘", "저장해줘", "메모해줘"처럼 저장 의도가 보이면, 먼저 save_structured_request를 바로 사용해서 안전하지 못한 생성된 값을 집어넣지 않고,
   extract_schedule_request(query=사용자 원문)로 자연어를 구조화한 뒤, 그 결과의 structured_request
-  필드 값(kind/title/date/start_time/end_time/members/priority/reason/original_text)을 그대로
-  save_structured_request의 인자로 전달해 저장한다. 자연어 문자열이나 extract_schedule_request가
-  반환하는 ok/tool_name/base_date wrapper를 그대로 저장하지 않는다 personal_create_schedule는 아직 구현되지 않았으므로 해당 툴을 이용하여 일정을 등록하려하지 않는다.
+  필드 값(kind/title/date/start_time/end_time/members/priority/reason/original_text)만 그대로
+  save_structured_request의 인자로 전달해 저장한다. personal_create_schedule는 아직 구현되지
+  않았으므로 해당 툴을 이용하여 일정을 등록하려 하지 않는다.
 - 조회: "내 일정 보여줘", "오늘 뭐 있어?"처럼 저장된 내용을 확인하는 질문에는 personal_list_saved_schedules를
   호출해 답한다. 몇시 부터 몇시 사이, 몇시 이후에, 몇시 전에 처럼 특정 기간이 언급되면 date_from/date_to로 좁히고, 언급이 없으면 기간 제한 없이 조회한다.
 - 리퀘스트 단위의 조회: 특정기간의 구조화 요청 목록이 올시 list_saved_requests, 리퀘스트 아이디를 사용한 요청은 get_saved_request을 이용하여 조회한다."""
@@ -643,7 +643,6 @@ def week03_prompt_parts() -> list[str]:
         "저장된 일정 목록이나 내 일정 조회 요청은 personal_list_saved_schedules로 앱 SQLite 일정 row를 확인한다. "
         "personal_list_schedules는 Week 1-2 현재 대화 임시 메모리 조회 전용이므로 Week 3의 단순 일정 조회에는 사용하지 않는다. "
         "새 대화에서 이전에 저장한 중요한 일정/할 일/알림을 참고해야 할 때는 대화 전사가 아니라 SQLite 조회 도구 결과만 근거로 삼는다. "
-        "Week 3에서는 외부 멤버 일정 조율을 처리하지 않는다. "
         "도구 결과에 없는 사실은 만들지 않는다."
     ]
 

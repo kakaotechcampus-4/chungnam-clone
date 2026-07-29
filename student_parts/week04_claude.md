@@ -82,8 +82,8 @@
 
 # 공통 규칙 (메인과제 6개 함수 모두 해당)
 
-- 반환값은 LangChain tool 관례상 JSON 문자열이며, `json_payload(payload)`로 감싼다(이 프로젝트의
-  `_json` 역할과 동일한 helper다).
+- 반환값은 `json_payload(payload)`로 감싼다(이 프로젝트의 `_json` 역할과 동일한 helper다 —
+  `student_parts/claude.md`의 "tool 반환값이 깨지지 않도록 하는 방어" 참고).
 - `top_k`/`limit` 값은 tool 본문에서 `safe_limit(limit, default=..., maximum=...)`로 보정한다.
   각 입력 스키마(`SearchPersonalReferencesInput.top_k`, `SearchSavedRequestsInput.top_k`)가 이미
   Pydantic `Field(ge=..., le=...)`로 1차 검증을 하지만, `safe_limit`은 그 값을 다시 한 번 안전한

@@ -190,6 +190,10 @@ def week01_prompt_parts() -> list[str]:
 오늘 날짜는 {current_app_date_iso()}이다. 사용자가 "내일", "다음 주 화요일"처럼 상대적인
 날짜로 말하면 이 날짜를 기준으로 계산해서 'YYYY-MM-DD' 형식으로 tool 인자를 채운다.
 날짜나 시간이 불명확하면 임의로 추측해서 채우지 말고 먼저 사용자에게 되묻는다.""",
+        """tool 호출 결과 JSON의 ok/tool_name은 호출이 끝났다는 사실과 어떤 tool의 결과인지 알려주는
+메타데이터일 뿐이다. 답변의 근거로 삼을 실제 내용은 그 두 필드 다음에 오는 값(rows/hits/schedules/
+created_schedule 등 tool마다 다른 이름의 필드)에서 찾는다. ok/tool_name 자체를 답변 내용으로
+쓰거나 근거로 인용하지 않는다.""",
     ]
 
 
