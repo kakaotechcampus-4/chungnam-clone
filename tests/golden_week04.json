@@ -1,0 +1,202 @@
+{
+  "_comment": "Week 4 골든 데이터셋. unit(API 불필요)·embedding(OpenAI embedding 필요)·agent(LLM 필요) 세 계층.",
+
+  "unit": [
+    {
+      "id": "search_saved_requests_hit",
+      "tier": "main",
+      "desc": "저장된 일정을 제목 키워드로 검색하면 rows에 해당 항목이 포함된다",
+      "tool": "search_saved_requests",
+      "pre_save": {
+        "kind": "personal_schedule",
+        "title": "RAG 검색 테스트 일정",
+        "date": "2026-07-30",
+        "original_text": "RAG test"
+      },
+      "input": { "query": "RAG 검색 테스트" },
+      "expect": {
+        "has_field": "rows",
+        "rows_min_count": 1,
+        "rows_contains_title": "RAG 검색 테스트 일정"
+      }
+    },
+    {
+      "id": "search_saved_requests_empty",
+      "tier": "main",
+      "desc": "없는 키워드로 검색하면 rows=[] 이다",
+      "tool": "search_saved_requests",
+      "input": { "query": "절대로없을검색어xyzabc999" },
+      "expect": {
+        "has_field": "rows",
+        "rows_empty": true
+      }
+    },
+    {
+      "id": "search_saved_requests_top_k",
+      "tier": "extra",
+      "desc": "top_k=1 이면 rows 개수가 최대 1개이다",
+      "tool": "search_saved_requests",
+      "pre_save": {
+        "kind": "personal_schedule",
+        "title": "top_k 테스트 일정",
+        "date": "2026-08-01",
+        "original_text": "top_k test"
+      },
+      "input": { "query": "top_k 테스트", "top_k": 1 },
+      "expect": {
+        "has_field": "rows",
+        "rows_max_count": 1
+      }
+    },
+    {
+      "id": "search_conversation_messages_structure",
+      "tier": "main",
+      "desc": "search_conversation_messages 결과에 hits/rows/context/rag_backend/sync 키가 모두 있다 (빈 DB)",
+      "tool": "search_conversation_messages",
+      "input": { "query": "회의 점심" },
+      "expect": {
+        "has_keys": ["hits", "rows", "context", "rag_backend", "sync"]
+      }
+    },
+    {
+      "id": "search_conversation_messages_hits_list",
+      "tier": "main",
+      "desc": "빈 DB에서 검색하면 hits와 rows가 list 타입이다",
+      "tool": "search_conversation_messages",
+      "input": { "query": "아무거나" },
+      "expect": {
+        "hits_is_list": true,
+        "rows_is_list": true
+      }
+    },
+    {
+      "id": "search_conversation_messages_exclude_current",
+      "tier": "extra",
+      "desc": "conversation_id를 명시하지 않아도 현재 세션이 자동으로 제외된다 (exclude_conversation_id 버그 검증)",
+      "tool": "search_conversation_messages",
+      "input": { "query": "테스트" },
+      "expect": {
+        "has_keys": ["hits", "sync"]
+      }
+    }
+  ],
+
+  "embedding": [
+    {
+      "id": "conversation_rag_search_hit",
+      "tier": "main",
+      "desc": "대화를 SQLite에 추가하고 sync 후 검색하면 hits에 해당 대화 내용이 포함된다",
+      "tool": "search_conversation_messages",
+      "pre_conversation": {
+        "title": "점심 회의 선호",
+        "messages": [
+          {"role": "user", "content": "점심에는 회의 잡지 말아줘"},
+          {"role": "assistant", "content": "알겠습니다. 점심 시간에는 회의를 잡지 않겠습니다."}
+        ]
+      },
+      "input": {"query": "점심 회의", "top_k": 3},
+      "expect": {
+        "has_field": "hits",
+        "hits_min_count": 1
+      }
+    },
+    {
+      "id": "conversation_rag_exclude_current",
+      "tier": "main",
+      "desc": "현재 세션 ID가 설정된 대화는 conversation_id 미명시 시 검색 결과에서 자동으로 제외된다",
+      "tool": "search_conversation_messages",
+      "pre_conversation": {
+        "title": "제외 테스트 대화",
+        "messages": [
+          {"role": "user", "content": "점심에 회의 잡지 말아줘"},
+          {"role": "assistant", "content": "알겠습니다. 점심은 비워두겠습니다."}
+        ]
+      },
+      "set_current_session_to_pre_conversation": true,
+      "input": {"query": "점심 회의", "top_k": 5},
+      "expect": {
+        "has_field": "hits",
+        "hits_exclude_pre_conversation_id": true
+      }
+    },
+    {
+      "id": "add_reference_ok",
+      "tier": "main",
+      "desc": "개인 참고자료를 추가하면 reference_backend와 reference.reference_id 필드가 있다",
+      "tool": "add_personal_reference",
+      "input": {
+        "title": "회의 선호 시간",
+        "content": "오전 10-12시에 중요 회의를 잡는 것을 선호한다",
+        "tags": ["meeting", "preference"]
+      },
+      "expect": {
+        "has_field": "reference_backend",
+        "reference_has_id": true
+      }
+    },
+    {
+      "id": "search_reference_hits",
+      "tier": "main",
+      "desc": "추가한 참고자료를 검색하면 top-level hits가 반환된다",
+      "tool": "search_personal_references",
+      "pre_add": {
+        "title": "점심 시간 보호",
+        "content": "점심 시간 12-13시는 회의 없이 비워둔다",
+        "tags": ["lunch", "preference"]
+      },
+      "input": { "query": "점심 시간 회의", "top_k": 3 },
+      "expect": {
+        "has_field": "hits",
+        "hits_min_count": 1
+      }
+    },
+    {
+      "id": "search_reference_hit_structure",
+      "tier": "main",
+      "desc": "hits 각 항목에 id/content/distance/metadata 키가 있다",
+      "tool": "search_personal_references",
+      "pre_add": {
+        "title": "구조 확인용 참고자료",
+        "content": "저는 오후 3시 이후 외부 미팅을 선호합니다",
+        "tags": ["meeting"]
+      },
+      "input": { "query": "외부 미팅", "top_k": 1 },
+      "expect": {
+        "has_field": "hits",
+        "hits_min_count": 1,
+        "hit_has_keys": ["id", "content", "distance", "metadata"]
+      }
+    }
+  ],
+
+  "agent": [
+    {
+      "id": "agent_add_reference_flow",
+      "tier": "main",
+      "desc": "참고자료 추가 요청 → add_personal_reference 가 호출된다",
+      "input": "내 선호 시간대 기록해줘: 오전 10-12시에 집중도가 높아서 중요 회의를 잡는 것을 선호해",
+      "expect_tool_called": "add_personal_reference"
+    },
+    {
+      "id": "agent_search_reference_flow",
+      "tier": "main",
+      "desc": "개인 선호/참고자료 질문 → search_personal_references 가 호출된다",
+      "input": "내 회의 선호 시간대가 언제야?",
+      "expect_tool_called": "search_personal_references"
+    },
+    {
+      "id": "agent_search_saved_requests_flow",
+      "tier": "main",
+      "desc": "저장된 일정 검색 요청 → search_saved_requests 가 호출된다",
+      "input": "저장된 코칭 관련 일정 찾아줘",
+      "expect_tool_called": "search_saved_requests"
+    },
+    {
+      "id": "agent_search_conversation_flow",
+      "tier": "extra",
+      "desc": "과거 대화 검색 요청 → search_conversation_messages 가 호출된다",
+      "input": "지난번에 내가 회의 관련해서 뭐라고 했는지 찾아줘",
+      "expect_tool_called": "search_conversation_messages"
+    }
+  ]
+}
