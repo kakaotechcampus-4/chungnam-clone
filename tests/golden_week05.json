@@ -1,0 +1,205 @@
+{
+  "_comment": "Week 5 골든 데이터셋. unit(MCP subprocess, OpenAI 불필요)·agent(LLM 필요) 두 계층.",
+
+  "unit": [
+    {
+      "id": "search_previous_conversations_hit",
+      "tier": "main",
+      "desc": "외부 대화를 키워드로 검색하면 rows에 결과가 포함된다",
+      "tool": "search_previous_conversations",
+      "input": { "query": "일정" },
+      "expect": {
+        "ok": true,
+        "has_field": "rows",
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "search_previous_conversations_member_filter",
+      "tier": "main",
+      "desc": "member_names 필터를 주면 해당 멤버의 대화만 반환된다",
+      "tool": "search_previous_conversations",
+      "input": { "query": "일정", "member_names": ["철수"] },
+      "expect": {
+        "ok": true,
+        "has_field": "rows",
+        "rows_min_count": 1,
+        "rows_member_name_all": "철수"
+      }
+    },
+    {
+      "id": "search_previous_conversations_empty",
+      "tier": "main",
+      "desc": "없는 멤버로 검색하면 rows=[] 이다",
+      "tool": "search_previous_conversations",
+      "input": { "query": "일정", "member_names": ["존재하지않는사람xyz"] },
+      "expect": {
+        "ok": true,
+        "has_field": "rows",
+        "rows_empty": true
+      }
+    },
+    {
+      "id": "load_conversation_messages_hit",
+      "tier": "main",
+      "desc": "알려진 conversation_id로 메시지를 로드하면 rows에 메시지가 포함된다",
+      "tool": "load_conversation_messages",
+      "input": { "conversation_id": "ext_cs" },
+      "expect": {
+        "ok": true,
+        "has_field": "rows",
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "load_conversation_messages_structure",
+      "tier": "main",
+      "desc": "로드된 메시지 rows 각 항목에 role/sender/content 키가 있다",
+      "tool": "load_conversation_messages",
+      "input": { "conversation_id": "ext_cs" },
+      "expect": {
+        "has_field": "rows",
+        "rows_min_count": 1,
+        "rows_first_has_keys": ["role", "sender", "content"]
+      }
+    },
+    {
+      "id": "extract_schedules_hit",
+      "tier": "main",
+      "desc": "멤버 이름과 날짜 범위로 일정 추출하면 rows와 schedule_summary가 반환된다",
+      "tool": "extract_schedules_from_history",
+      "input": { "member_names": ["철수"], "date_from": "2026-07-01", "date_to": "2026-07-31" },
+      "expect": {
+        "ok": true,
+        "has_keys": ["rows", "schedule_summary"],
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "extract_schedules_empty_member",
+      "tier": "main",
+      "desc": "없는 멤버로 일정 추출하면 rows=[] 이다",
+      "tool": "extract_schedules_from_history",
+      "input": { "member_names": ["없는사람xyz"], "date_from": "2026-07-01", "date_to": "2026-07-31" },
+      "expect": {
+        "has_field": "rows",
+        "rows_empty": true
+      }
+    },
+    {
+      "id": "list_shared_schedules_structure",
+      "tier": "main",
+      "desc": "필터 없이 list_shared_schedules 호출하면 rows와 schedule_summary가 반환된다",
+      "tool": "list_shared_schedules",
+      "input": {},
+      "expect": {
+        "ok": true,
+        "has_keys": ["rows", "schedule_summary"],
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "list_shared_schedules_member_filter",
+      "tier": "main",
+      "desc": "member_names 필터로 특정 멤버 공유 일정만 조회된다",
+      "tool": "list_shared_schedules",
+      "input": { "member_names": ["철수"], "date_from": "2026-07-01", "date_to": "2026-07-31" },
+      "expect": {
+        "ok": true,
+        "has_field": "rows",
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "collect_member_schedules_structure",
+      "tier": "main",
+      "desc": "collect_member_schedules 결과에 rows와 schedule_summary 키가 있다",
+      "tool": "collect_member_schedules",
+      "input": { "member_names": ["철수"], "date_from": "2026-07-01", "date_to": "2026-07-31" },
+      "expect": {
+        "has_keys": ["rows", "schedule_summary"],
+        "rows_min_count": 1
+      }
+    },
+    {
+      "id": "collect_member_schedules_row_structure",
+      "tier": "main",
+      "desc": "collect_member_schedules rows 각 항목에 member_name/title/date/start_time/end_time 키가 있다",
+      "tool": "collect_member_schedules",
+      "input": { "member_names": ["철수"], "date_from": "2026-07-01", "date_to": "2026-07-31" },
+      "expect": {
+        "has_field": "rows",
+        "rows_min_count": 1,
+        "rows_first_has_keys": ["member_name", "title", "date", "start_time", "end_time"]
+      }
+    },
+    {
+      "id": "create_shared_schedule_ok",
+      "tier": "extra",
+      "desc": "create_shared_schedule로 공유 일정을 등록하면 ok=true와 shared_schedule이 반환된다",
+      "tool": "create_shared_schedule",
+      "input": {
+        "member_name": "week05_test_user",
+        "title": "Week05 테스트 일정",
+        "date": "2026-08-01",
+        "start_time": "10:00",
+        "end_time": "11:00",
+        "source_conversation_id": "week05_test_src_001"
+      },
+      "expect": {
+        "ok": true,
+        "has_field": "shared_schedule"
+      }
+    },
+    {
+      "id": "delete_shared_schedule_ok",
+      "tier": "extra",
+      "desc": "delete_shared_schedule로 source_conversation_id 기준 삭제하면 ok=true와 deleted 리스트가 반환된다",
+      "tool": "delete_shared_schedule",
+      "pre_create": {
+        "member_name": "week05_delete_test_user",
+        "title": "삭제 테스트 일정",
+        "date": "2026-08-02",
+        "start_time": "14:00",
+        "source_conversation_id": "week05_test_src_002"
+      },
+      "input": { "source_conversation_id": "week05_test_src_002" },
+      "expect": {
+        "ok": true,
+        "has_keys": ["deleted"],
+        "deleted_min_count": 1
+      }
+    }
+  ],
+
+  "agent": [
+    {
+      "id": "agent_search_previous_conversations",
+      "tier": "main",
+      "desc": "팀원 과거 대화 검색 요청 → search_previous_conversations 가 호출된다",
+      "input": "철수의 7월 일정 관련 대화를 찾아줘",
+      "expect_tool_called": "search_previous_conversations"
+    },
+    {
+      "id": "agent_collect_member_schedules",
+      "tier": "main",
+      "desc": "여러 사람 일정 수집 요청 → collect_member_schedules 가 호출된다",
+      "input": "철수, 민준이랑 7월 8일부터 15일 사이에 회의 잡으려면 서로 일정을 모아줘",
+      "expect_tool_called": "collect_member_schedules"
+    },
+    {
+      "id": "agent_list_shared_schedules",
+      "tier": "main",
+      "desc": "공유 일정 저장소 조회 요청 → list_shared_schedules 가 호출된다",
+      "input": "공유 일정 저장소에 등록된 일정 목록 보여줘",
+      "expect_tool_called": "list_shared_schedules"
+    },
+    {
+      "id": "agent_extract_schedules_from_history",
+      "tier": "extra",
+      "desc": "외부 멤버 바쁜 시간 추출 요청 → extract_schedules_from_history 가 호출된다",
+      "input": "영희의 7월 10일부터 17일까지 일정을 이전 대화 기록에서 추출해줘",
+      "expect_tool_called": "extract_schedules_from_history"
+    }
+  ]
+}
