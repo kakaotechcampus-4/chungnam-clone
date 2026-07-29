@@ -374,8 +374,15 @@ def delete_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
 
-    # TODO: call_mcp_tool_sync("delete_shared_schedule", args)로 공유 일정을 삭제하세요.
-    ...
+    # 두 조건은 AND가 아니라 OR로 걸린다. 즉 하나만 줘도 삭제되고, 둘을 함께 주면 어느 한쪽이라도
+    # 맞는 row가 모두 지워진다. 그룹 일정처럼 하나의 요청이 참석자별 여러 row로 저장된 경우
+    # source_conversation_id 하나로 관련 row를 한 번에 정리할 수 있게 한 설계다.
+    # 둘 다 비어 있으면 저장소가 아무것도 지우지 않고 빈 결과를 돌려주므로, 여기서 미리 막지 않는다.
+    args = {"schedule_id": schedule_id, "source_conversation_id": source_conversation_id}
+
+    # deleted_count가 0이어도 실패가 아니다. "지울 대상이 없었다"는 사실을 그대로 전달해야
+    # LLM이 이미 취소된 일정을 다시 취소했다고 잘못 답하지 않는다.
+    return call_mcp_tool_sync("delete_shared_schedule", args)
 
 
 @tool(args_schema=ListSharedSchedulesInput)
