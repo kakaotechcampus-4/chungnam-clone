@@ -49,6 +49,7 @@ from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     SearchPreviousConversationsInput,
     _collect_member_schedules,
     _personal_schedules_for_current_scope,
+    collect_member_schedules,
     create_shared_schedule,
     delete_shared_schedule,
     extract_schedules_from_history,
@@ -434,13 +435,15 @@ def insert_schedule(store: AppSQLiteStore, schedule_id: str, title: str, date: s
         )
 
 
-def pending_schedule(schedule_id: str, title: str, session_id: str | None = CONV_A) -> dict[str, Any]:
+def pending_schedule(
+    schedule_id: str, title: str, session_id: str | None = CONV_A, date: str = "2026-07-20"
+) -> dict[str, Any]:
     """Week 1이 대화 중에 메모리에만 만들어 두는 임시 일정 row 모양."""
 
     row: dict[str, Any] = {
         "id": schedule_id,
         "title": title,
-        "date": "2026-07-20",
+        "date": date,
         "start_time": "14:00",
         "end_time": "15:00",
         "attendees": [],
@@ -659,3 +662,47 @@ def test_collect_empty_result_uses_helper_wording():
     result = collect([], [])
     assert result["rows"] == []
     assert result["schedule_summary"] == external_schedule_summary([])
+
+
+# ── collect_member_schedules tool 배선 (두 helper를 실제로 연결했는지) ──
+def test_collect_tool_returns_json_with_rows_and_summary(tmp_app_db, pending_sandbox):
+    # 반환이 JSON 문자열이고 rows/schedule_summary 두 키를 가지며 한글이 그대로 실려오는지
+    pending_sandbox.clear()
+    raw = collect_member_schedules.invoke(
+        {"member_names": ["철수"], "date_from": JULY_FROM, "date_to": JULY_TO}
+    )
+    assert "철수" in raw, "ensure_ascii=False로 한글이 그대로 나와야 한다"
+    payload = json.loads(raw)
+    assert set(payload) == {"rows", "schedule_summary"}
+    assert all(MERGED_ROW_KEYS <= set(row) for row in payload["rows"])
+
+
+def test_collect_tool_merges_my_saved_schedule_with_external(tmp_app_db, pending_sandbox):
+    # 배선 검증: 앱 DB의 내 일정과 외부 멤버 일정이 함께 나와야 한다
+    pending_sandbox.clear()
+    insert_schedule(tmp_app_db, "w5test_tool_saved", "내 저장 일정", date="2026-07-08")
+    payload = call(collect_member_schedules, member_names=["철수"], date_from=JULY_FROM, date_to=JULY_TO)
+    assert {row["member_name"] for row in payload["rows"]} == {"나", "철수"}
+    assert any(row["title"] == "내 저장 일정" for row in payload["rows"])
+
+
+def test_collect_tool_without_my_schedules_returns_external_only(tmp_app_db, pending_sandbox):
+    # (대조) 앱 DB가 비면 외부 일정만 나온다. 이 대조가 없으면 위 테스트의 "나"가 어디서 왔는지
+    # 확인되지 않아, 내 일정을 읽지 않는 배선 누락도 통과할 수 있다
+    pending_sandbox.clear()
+    payload = call(collect_member_schedules, member_names=["철수"], date_from=JULY_FROM, date_to=JULY_TO)
+    assert {row["member_name"] for row in payload["rows"]} == {"철수"}
+
+
+def test_collect_tool_includes_pending_of_current_conversation(tmp_app_db, pending_sandbox):
+    # 아직 저장하지 않은 이번 대화의 임시 일정도 tool 결과에 들어와야 한다.
+    # 이걸 빼면 "방금 3시에 스터디 있다고 했는데" 그 시간을 비어 있다고 답한다
+    pending_sandbox.clear()
+    pending_sandbox.append(
+        pending_schedule("w5test_tool_pending", "대화 중 만든 회의", date="2026-07-09")
+    )
+    with conversation_session_scope(CONV_A):
+        payload = call(
+            collect_member_schedules, member_names=["철수"], date_from=JULY_FROM, date_to=JULY_TO
+        )
+    assert any(row["title"] == "대화 중 만든 회의" for row in payload["rows"])
