@@ -33,12 +33,14 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import student_parts.week05_load_kanas_past_conversations as week05  # noqa: E402
 from fixed.app_store import AppSQLiteStore  # noqa: E402
+from fixed.config import CONFIG as APP_CONFIG  # noqa: E402
 from fixed.external_people_store import (  # noqa: E402
     ExternalPeopleSQLiteStore,
     external_schedule_summary,
 )
 from fixed.session_scope import conversation_session_scope  # noqa: E402
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES  # noqa: E402
+from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools  # noqa: E402
 from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     CollectMemberSchedulesInput,
     CreateSharedScheduleInput,
@@ -55,8 +57,12 @@ from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     extract_schedules_from_history,
     list_shared_schedules,
     load_conversation_messages,
+    build_week05_agent,
     load_langchain_mcp_tools_sync,
     search_previous_conversations,
+    week05_prompt_parts,
+    week05_system_prompt,
+    week05_tools,
 )
 
 # 외부 실습 데이터(서버가 뜰 때마다 seed된다)
@@ -706,3 +712,39 @@ def test_collect_tool_includes_pending_of_current_conversation(tmp_app_db, pendi
             collect_member_schedules, member_names=["철수"], date_from=JULY_FROM, date_to=JULY_TO
         )
     assert any(row["title"] == "대화 중 만든 회의" for row in payload["rows"])
+
+
+# ── tool 목록·프롬프트 배선 ──
+def test_week05_tools_extend_week04_without_duplicates():
+    # 4주차 tool을 그대로 유지한 채 5주차 7개가 더해지고, 이름이 겹치지 않는지
+    names = [item.name for item in week05_tools()]
+    assert {item.name for item in week04_tools()} <= set(names)
+    assert MCP_TOOL_NAMES | {"collect_member_schedules"} <= set(names)
+    assert len(names) == len(set(names)), "tool 이름이 겹치면 LLM이 어느 것을 부를지 알 수 없다"
+
+
+def test_week05_prompt_keeps_previous_parts_and_appends_one():
+    # 앞 주차 조각을 고치지 않고 5주차 조각 하나만 덧붙이는지
+    previous = week04_prompt_parts()
+    parts = week05_prompt_parts()
+    assert parts[: len(previous)] == previous
+    assert len(parts) == len(previous) + 1
+    assert all(isinstance(part, str) and part.strip() for part in parts)
+
+
+def test_week05_system_prompt_names_confusable_tools():
+    # 이름이 비슷한 두 검색 tool을 프롬프트가 함께 언급해 구분을 알려주는지
+    prompt = week05_system_prompt()
+    for name in (
+        "search_previous_conversations",
+        "search_conversation_messages",
+        "collect_member_schedules",
+        "list_shared_schedules",
+    ):
+        assert name in prompt, f"프롬프트에 {name} 안내가 없다"
+
+
+@pytest.mark.skipif(not APP_CONFIG.has_openai_key, reason="PROXY_TOKEN이 없으면 agent를 만들 수 없다")
+def test_build_week05_agent_accepts_all_tools_and_caches():
+    # 21개 tool로 agent가 실제로 만들어지는지, 그리고 같은 인스턴스를 재사용하는지
+    assert build_week05_agent() is build_week05_agent()
