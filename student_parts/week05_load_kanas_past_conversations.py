@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -307,8 +308,51 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    # TODO: 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
-    ...
+    # 정규화는 wrapper가 아니라 이 함수에서 한다. 앞의 wrapper tool들은 LLM이 준 인자를 그대로
+    # 전달하기만 하지만, 이 함수는 외부에 보낼 인자를 스스로 조립하기 때문이다.
+    # normalize_external_schedule_date_bounds는 "2026-07-07T00:00:00" 같은 값을 날짜만 남긴다.
+    normalized_members = normalize_external_member_names(member_names)
+    window_from, window_to = normalize_external_schedule_date_bounds(member_names, date_from, date_to)
+
+    # MCP tool은 JSON 문자열을 돌려주므로 파싱해서 rows를 꺼낸다. 파싱하지 않으면 아래에서
+    # 문자열이 리스트에 그대로 이어붙어 rows가 망가진다.
+    external_payload = json.loads(
+        call_mcp_tool_sync(
+            "extract_schedules_from_history",
+            {"member_names": normalized_members, "date_from": window_from, "date_to": window_to},
+        )
+    )
+    external_rows = external_payload.get("rows") or []
+
+    # 내 일정을 외부 rows와 같은 키 이름으로 바꿔 담는다. 앱 일정은 title/date/start_time을 쓰지만
+    # member_name이라는 개념이 없어서, 공유 저장소가 내 일정을 부르는 이름과 같은 상수를 붙인다.
+    # 이렇게 맞춰 두면 이 rows를 그대로 쓰는 6주차 코드가 "나"와 외부 멤버를 구분 없이 다룰 수 있다.
+    #
+    # 조회 구간 밖의 내 일정은 제외한다. 외부 멤버 쪽은 서버가 이미 구간으로 걸러 주는데 내 일정만
+    # 전부 들어오면, 7월 일정을 물었는데 8월 일정이 바쁜 시간으로 섞여 답이 틀어진다.
+    # 날짜가 없는 일정도 구간 판단이 불가능해 제외한다. 시간대를 막는 근거가 될 수 없기 때문이다.
+    has_window = bool(window_from and window_to)
+    personal_rows = [
+        {
+            "member_name": PERSONAL_SHARED_MEMBER_NAME,
+            "title": schedule.get("title"),
+            "date": schedule.get("date"),
+            "start_time": schedule.get("start_time"),
+            "end_time": schedule.get("end_time"),
+            "notes": schedule.get("notes"),
+        }
+        for schedule in personal_schedules
+        if not has_window or (schedule.get("date") and window_from <= str(schedule["date"]) <= window_to)
+    ]
+
+    # 두 출처를 합친 뒤 날짜·시간순으로 정렬한다. 서버는 외부 멤버만 정렬해 주므로, 두 출처를 섞은
+    # 순서는 합친 쪽에서 정해야 한다. 정렬하지 않으면 요약이 내 일정과 남의 일정으로 뭉텅이가 된다.
+    rows = [*personal_rows, *external_rows]
+    rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("start_time") or "")))
+
+    # 요약은 여기서 새로 만든다. 서버가 준 schedule_summary는 외부 멤버만의 요약이라, 내 일정이
+    # 합쳐진 목록의 요약으로는 쓸 수 없다. 근거가 되는 rows가 달라지면 요약도 다시 만든다.
+    return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
