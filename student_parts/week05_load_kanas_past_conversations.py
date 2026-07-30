@@ -440,7 +440,22 @@ def week05_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
-        # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
+        (
+            "이번 주부터 '나' 외의 다른 사람(외부 멤버) 일정/대화를 다루는 tool이 추가됐다. "
+            "search_saved_requests와 search_personal_references는 '나'의 개인 저장 기록만 검색하므로, "
+            "다른 사람 이름이 주어로 나오는 일정/대화 질문에는 이 두 tool을 쓰지 않는다."
+        ),
+        (
+            "특정 외부 멤버의 이전 대화를 찾을 때는 search_previous_conversations를 쓰고, "
+            "그 대화의 전체 내용이 필요하면 이어서 load_conversation_messages를 쓴다. "
+            "특정 외부 멤버의 일정/바쁜 시간을 물으면 extract_schedules_from_history를 쓴다. "
+            "예: '철수 7월 7일부터 7월 17일 사이 일정 알려줘' → "
+            "extract_schedules_from_history(member_names=['철수'], date_from='2026-07-07', date_to='2026-07-17')."
+        ),
+        (
+            "공유 일정 저장소 자체를 확인하려면 list_shared_schedules를 쓰고, "
+            "'나'와 다른 멤버들의 일정을 함께 모아 비교해야 하면 collect_member_schedules를 쓴다."
+        ),
     ]
 
 
