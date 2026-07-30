@@ -486,8 +486,18 @@ def list_shared_schedules(
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
-    # TODO: 내 일정과 외부 멤버 busy-time rows를 모아 JSON 문자열로 반환하세요.
-    ...
+    # 내 일정은 여기서 읽어 인자로 넘긴다. _collect_member_schedules가 직접 읽지 않고 받게 해 두면
+    # 병합 규칙만 따로 검증할 수 있고, 6주차가 다른 방식으로 모은 내 일정을 넣어 재사용할 수도 있다.
+    merged = _collect_member_schedules(
+        member_names=member_names,
+        date_from=date_from,
+        date_to=date_to,
+        personal_schedules=_personal_schedules_for_current_scope(),
+    )
+
+    # 앞의 wrapper들과 달리 여기서는 dict를 받았으므로 json_payload로 감싸 문자열로 만든다.
+    # 감싸지 않고 dict를 그대로 돌려주면 tool 반환 타입이 어긋나 LLM이 파이썬 표기를 그대로 읽는다.
+    return json_payload(merged)
 
 
 def week05_tools() -> list[Any]:
