@@ -33,7 +33,10 @@ sys.path.insert(0, str(REPO_ROOT))
 
 import student_parts.week05_load_kanas_past_conversations as week05  # noqa: E402
 from fixed.app_store import AppSQLiteStore  # noqa: E402
-from fixed.external_people_store import ExternalPeopleSQLiteStore  # noqa: E402
+from fixed.external_people_store import (  # noqa: E402
+    ExternalPeopleSQLiteStore,
+    external_schedule_summary,
+)
 from fixed.session_scope import conversation_session_scope  # noqa: E402
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES  # noqa: E402
 from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
@@ -44,6 +47,7 @@ from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     ListSharedSchedulesInput,
     LoadConversationMessagesInput,
     SearchPreviousConversationsInput,
+    _collect_member_schedules,
     _personal_schedules_for_current_scope,
     create_shared_schedule,
     delete_shared_schedule,
@@ -555,3 +559,103 @@ def test_personal_scope_does_not_filter_by_kind(tmp_app_db):
     insert_schedule(tmp_app_db, "w5test_no_kind", "종류 정보 없는 일정")
     titles = {row["title"] for row in _personal_schedules_for_current_scope()}
     assert "종류 정보 없는 일정" in titles
+
+
+# ── _collect_member_schedules (내 일정 + 외부 멤버 일정 통합, 외부 조회는 실제 MCP 호출) ──
+MERGED_ROW_KEYS = {"member_name", "title", "date", "start_time", "end_time", "notes"}
+
+
+def my_schedule(
+    title: str, date: str | None, start_time: str = "09:00", end_time: str = "10:00"
+) -> dict[str, Any]:
+    """_personal_schedules_for_current_scope가 돌려주는 내 일정 row 모양(앱 DB row 기준)."""
+
+    return {
+        "schedule_id": f"w5test_{title}",
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "attendees": [],
+    }
+
+
+def collect(members: list[str], personal: list[dict[str, Any]], **bounds: str) -> dict[str, Any]:
+    """키워드 전용 인자를 매번 쓰지 않도록 감싼 호출."""
+
+    return _collect_member_schedules(
+        member_names=members,
+        date_from=bounds.get("date_from", JULY_FROM),
+        date_to=bounds.get("date_to", JULY_TO),
+        personal_schedules=personal,
+    )
+
+
+def test_collect_unifies_row_keys():
+    # 내 일정과 외부 일정이 모두 같은 6개 키를 갖는지 (notes는 빈 문자열일 수 있어 키 존재로 확인)
+    result = collect(["철수"], [my_schedule("내 회의", "2026-07-08")])
+    assert result["rows"]
+    assert all(MERGED_ROW_KEYS <= set(row) for row in result["rows"])
+
+
+def test_collect_labels_my_rows_and_keeps_external_names():
+    # 내 일정은 "나"로, 외부 일정은 각자 이름으로 남는지
+    result = collect(["철수"], [my_schedule("내 회의", "2026-07-08")])
+    assert {row["member_name"] for row in result["rows"]} == {"나", "철수"}
+
+
+def test_collect_keeps_my_rows_when_no_members_requested():
+    # member_names=[]면 외부는 0건이지만 내 일정은 남아야 한다
+    result = collect([], [my_schedule("내 회의", "2026-07-08")])
+    assert {row["member_name"] for row in result["rows"]} == {"나"}
+
+
+def test_collect_excludes_my_schedule_outside_window():
+    # 조회 구간 밖의 내 일정은 제외한다. 구간 안 일정이 남는 것이 대조다
+    result = collect(
+        [], [my_schedule("구간 안 회의", "2026-07-08"), my_schedule("구간 밖 회의", "2026-08-01")]
+    )
+    titles = {row["title"] for row in result["rows"]}
+    assert "구간 안 회의" in titles
+    assert "구간 밖 회의" not in titles, "구간 밖 일정이 바쁜 시간으로 섞였다"
+
+
+def test_collect_excludes_my_schedule_without_date():
+    # 날짜가 없는 내 일정은 구간 판단이 불가능해 제외한다
+    result = collect([], [my_schedule("날짜 없는 회의", None)])
+    assert result["rows"] == []
+
+
+def test_collect_normalizes_datetime_bounds():
+    # 날짜에 시간이 붙어 와도 정규화된다. 원문 그대로 서버에 넘기면 문자열 비교에서 밀려 0건이 된다
+    result = collect(
+        ["철수"], [], date_from="2026-07-07T00:00:00", date_to="2026-07-07T23:59:59"
+    )
+    assert {row["title"] for row in result["rows"]} == {"API 연동 실습"}
+
+
+def test_collect_sorts_merged_rows_chronologically():
+    # 두 출처를 합친 순서는 합친 쪽이 정한다. 내 일정이 앞에 뭉치지 않고 날짜순 자리에 들어가야 한다
+    result = collect(["철수"], [my_schedule("내 회의", "2026-07-08")])
+    ordered = [(row["date"], row["start_time"]) for row in result["rows"]]
+    assert ordered == sorted(ordered)
+    assert result["rows"][0]["member_name"] == "철수", "가장 이른 7월 7일 일정은 철수 것이다"
+    assert result["rows"][1]["member_name"] == "나", "7월 8일 내 일정이 두 번째 자리여야 한다"
+
+
+def test_collect_summary_is_rebuilt_over_merged_rows():
+    # 요약은 합친 rows로 다시 만든다. 서버가 준 외부 멤버만의 요약과 달라야 한다
+    result = collect(["철수"], [my_schedule("내 회의", "2026-07-08")])
+    external_only = call(
+        extract_schedules_from_history, member_names=["철수"], date_from=JULY_FROM, date_to=JULY_TO
+    )["schedule_summary"]
+    assert "나" in result["schedule_summary"]
+    assert result["schedule_summary"] != external_only, "서버 요약을 그대로 재사용했다"
+    assert result["schedule_summary"] == external_schedule_summary(result["rows"])
+
+
+def test_collect_empty_result_uses_helper_wording():
+    # 아무 근거도 없으면 rows는 빈 목록이고 요약 문구도 헬퍼가 정한 그대로다
+    result = collect([], [])
+    assert result["rows"] == []
+    assert result["schedule_summary"] == external_schedule_summary([])
