@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -308,8 +309,13 @@ def _collect_member_schedules(
 
     # TODO: 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
     normalized_member_names = normalize_external_member_names(member_names)
+    external_member_names = [
+        member_name
+        for member_name in normalized_member_names
+        if member_name != PERSONAL_SHARED_MEMBER_NAME
+    ]
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
-        normalized_member_names,
+        external_member_names,
         date_from,
         date_to,
     )
@@ -325,7 +331,7 @@ def _collect_member_schedules(
 
         personal_rows.append(
             {
-                "member_name": "me",
+                "member_name": "나",
                 "title": schedule.get("title") or "제목 없음",
                 "date": schedule_date,
                 "start_time": schedule.get("start_time") or "시간 미정",
@@ -335,21 +341,49 @@ def _collect_member_schedules(
             }
         )
 
-    external_result = call_mcp_tool_sync(
-        "extract_schedules_from_history",
-        {
-            "member_names": normalized_member_names,
-            "date_from": normalized_date_from,
-            "date_to": normalized_date_to,
-        },
-    )
+    external_rows: list[dict[str, Any]] = []
+    if external_member_names:
+        try:
+            external_result = call_mcp_tool_sync(
+                "extract_schedules_from_history",
+                {
+                    "member_names": external_member_names,
+                    "date_from": normalized_date_from,
+                    "date_to": normalized_date_to,
+                },
+            )
 
-    if isinstance(external_result, str):
-        external_payload = json.loads(external_result)
-    else:
-        external_payload = external_result
+            if isinstance(external_result, str):
+                external_payload = json.loads(external_result)
+            else:
+                external_payload = external_result
 
-    external_rows = external_payload.get("rows", [])
+            if not isinstance(external_payload, dict):
+                raise ValueError("MCP 응답이 JSON object 형태가 아닙니다.")
+
+            external_rows = external_payload.get("rows", [])
+        except (json.JSONDecodeError, ValueError, TypeError) as exc:
+            return {
+                "ok": False,
+                "tool_name": "collect_member_schedules",
+                "member_names": normalized_member_names,
+                "external_member_names": external_member_names,
+                "date_from": normalized_date_from,
+                "date_to": normalized_date_to,
+                "error": f"외부 일정 조회 응답을 해석하지 못했습니다: {exc}",
+                "partial_rows": personal_rows,
+            }
+        except Exception as exc:
+            return {
+                "ok": False,
+                "tool_name": "collect_member_schedules",
+                "member_names": normalized_member_names,
+                "external_member_names": external_member_names,
+                "date_from": normalized_date_from,
+                "date_to": normalized_date_to,
+                "error": f"외부 일정 조회에 실패했습니다: {exc}",
+                "partial_rows": personal_rows,
+            }
 
     rows = [*personal_rows, *external_rows]
     rows.sort(
@@ -491,7 +525,12 @@ def delete_shared_schedule(
     schedule_id: str | None = None,
     source_conversation_id: str | None = None,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
+    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다.
+    
+    삭제 대상은 먼저 list_shared_schedules 결과로 사용자에게 보여준 뒤,
+    사용자가 삭제를 명확히 확인한 schedule_id 또는 source_conversation_id로만 지정합니다.
+    확인 없이 추정한 ID나 사용자가 보지 못한 조회 결과의 ID로는 호출하지 않습니다.
+    """
 
     # TODO: call_mcp_tool_sync("delete_shared_schedule", args)로 공유 일정을 삭제하세요.
     result = call_mcp_tool_sync(
@@ -602,7 +641,9 @@ def week05_prompt_parts() -> list[str]:
             "공유 일정 저장소에 이미 등록된 일정을 확인할 때는 list_shared_schedules를 사용한다. "
             "내 일정과 다른 멤버들의 busy-time을 한 번에 모아야 할 때는 collect_member_schedules를 사용한다. "
             "공유 일정 저장소에 일정을 새로 등록하거나 갱신해야 하면 create_shared_schedule을 사용하고, "
-            "공유 일정 저장소에서 일정을 삭제해야 하면 delete_shared_schedule을 사용한다. "
+            "공유 일정 저장소에서 일정을 삭제해야 하면 먼저 list_shared_schedules로 삭제 후보의 "
+            "schedule_id/source_conversation_id와 제목, 날짜, 시간을 사용자에게 보여주고 명확한 확인을 받은 뒤"
+            "delete_shared_schedule을 사용한다. 확인 없이 공유 일정을 삭제하지 않는다. "
             "도구 결과의 rows와 schedule_summary를 근거로 답하고, 확인하지 않은 외부 멤버 일정은 추측하지 않는다."
             "사용자가 날짜 범위를 명시하지 않고 멤버 일정 조회를 요청하면, 현재 날짜부터 충분히 넓은 기본 범위로 조회한다."
             "예: date_from=current_app_date_iso(), date_to=\"2099-12-31\". 오늘/내일로 나누어 여러 번 호출하지 않는다."
