@@ -8,12 +8,19 @@
 빠뜨려도 철수의 row가 포함된 상위집합이 돌아와 단정문이 통과한다. 그래서 음성 대조를 함께 둔다:
 필터 결과는 무필터보다 엄격히 작아야 하고, 빈 리스트는 0건이어야 한다.
 
+파일 구성은 세 묶음이다.
+1. 입력 스키마 경계 — 강사가 준 제약을 내가 깨지 않았는지 확인하는 회귀 방지용이다. MCP를 쓰지 않는다.
+2. MCP wrapper 계약 — 서버를 실제로 띄워 tool 이름·반환 키·필터 동작을 확인한다.
+3. 병합 로직 — 앱 SQLite와 대화 중 임시 일정을 다루므로 MCP를 쓰지 않고, 대신 앱 DB 경로를
+   임시 파일로 돌린다.
+
 실행: uv run --with pytest pytest tests/test_week05_mcp.py -v
 """
 
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 import json
 import sys
@@ -24,7 +31,11 @@ from pydantic import ValidationError
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
+import student_parts.week05_load_kanas_past_conversations as week05  # noqa: E402
+from fixed.app_store import AppSQLiteStore  # noqa: E402
 from fixed.external_people_store import ExternalPeopleSQLiteStore  # noqa: E402
+from fixed.session_scope import conversation_session_scope  # noqa: E402
+from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES  # noqa: E402
 from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     CollectMemberSchedulesInput,
     CreateSharedScheduleInput,
@@ -33,6 +44,7 @@ from student_parts.week05_load_kanas_past_conversations import (  # noqa: E402
     ListSharedSchedulesInput,
     LoadConversationMessagesInput,
     SearchPreviousConversationsInput,
+    _personal_schedules_for_current_scope,
     create_shared_schedule,
     delete_shared_schedule,
     extract_schedules_from_history,
@@ -395,3 +407,151 @@ def test_seeded_test_rows_survive_next_mcp_call(seeded_controls):
     call(search_previous_conversations, query="일정")
     after = call(list_shared_schedules, source_conversation_id=CONTROL_SOURCE)["rows"]
     assert len(after) == 2
+
+
+# ── _personal_schedules_for_current_scope (앱 SQLite + 현재 대화 임시 일정, MCP 호출 없음) ──
+CONV_A = "w5test_conv_a"
+CONV_B = "w5test_conv_b"
+
+
+def insert_schedule(store: AppSQLiteStore, schedule_id: str, title: str, date: str = "2026-07-20") -> None:
+    """앱 DB의 schedules에 row를 직접 넣는다.
+
+    save_structured_request를 쓰면 공유 저장소 자동 동기화까지 함께 돌아 MCP 서브프로세스가 뜨므로,
+    이 함수의 관심사(병합·중복 제거·범위 필터)만 보려고 raw SQL로 심는다.
+    """
+
+    with store.connect() as conn:
+        conn.execute(
+            "INSERT INTO schedules (schedule_id, request_id, owner, title, date, start_time, end_time,"
+            " attendees_json, source, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (schedule_id, f"req_{schedule_id}", "me", title, date, "10:00", "11:00", "[]", "test",
+             "2026-07-29T09:00:00"),
+        )
+
+
+def pending_schedule(schedule_id: str, title: str, session_id: str | None = CONV_A) -> dict[str, Any]:
+    """Week 1이 대화 중에 메모리에만 만들어 두는 임시 일정 row 모양."""
+
+    row: dict[str, Any] = {
+        "id": schedule_id,
+        "title": title,
+        "date": "2026-07-20",
+        "start_time": "14:00",
+        "end_time": "15:00",
+        "attendees": [],
+        "created_at": "2026-07-29T09:00:00",
+    }
+    if session_id is not None:
+        row["session_id"] = session_id
+    return row
+
+
+@pytest.fixture()
+def tmp_app_db(tmp_path, monkeypatch):
+    """앱 SQLite를 임시 파일로 돌린다.
+
+    CONFIG는 frozen dataclass라 app_db_path만 바꿀 수 없어서, 모듈이 들고 있는 CONFIG 자체를
+    갈아끼운다. 구현이 호출 시점에 AppSQLiteStore(CONFIG.app_db_path)를 만들기 때문에 이렇게 통한다.
+    """
+
+    path = tmp_path / "app.sqlite3"
+    store = AppSQLiteStore(path)
+    monkeypatch.setattr(week05, "CONFIG", SimpleNamespace(app_db_path=path))
+    return store
+
+
+@pytest.fixture()
+def pending_sandbox():
+    """PERSONAL_SCHEDULES는 Week 1의 모듈 전역 리스트라 테스트가 끝나면 원래 내용으로 되돌린다.
+
+    pop()이 아니라 저장해 둔 사본으로 덮어쓴다. 테스트 중 다른 경로가 append했을 수도 있어
+    개수를 가정할 수 없기 때문이다. 이름을 다시 묶지 않고 슬라이스로 넣어야 Week 1이 들고 있는
+    같은 리스트 객체가 유지된다.
+    """
+
+    saved = list(PERSONAL_SCHEDULES)
+    yield PERSONAL_SCHEDULES
+    PERSONAL_SCHEDULES[:] = saved
+
+
+def test_personal_scope_returns_saved_rows(tmp_app_db):
+    # 앱 DB에 저장된 일정을 그대로 가져오는지
+    insert_schedule(tmp_app_db, "w5test_sch_1", "치과 예약")
+    insert_schedule(tmp_app_db, "w5test_sch_2", "스터디")
+    titles = {row["title"] for row in _personal_schedules_for_current_scope()}
+    assert titles == {"치과 예약", "스터디"}
+
+
+def test_personal_scope_empty_when_both_sources_empty(tmp_app_db, pending_sandbox):
+    # 두 출처가 모두 비어 있으면 빈 목록
+    pending_sandbox.clear()
+    assert _personal_schedules_for_current_scope() == []
+
+
+def test_personal_scope_includes_pending_of_current_conversation(tmp_app_db, pending_sandbox):
+    # 아직 저장되지 않은 이번 대화의 임시 일정이 포함되는지
+    pending_sandbox.clear()
+    pending_sandbox.append(pending_schedule("w5test_pending_1", "방금 만든 회의"))
+    with conversation_session_scope(CONV_A):
+        titles = {row["title"] for row in _personal_schedules_for_current_scope()}
+    assert "방금 만든 회의" in titles
+
+
+def test_personal_scope_excludes_pending_of_other_conversation(tmp_app_db, pending_sandbox):
+    # (대조) 다른 대화의 임시 일정은 빠지고, 같은 대화의 것만 남아야 한다
+    pending_sandbox.clear()
+    pending_sandbox.append(pending_schedule("w5test_pending_a", "A 대화 회의", session_id=CONV_A))
+    pending_sandbox.append(pending_schedule("w5test_pending_b", "B 대화 회의", session_id=CONV_B))
+    with conversation_session_scope(CONV_A):
+        titles = {row["title"] for row in _personal_schedules_for_current_scope()}
+    assert "A 대화 회의" in titles
+    assert "B 대화 회의" not in titles, "다른 대화의 임시 일정이 새어 들어왔다"
+
+
+def test_personal_scope_pending_without_session_id_belongs_to_default(tmp_app_db, pending_sandbox):
+    # session_id가 없는 임시 일정은 기본 범위로 취급된다 — 특정 대화 안에서는 빠져야 한다
+    pending_sandbox.clear()
+    pending_sandbox.append(pending_schedule("w5test_pending_none", "범위 없는 회의", session_id=None))
+    outside = {row["title"] for row in _personal_schedules_for_current_scope()}
+    with conversation_session_scope(CONV_A):
+        inside = {row["title"] for row in _personal_schedules_for_current_scope()}
+    assert "범위 없는 회의" in outside
+    assert "범위 없는 회의" not in inside
+
+
+def test_personal_scope_dedupes_pending_already_saved(tmp_app_db, pending_sandbox):
+    # 임시 일정의 id가 저장된 일정의 schedule_id와 같으면 한 번만 세어야 한다
+    insert_schedule(tmp_app_db, "w5test_same_id", "중복 확인 회의")
+    pending_sandbox.clear()
+    pending_sandbox.append(pending_schedule("w5test_same_id", "중복 확인 회의"))
+    with conversation_session_scope(CONV_A):
+        rows = _personal_schedules_for_current_scope()
+    assert len(rows) == 1, "이미 저장된 임시 일정이 두 번 세어졌다"
+
+
+def test_personal_scope_keeps_pending_with_different_id(tmp_app_db, pending_sandbox):
+    # (대조) id가 다르면 서로 다른 일정이므로 2건이어야 한다. 이 대조가 없으면 위 테스트는
+    # 중복 제거가 아니라 "임시 일정이 아예 빠지는 버그"로도 통과한다
+    insert_schedule(tmp_app_db, "w5test_saved_id", "중복 확인 회의")
+    pending_sandbox.clear()
+    pending_sandbox.append(pending_schedule("w5test_other_id", "중복 확인 회의"))
+    with conversation_session_scope(CONV_A):
+        rows = _personal_schedules_for_current_scope()
+    assert len(rows) == 2
+
+
+@pytest.mark.parametrize("count", [15, 20])
+def test_personal_scope_reads_beyond_default_limit(tmp_app_db, count):
+    # list_schedules 기본 limit이 12라, 명시하지 않으면 13번째부터 조용히 잘린다
+    for index in range(count):
+        insert_schedule(tmp_app_db, f"w5test_many_{index}", f"일정 {index}")
+    assert len(_personal_schedules_for_current_scope()) == count
+
+
+def test_personal_scope_does_not_filter_by_kind(tmp_app_db):
+    # kind 필터를 넘겼다면 structured_requests에 짝이 없는 row는 제외된다. 그룹 회의도 내가 바쁜
+    # 시간이므로 종류로 걸러내지 않는다는 것을 이 row가 남는지로 확인한다
+    insert_schedule(tmp_app_db, "w5test_no_kind", "종류 정보 없는 일정")
+    titles = {row["title"] for row in _personal_schedules_for_current_scope()}
+    assert "종류 정보 없는 일정" in titles
