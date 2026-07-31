@@ -26,6 +26,7 @@ from fixed.runtime_clock import current_app_date_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
+from student_parts.week03_build_nanas_logbook import tool_result
 from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
 
 
@@ -339,12 +340,17 @@ def _collect_member_schedules(
         rows.extend(payload.get("rows") or [])
 
     rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("start_time") or "")))
-    return {
-        "rows": rows,
+    return tool_result(
+        "collect_member_schedules",
+        ok=True,
+        # 정규화된 최종 멤버 범위. "나"는 항상 포함되고, external_member_names는 위에서
+        # 이미 "나"를 제외하고 정규화까지 끝낸 리스트라 그대로 재사용한다.
+        members=[PERSONAL_SHARED_MEMBER_NAME, *external_member_names],
+        rows=rows,
         # MCP payload의 schedule_summary는 외부 멤버 rows만 설명하므로, "나"의 바쁜 시간이
         # 빠지지 않도록 병합된 rows로 다시 생성한다.
-        "schedule_summary": external_schedule_summary(rows),
-    }
+        schedule_summary=external_schedule_summary(rows),
+    )
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
@@ -482,7 +488,16 @@ WEEK05_EXTERNAL_PROMPT = (
     "다른 사람의 대화·일정은 아래 Week 5 도구로 처리한다. "
     "(1) 다른 사람이 예전에 나눈 대화를 찾을 때는 search_previous_conversations를 먼저 쓰고, "
     "특정 대화의 전체 내용이 필요하면 그 결과의 conversation_id로 load_conversation_messages를 "
-    "이어서 호출한다. "
+    "이어서 호출한다. \"~가 말한\", \"~와 나눈\", \"~에 대해 얘기한\"처럼 사람 이름이 문장 "
+    "구조에 자연스럽게 녹아 있어도, query에는 그 이름을 포함하지 말고 주제어만 남기며 이름은 "
+    "member_names로 분리한다 — 예를 들어 \"하린이 파트너 콜을 말한 대화 찾아줘\"는 "
+    "query=\"하린 파트너 콜\"이 아니라 query=\"파트너 콜\", member_names=[\"하린\"]으로 호출한다. "
+    "query는 저장된 문구와 부분 문자열로 정확히 일치해야 찾아지므로, 이름을 섞으면 실제 저장된 "
+    "발화와 어긋나 빈 결과가 나온다. "
+    "rows가 빈 배열로 돌아오면 그 즉시 없다고 답하지 말고, 방금 보낸 query 문자열 안에 사람 "
+    "이름으로 보이는 단어가 있는지 다시 확인한다 — 있다면 그 이름을 member_names로 옮기고 "
+    "query에서는 빼서 한 번 더 search_previous_conversations를 호출한다. 이 재시도 후에도 "
+    "rows가 비어야만 없다고 답한다. "
     "(2) 나를 제외한 특정 인물의 이름이 문장에 등장하면(\"철수 일정 있어?\", \"영희 바빠?\", "
     "\"민준이랑 시간 맞아?\"처럼 표현이 짧고 인물이 한 명뿐이어도) collect_member_schedules 또는 "
     "extract_schedules_from_history를 사용한다. personal_list_saved_schedules는 내가 만든 "
