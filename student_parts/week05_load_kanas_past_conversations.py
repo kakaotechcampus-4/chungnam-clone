@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -292,6 +293,11 @@ def _collect_member_schedules(
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
     normalized_members = normalize_external_member_names(member_names)
+
+    external_member_names = [
+        name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME
+    ]
+
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to,
     )
@@ -299,16 +305,20 @@ def _collect_member_schedules(
     external_payload = call_external_tool_payload(
         "extract_schedules_from_history",
         {
-            "member_names": normalized_members,
+            "member_names": external_member_names,
             "date_from": normalized_date_from,
             "date_to": normalized_date_to,
         },
     )
+
     external_rows = external_payload.get("rows", [])
 
     personal_rows = []
     for schedule in personal_schedules:
         structured = _structured_request_from_schedule_row(schedule)
+        schedule_date = structured.date
+        if not schedule_date or not (normalized_date_from <= str(schedule_date) <= normalized_date_to):
+            continue
         personal_rows.append({
             "member_name": "나",
             "title": structured.title,
