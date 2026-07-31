@@ -281,6 +281,24 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _is_within_date_range(date_value: Any, date_from: str, date_to: str) -> bool:
+    """요청한 기간 안의 일정인지 확인합니다(YYYY-MM-DD 문자열 비교, 양끝 포함).
+
+    외부 멤버 rows는 store가 SQL(date >= ? AND date <= ?)로 이미 걸러 주므로,
+    내 일정도 같은 기준으로 맞춰 요청 기간과 답변이 어긋나지 않게 합니다.
+    날짜가 없는 일정은 기간 안이라고 보장할 수 없어 busy-time 후보에서 제외합니다.
+    """
+
+    date_text = str(date_value or "").strip()
+    if not date_text:
+        return False
+    if date_from and date_text < date_from:
+        return False
+    if date_to and date_text > date_to:
+        return False
+    return True
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -298,6 +316,9 @@ def _collect_member_schedules(
     my_rows: list[dict[str, Any]] = []
     for schedule in personal_schedules:
         structured = _structured_request_from_schedule_row(schedule)
+        # 외부 rows와 같은 기간 기준을 적용한다(요청 기간 밖 내 일정이 섞이지 않게).
+        if not _is_within_date_range(structured.date, normalized_from, normalized_to):
+            continue
         my_rows.append(
             {
                 "member_name": "나",

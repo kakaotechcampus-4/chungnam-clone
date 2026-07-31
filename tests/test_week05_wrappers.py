@@ -133,7 +133,36 @@ class Week05CollectMerge(unittest.TestCase):
         required = {"member_name", "title", "date", "start_time", "end_time", "notes"}
         for row in result["rows"]:
             self.assertTrue(required.issubset(row.keys()), row)
+            # 필드 유무만이 아니라 "요청한 기간 안"인지도 확인한다(멘토 리뷰).
+            self.assertTrue("2026-07-01" <= row["date"] <= "2026-07-31", row)
         self.assertTrue(result["schedule_summary"])
+
+    def test_my_rows_outside_requested_range_are_excluded(self) -> None:
+        """요청 기간(7월) 밖 내 일정과 날짜 없는 일정은 rows에 들어오면 안 된다."""
+
+        my = [
+            {"schedule_id": "in", "title": "7월 일정", "date": "2026-07-10", "start_time": "10:00", "end_time": "11:00"},
+            {"schedule_id": "after", "title": "8월 일정", "date": "2026-08-05", "start_time": "10:00", "end_time": "11:00"},
+            {"schedule_id": "before", "title": "6월 일정", "date": "2026-06-30", "start_time": "10:00", "end_time": "11:00"},
+            {"schedule_id": "nodate", "title": "날짜 미정", "date": None, "start_time": None, "end_time": None},
+        ]
+        result = w5._collect_member_schedules(
+            member_names=[], date_from="2026-07-01", date_to="2026-07-31", personal_schedules=my
+        )
+        titles = [row["title"] for row in result["rows"]]
+        self.assertEqual(titles, ["7월 일정"], titles)
+
+    def test_range_bounds_are_inclusive(self) -> None:
+        """양끝 날짜(date_from/date_to)는 외부 store SQL과 같이 포함된다."""
+
+        my = [
+            {"schedule_id": "start", "title": "시작일", "date": "2026-07-01", "start_time": "09:00", "end_time": "10:00"},
+            {"schedule_id": "end", "title": "종료일", "date": "2026-07-31", "start_time": "09:00", "end_time": "10:00"},
+        ]
+        result = w5._collect_member_schedules(
+            member_names=[], date_from="2026-07-01", date_to="2026-07-31", personal_schedules=my
+        )
+        self.assertEqual({row["title"] for row in result["rows"]}, {"시작일", "종료일"})
 
     def test_no_members_skips_external_call(self) -> None:
         # 정규화 결과가 비면 외부 MCP 호출 없이 내 일정만 담긴다.
