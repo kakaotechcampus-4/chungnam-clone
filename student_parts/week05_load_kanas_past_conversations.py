@@ -303,7 +303,7 @@ def _collect_member_schedules(
     rows: list[dict[str, Any]] = []
     for schedule in personal_schedules:
         structured = _structured_request_from_schedule_row(schedule)
-        if structured.date and not (normalized_date_from <= structured.date <= normalized_date_to):
+        if not structured.date or not (normalized_date_from <= structured.date <= normalized_date_to):
             continue
         rows.append(
             {
@@ -366,7 +366,8 @@ def search_previous_conversations(
 
 @tool(args_schema=LoadConversationMessagesInput)
 def load_conversation_messages(conversation_id: str) -> str:
-    """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
+    """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다. conversation_id를 이미 알고 있으면
+    검색 없이 바로 이 tool을 호출하세요."""
 
     try:
         payload = call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id})
@@ -500,11 +501,25 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
     try:
+        personal_schedules = _personal_schedules_for_current_scope()
+    except Exception as exc:
+        return json_payload(
+            tool_result(
+                "collect_member_schedules",
+                ok=False,
+                rows=[],
+                schedule_summary="",
+                error_type=f"personal_schedule_error:{type(exc).__name__}",
+                error=str(exc),
+            )
+        )
+
+    try:
         collected = _collect_member_schedules(
             member_names=member_names,
             date_from=date_from,
             date_to=date_to,
-            personal_schedules=_personal_schedules_for_current_scope(),
+            personal_schedules=personal_schedules,
         )
     except Exception as exc:
         return json_payload(
@@ -513,7 +528,7 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
                 ok=False,
                 rows=[],
                 schedule_summary="",
-                error_type=type(exc).__name__,
+                error_type=f"external_mcp_error:{type(exc).__name__}",
                 error=str(exc),
             )
         )
