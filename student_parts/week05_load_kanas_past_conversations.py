@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -190,11 +191,17 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
     store = AppSQLiteStore(CONFIG.app_db_path)
-    # 임시 일정 중복 제거를 저장 목록 전체와 대조해야 해서 넉넉한 상한으로 읽는다.
+    # 임시 일정이 이미 저장됐는지는 날짜와 무관하게 저장 id 전체와 대조해야 한다.
+    # 임시 일정의 날짜가 조회 범위 밖이어도 그 id 가 저장 목록에 있으면 중복이므로,
+    # 날짜로 좁혀 읽으면 그 중복을 놓친다. 그래서 날짜 필터 대신 넉넉한 상한으로 전체를 읽는다.
     saved = store.list_schedules(limit=10000)
     saved_ids = {row.get("schedule_id") for row in saved}
 
     scope = current_session_scope()
+    # 임시 일정의 id 와 저장 row 의 schedule_id 를 바로 비교할 수 있는 이유:
+    # week03 personal_create_schedule 이 임시 일정 id 를 source_schedule_id 로 실어 보내고,
+    # AppSQLiteStore.save_structured_request 가 schedule_id = source_schedule_id or new_id(...) 로
+    # 저장해서 임시 id 가 그대로 저장 row 의 PK 가 되기 때문이다.
     temp = [
         schedule
         for schedule in PERSONAL_SCHEDULES
@@ -311,10 +318,14 @@ def _collect_member_schedules(
             }
         )
 
+    # 내 일정은 위에서 personal_schedules 로 이미 넣었다. 외부 조회 대상에서 "나" 를 빼지 않으면
+    # 공유 저장소에 동기화된 내 일정 복사본이 다시 조회돼 같은 일정이 두 번 담긴다.
+    external_member_names = [name for name in member_names if name != PERSONAL_SHARED_MEMBER_NAME]
+
     external = call_external_tool_payload(
         "extract_schedules_from_history",
         {
-            "member_names": normalize_external_member_names(member_names),
+            "member_names": normalize_external_member_names(external_member_names),
             "date_from": date_from,
             "date_to": date_to,
         },
@@ -332,7 +343,13 @@ def _collect_member_schedules(
             }
         )
 
-    return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
+    result = {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
+    if external_rows is None:
+        # 외부 조회 결과를 읽지 못한 것을 "일정 없음" 과 구분되게 흔적으로 남긴다.
+        # 삭제 wrapper 가 실패를 ok=False 로 남기는 것과 같은 방식이다.
+        result["ok"] = False
+        result["error"] = "외부 멤버 일정 조회 결과를 읽지 못했습니다."
+    return result
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
