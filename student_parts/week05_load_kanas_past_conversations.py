@@ -291,7 +291,11 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    normalized_member_names = normalize_external_member_names(member_names)
+    normalized_member_names = [
+        member_name
+        for member_name in normalize_external_member_names(member_names)
+        if member_name != PERSONAL_SHARED_MEMBER_NAME
+    ]
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to
     )
@@ -316,7 +320,6 @@ def _collect_member_schedules(
             "notes": row.get("notes") or "",
         }
         for row in external_payload["rows"]
-        if row["member_name"] != PERSONAL_SHARED_MEMBER_NAME
     ]
 
     personal_requests = [_structured_request_from_schedule_row(row) for row in personal_schedules]
