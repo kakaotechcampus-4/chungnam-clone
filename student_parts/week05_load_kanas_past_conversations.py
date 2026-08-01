@@ -341,7 +341,11 @@ def search_previous_conversations(
     member_names: list[str] | None = None,
     limit: int = 5,
 ) -> str:
-    """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
+    """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다.
+
+    query는 대화 문장에 그대로 들어 있는 문자열과 부분 일치로만 대조합니다. 그래서 명사 하나만 넣어야 하고,
+    여러 단어를 이어 붙이거나 사용자가 덧붙인 말('준비', '일정' 등)을 함께 넣으면 0건이 됩니다.
+    멤버 이름은 query가 아니라 member_names에 넣습니다."""
 
     # 외부 저장소는 member_names의 None과 []를 다르게 읽는다. None은 "필터 없음"이라 전체를 찾고,
     # []는 "대상 멤버 없음"이라 0건이다. 그래서 member_names or [] 같은 기본값을 채우지 않는다.
@@ -434,7 +438,8 @@ def list_shared_schedules(
 
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
-    """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
+    """내 일정과 다른 사람들의 일정을 한 번에 모읍니다. member_names에는 외부 멤버 이름만 넣습니다.
+    내 일정은 항상 자동으로 포함되므로, 나를 위해 따로 호출하거나 빈 목록을 넘기지 않습니다."""
 
     merged = _collect_member_schedules(
         member_names=member_names,
@@ -482,24 +487,51 @@ def week05_prompt_parts() -> list[str]:
             "⑨ 출처를 먼저 구분한다. 내가 사용자와 나눈 지난 대화는 search_conversation_messages로 찾고, "
             "다른 멤버(팀원)의 지난 대화나 일정은 search_previous_conversations와 "
             "extract_schedules_from_history로 찾는다. 두 이름이 비슷하므로 누구의 대화인지 매번 확인한다. "
+            "사용자가 ext_로 시작하는 대화 id를 대면 그것은 외부 멤버의 대화이므로 "
+            "load_conversation_messages로 조회한다. search_conversation_messages는 앱에 저장된 내 대화만 "
+            "찾으므로, 그 결과를 외부 대화의 내용인 것처럼 옮겨 적지 않는다. "
+            "사용자가 특정 대화 id를 지정했는데 검색 결과의 conversation_id가 그 id와 다르면 그 결과는 답이 "
+            "아니다. 다른 대화를 요약해 보여주지 말고 그 id의 대화를 찾지 못했다고 답한다. "
             "⑩ 외부 멤버 정보는 search_previous_conversations로 관련 대화를 찾고, 그 결과의 "
             "conversation_id를 모아 extract_schedules_from_history로 일정을 확인하는 순서를 권장한다. "
-            "대화 원문을 직접 봐야 할 때만 load_conversation_messages를 호출한다. "
+            "사용자가 원문·전문·'그대로'를 요구하면 검색 결과의 content로 대신하지 말고 반드시 "
+            "load_conversation_messages로 그 대화를 불러와 답한다. "
             "conversation_id는 반드시 검색 결과에 있던 값을 쓰고 지어내지 않는다. "
+            "search_previous_conversations의 query에는 저장된 문장에 그대로 들어 있을 짧은 핵심어 하나만 쓴다. "
+            "멤버 이름은 query가 아니라 member_names에 넣는다. query에 이름을 덧붙이면 그 문자열이 통째로 "
+            "대조되어 0건이 된다. 마찬가지로 '준비'처럼 사용자가 덧붙인 말은 빼고 핵심어만 남긴다. "
+            "이 검색은 질의를 부분 문자열로 대조하므로 '철수 7월 9일 일정'처럼 조건을 이어 붙이면 0건이 된다. "
+            "0건이면 없다고 결론짓기 전에 멤버 이름 같은 더 짧은 키워드로 한 번 더 검색하고, "
+            "그래도 0건이면 list_shared_schedules로 같은 멤버·날짜를 조회해 확인한 뒤 결론을 낸다. "
             "⑪ member_names에 빈 목록을 넣으면 '대상 멤버가 없다'는 뜻이어서 결과가 0건이 된다. "
             "멤버를 특정할 수 없으면 빈 목록을 넘기지 말고, search_previous_conversations에서는 "
             "member_names를 생략해 전체에서 찾거나 누구인지 먼저 확인한 뒤 호출한다. "
             "⑫ '우리 언제 만날 수 있어?'처럼 내 일정과 여러 멤버의 일정을 함께 봐야 하는 질문은 "
             "collect_member_schedules 한 번으로 모은다. 결과의 rows에는 나와 외부 멤버가 같은 형태로 "
             "들어 있고 schedule_summary가 함께 오므로, 그 내용을 근거로 답한다. "
+            "이때 member_names에는 외부 멤버 이름만 넣는다. 내 일정은 자동으로 합쳐지므로 "
+            "'나'나 비서 이름을 멤버로 넣지 않는다. 넣어도 외부 저장소에 없어 결과만 비어 돌아온다. "
+            "collect_member_schedules는 질문 하나에 한 번만 호출한다. 여러 멤버를 물어도 이름을 "
+            "member_names 배열에 모두 넣어 한 번에 처리한다. '각각'이나 '따로'라는 말은 답변을 나눠 "
+            "적으라는 뜻이지 tool을 나눠 부르라는 뜻이 아니다. 내 일정은 결과에 이미 들어 있으므로 "
+            "나를 위한 호출을 따로 만들지 않으며, member_names에 빈 목록을 넘기지 않는다. "
             "⑬ 공유 일정 저장소에 실제로 등록된 내용을 확인할 때는 list_shared_schedules를 쓴다. "
             "등록과 갱신은 create_shared_schedule, 취소는 delete_shared_schedule을 쓴다. "
-            "⑭ 지난 대화에서 누군가 한 말은 그 시점의 진술이지 확정된 일정이 아니다. 확정 여부가 중요하면 "
-            "공유 일정 저장소나 저장 기록으로 한 번 더 확인하고, 근거가 어느 출처에서 나왔는지 밝힌다. "
+            "⑭ 지난 대화에서 누군가 한 말은 그 시점의 진술이지 확정된 일정이 아니다. 대화에서 얻은 일정을 "
+            "'확정됐다'고 말하지 않는다. '대화에서 언급된 내용'이라고 밝히고, 확정 여부를 묻는 질문에는 "
+            "list_shared_schedules로 공유 저장소를 확인한 뒤 답한다. 근거가 어느 출처에서 나왔는지 함께 적는다. "
             "⑮ 조회 구간(date_from·date_to)은 사용자가 말한 날짜를 그대로 쓰고, 상대 표현이면 오늘 기준으로 "
             "환산해 어떤 구간을 확인했는지 답변에 적는다. 날짜를 알 수 없으면 추측하지 말고 되묻는다. "
             "⑯ 여러 사람이 모두 가능한 최종 회의 시간을 확정하는 일은 다음 주차 범위다. 이번 주에는 "
-            "누가 언제 바쁜지와 그 근거를 정리해 후보까지만 제시한다."
+            "누가 언제 바쁜지와 그 근거를 정리해 후보까지만 제시한다. "
+            "⑰ 일정·대화·저장 기록을 묻는 질문에는 반드시 해당 tool을 호출해 확인한 뒤 답한다. "
+            "앞선 답변이나 이미 받은 결과를 근거로 새 질문에 답하지 않는다. 날짜나 대상이 조금이라도 "
+            "달라지면 다시 조회한다. 조회 없이 '없습니다'라고 단정하지 않는다. "
+            "⑱ 대상을 지정하지 않은 질문(예: '그날 바쁜 사람 있어?')은 앞 대화에 나온 멤버로 좁히지 않는다. "
+            "member_names를 넘기지 말고 list_shared_schedules로 전체를 조회한 뒤 답한다. "
+            "⑲ create_shared_schedule 결과의 schedule_id는 이후 삭제·수정에 그대로 쓴다. 방금 등록한 일정을 "
+            "지워 달라는 요청에 id를 사용자에게 되묻지 않는다. 등록할 때는 나중에 찾을 수 있도록 "
+            "source_conversation_id도 함께 남긴다."
         ),
     ]
 
