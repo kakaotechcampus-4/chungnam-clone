@@ -292,8 +292,18 @@ def _collect_member_schedules(
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
     # TODO: 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
+    normalized_members = normalize_external_member_names(member_names)
+    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
+        member_names, date_from, date_to
+    )
+        
     rows: list[dict[str, Any]] = []
     for schedule in personal_schedules:
+        schedule_date = schedule.get("date") or ""
+        if normalized_date_from and schedule_date < normalized_date_from:
+            continue
+        if normalized_date_to and schedule_date > normalized_date_to:
+            continue
         rows.append(
             {
                 "member_name": "나",
@@ -304,10 +314,7 @@ def _collect_member_schedules(
                 "notes": None,
             }
         )
-    normalized_members = normalize_external_member_names(member_names)
-    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
-        member_names, date_from, date_to
-    )
+        
     external_payload = call_external_tool_payload(
         "extract_schedules_from_history",
         {
