@@ -32,9 +32,7 @@ from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week
 
 _WEEK05_AGENT: Any | None = None
 
-# 앱 SQLite에서 내 일정을 읽어올 때 쓰는 상한. AppSQLiteStore.list_schedules의 기본값은 12건이고
-# 그 값을 그대로 SQL LIMIT에 넣기 때문에, 기본값에 맡기면 일정이 13건 이상일 때 조용히 잘려나간다.
-# 회의 조율은 "바쁜 시간을 하나도 빠뜨리지 않는 것"이 전제라, 빠진 일정 하나가 잘못된 후보를 만든다.
+# list_schedules의 기본 limit은 12이고 클램프 없이 SQL LIMIT으로 들어가, 맡겨두면 조용히 잘린다.
 PERSONAL_SCHEDULE_FETCH_LIMIT = 200
 
 
@@ -195,24 +193,17 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
-    # store를 모듈 전역 싱글턴으로 두지 않고 호출할 때마다 만든다. 테스트가 CONFIG를 갈아끼워
-    # 임시 DB를 보게 할 수 있고, 앱이 실행 중에 DB 경로를 바꿔도 다음 호출부터 반영된다.
     store = AppSQLiteStore(CONFIG.app_db_path)
 
-    # kind 필터를 주지 않아 개인/그룹 일정을 모두 가져온다. 그룹 회의도 내가 바쁜 시간이므로
-    # 조율 후보에서 빼면 이미 약속이 있는 시간을 비어 있다고 답하게 된다.
+    # kind를 주지 않아 그룹 일정까지 가져온다. 그룹 회의도 내가 바쁜 시간이다.
     saved_schedules = store.list_schedules(limit=PERSONAL_SCHEDULE_FETCH_LIMIT)
 
-    # 아직 DB에 저장되지 않은, 지금 대화에서만 만들어 둔 임시 일정을 덧붙인다.
-    # 두 저장소는 id를 담는 키 이름이 다르다. 앱 SQLite row는 schedule_id, Week 1 임시 일정은 id다.
-    # 그래서 dedup 기준을 한쪽 키로만 잡으면 방금 저장한 일정이 두 번 세어져 하루에 같은 회의가
-    # 두 개 있는 것처럼 보인다.
+    # 두 출처가 id를 담는 키 이름이 다르다. 앱 row는 schedule_id, Week 1 임시 일정은 id다.
     saved_ids = {schedule.get("schedule_id") for schedule in saved_schedules}
     current_scope = current_session_scope()
     pending_schedules = [
         schedule
         for schedule in PERSONAL_SCHEDULES
-        # 다른 대화에서 만든 임시 일정이 이 대화의 조율 결과로 새지 않도록 현재 대화 범위만 남긴다.
         if _schedule_scope(schedule) == current_scope and schedule.get("id") not in saved_ids
     ]
 
@@ -308,14 +299,10 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    # 정규화는 wrapper가 아니라 이 함수에서 한다. 앞의 wrapper tool들은 LLM이 준 인자를 그대로
-    # 전달하기만 하지만, 이 함수는 외부에 보낼 인자를 스스로 조립하기 때문이다.
-    # normalize_external_schedule_date_bounds는 "2026-07-07T00:00:00" 같은 값을 날짜만 남긴다.
+    # 정규화는 외부에 보낼 인자를 직접 조립하는 이 함수에서 한다. wrapper는 받은 값을 전달만 한다.
     normalized_members = normalize_external_member_names(member_names)
     window_from, window_to = normalize_external_schedule_date_bounds(member_names, date_from, date_to)
 
-    # MCP tool은 JSON 문자열을 돌려주므로 파싱해서 rows를 꺼낸다. 파싱하지 않으면 아래에서
-    # 문자열이 리스트에 그대로 이어붙어 rows가 망가진다.
     external_payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
@@ -324,13 +311,8 @@ def _collect_member_schedules(
     )
     external_rows = external_payload.get("rows") or []
 
-    # 내 일정을 외부 rows와 같은 키 이름으로 바꿔 담는다. 앱 일정은 title/date/start_time을 쓰지만
-    # member_name이라는 개념이 없어서, 공유 저장소가 내 일정을 부르는 이름과 같은 상수를 붙인다.
-    # 이렇게 맞춰 두면 이 rows를 그대로 쓰는 6주차 코드가 "나"와 외부 멤버를 구분 없이 다룰 수 있다.
-    #
-    # 조회 구간 밖의 내 일정은 제외한다. 외부 멤버 쪽은 서버가 이미 구간으로 걸러 주는데 내 일정만
-    # 전부 들어오면, 7월 일정을 물었는데 8월 일정이 바쁜 시간으로 섞여 답이 틀어진다.
-    # 날짜가 없는 일정도 구간 판단이 불가능해 제외한다. 시간대를 막는 근거가 될 수 없기 때문이다.
+    # 구간 밖이거나 날짜가 없는 내 일정은 제외한다. 외부 쪽은 서버가 이미 구간으로 걸러 주므로,
+    # 내 일정만 전부 넣으면 7월을 물었는데 8월 일정이 바쁜 시간으로 섞인다.
     has_window = bool(window_from and window_to)
     personal_rows = [
         {
@@ -345,13 +327,11 @@ def _collect_member_schedules(
         if not has_window or (schedule.get("date") and window_from <= str(schedule["date"]) <= window_to)
     ]
 
-    # 두 출처를 합친 뒤 날짜·시간순으로 정렬한다. 서버는 외부 멤버만 정렬해 주므로, 두 출처를 섞은
-    # 순서는 합친 쪽에서 정해야 한다. 정렬하지 않으면 요약이 내 일정과 남의 일정으로 뭉텅이가 된다.
+    # 서버는 외부 멤버만 정렬해 주므로 두 출처를 섞은 순서는 여기서 정한다.
     rows = [*personal_rows, *external_rows]
     rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("start_time") or "")))
 
-    # 요약은 여기서 새로 만든다. 서버가 준 schedule_summary는 외부 멤버만의 요약이라, 내 일정이
-    # 합쳐진 목록의 요약으로는 쓸 수 없다. 근거가 되는 rows가 달라지면 요약도 다시 만든다.
+    # 서버가 준 schedule_summary는 외부 멤버만 기준이라, 내 일정까지 합친 rows로 다시 만든다.
     return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
 
 
@@ -363,13 +343,9 @@ def search_previous_conversations(
 ) -> str:
     """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # member_names는 받은 값을 그대로 넘긴다. 외부 저장소는 None과 빈 리스트를 다르게 해석한다:
-    # None이면 "멤버 필터 없음"이라 전체 멤버에서 찾고, []이면 "대상 멤버가 없음"이라 0건을 돌려준다.
-    # 여기서 member_names or [] 같은 기본값을 주면 멤버를 언급하지 않은 질문이 전부 0건이 된다.
+    # 외부 저장소는 member_names의 None과 []를 다르게 읽는다. None은 "필터 없음"이라 전체를 찾고,
+    # []는 "대상 멤버 없음"이라 0건이다. 그래서 member_names or [] 같은 기본값을 채우지 않는다.
     args = {"query": query, "member_names": member_names, "limit": limit}
-
-    # 멤버 이름 정규화는 외부 저장소 경계에서 이미 한 번 처리하므로 이 wrapper에서 다시 변환하지 않는다.
-    # MCP tool은 JSON 문자열을 돌려주므로 json_payload()로 다시 감싸지 않고 그대로 반환한다.
     return call_mcp_tool_sync("search_previous_conversations", args)
 
 
@@ -377,14 +353,10 @@ def search_previous_conversations(
 def load_conversation_messages(conversation_id: str) -> str:
     """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
 
-    # 이 tool만 call_external_tool_payload를 쓴다. 다른 wrapper가 쓰는 call_mcp_tool_sync는 JSON
-    # 문자열을 그대로 돌려주지만, 이 헬퍼는 json.loads까지 해서 dict를 돌려준다. 그래서 반환 직전에
-    # json_payload()로 다시 JSON 문자열로 만들어야 한다. dict를 그대로 반환하면 tool 결과가
-    # 파이썬 dict 표기(작은따옴표)로 전달돼 유효한 JSON이 아니게 된다.
+    # call_external_tool_payload는 json.loads까지 해서 dict를 준다. 그래서 이 tool만 다시 감싼다.
     payload = call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id})
 
-    # 메시지의 sender/content/created_at와 시간순 정렬은 그대로 둔다. 대화는 순서가 곧 맥락이라,
-    # 보기 좋게 재정렬하거나 필드를 골라내면 누가 먼저 무슨 말을 했는지가 흐려진다.
+    # 대화는 순서가 곧 맥락이라 재정렬하거나 필드를 골라내지 않는다.
     return json_payload(payload)
 
 
@@ -392,14 +364,7 @@ def load_conversation_messages(conversation_id: str) -> str:
 def extract_schedules_from_history(member_names: list[str], date_from: str, date_to: str) -> str:
     """외부 SQLite 이전 대화에서 멤버별 일정을 추출합니다."""
 
-    # 날짜 형식 정리도 외부 저장소 경계에서 한 번만 하므로 여기서 다시 자르거나 바꾸지 않는다.
-    # member_names는 필수 인자다. 빈 리스트를 넘기면 "대상 멤버 없음"이라 0건이 돌아오므로,
-    # 대상이 정해지지 않았다면 이 tool을 호출하는 것 자체가 이르다.
     args = {"member_names": member_names, "date_from": date_from, "date_to": date_to}
-
-    # 결과에는 rows와 함께 schedule_summary(사람이 읽는 요약)가 이미 들어 있다. 여기서 다시 만들지 않는다.
-    # 요약을 직접 만드는 곳은 collect_member_schedules 한 곳뿐이다. 그때는 내 일정까지 합친
-    # 목록이 기준이라 서버가 준 외부 멤버만의 요약을 그대로 쓸 수 없기 때문이다.
     return call_mcp_tool_sync("extract_schedules_from_history", args)
 
 
@@ -416,10 +381,7 @@ def create_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
-    # schedule_id와 source_conversation_id를 그대로 실어 보낸다. 이 두 값이 나중에 이 row를 다시
-    # 찾는 유일한 손잡이다. schedule_id가 같으면 저장소가 새로 만들지 않고 갱신(UPSERT)하므로,
-    # 같은 요청을 두 번 보내도 일정이 두 개로 늘어나지 않는다. 반대로 id를 비워 보내면 매번 새 row가
-    # 생겨서 재시도할 때마다 중복이 쌓이고, 취소할 때 무엇을 지워야 할지 알 수 없게 된다.
+    # schedule_id가 같으면 저장소가 새로 만들지 않고 갱신한다. 비워 보내면 재시도마다 새 row가 쌓인다.
     args = {
         "member_name": member_name,
         "title": title,
@@ -431,8 +393,6 @@ def create_shared_schedule(
         "schedule_id": schedule_id,
     }
 
-    # 결과의 shared_schedule에는 sync_status(created / updated)가 들어 있다. 새로 만들었는지
-    # 기존 일정을 고쳤는지가 답변에서 달라져야 하므로 걸러내지 않고 그대로 전달한다.
     return call_mcp_tool_sync("create_shared_schedule", args)
 
 
@@ -443,14 +403,9 @@ def delete_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
 
-    # 두 조건은 AND가 아니라 OR로 걸린다. 즉 하나만 줘도 삭제되고, 둘을 함께 주면 어느 한쪽이라도
-    # 맞는 row가 모두 지워진다. 그룹 일정처럼 하나의 요청이 참석자별 여러 row로 저장된 경우
-    # source_conversation_id 하나로 관련 row를 한 번에 정리할 수 있게 한 설계다.
-    # 둘 다 비어 있으면 저장소가 아무것도 지우지 않고 빈 결과를 돌려주므로, 여기서 미리 막지 않는다.
+    # 두 조건은 AND가 아니라 OR다. 둘을 함께 주면 어느 한쪽이라도 맞는 row가 모두 지워진다.
+    # 참석자별로 여러 row가 저장된 그룹 일정을 source_conversation_id 하나로 정리하기 위한 설계다.
     args = {"schedule_id": schedule_id, "source_conversation_id": source_conversation_id}
-
-    # deleted_count가 0이어도 실패가 아니다. "지울 대상이 없었다"는 사실을 그대로 전달해야
-    # LLM이 이미 취소된 일정을 다시 취소했다고 잘못 답하지 않는다.
     return call_mcp_tool_sync("delete_shared_schedule", args)
 
 
@@ -464,11 +419,8 @@ def list_shared_schedules(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다."""
 
-    # 필터 5개를 모두 받은 값 그대로 넘긴다. 여기서 기본값을 채워 넣으면 안 되는 이유가 두 가지다.
-    # 첫째, 필터가 하나도 없으면 외부 저장소가 "기본 실습 멤버 + 기본 날짜 구간"으로 스스로 대체한다.
-    #   wrapper가 임의로 값을 채우면 이 분기가 사라져서, 조건 없이 "공유 일정 보여줘"라고 물었을 때
-    #   비어 있는 결과가 나온다.
-    # 둘째, member_names는 None(필터 없음)과 []("대상 멤버 없음" → 0건)의 뜻이 다르다.
+    # 필터가 하나도 없으면 저장소가 기본 실습 멤버·기본 구간으로 대체한다. wrapper가 값을 채우면
+    # 그 분기가 사라져, 조건 없이 "공유 일정 보여줘"라고 물었을 때 결과가 비어버린다.
     args = {
         "member_names": member_names,
         "date_from": date_from,
@@ -477,8 +429,6 @@ def list_shared_schedules(
         "limit": limit,
     }
 
-    # 이 tool의 rows 구조는 6주차 Kana 하위 agent가 그대로 재사용한다. 여기서 키를 바꾸거나 골라내면
-    # 이 파일을 보지 않는 6주차 코드가 조용히 깨지므로, 서버가 준 모양을 그대로 넘긴다.
     return call_mcp_tool_sync("list_shared_schedules", args)
 
 
@@ -486,8 +436,6 @@ def list_shared_schedules(
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
-    # 내 일정은 여기서 읽어 인자로 넘긴다. _collect_member_schedules가 직접 읽지 않고 받게 해 두면
-    # 병합 규칙만 따로 검증할 수 있고, 6주차가 다른 방식으로 모은 내 일정을 넣어 재사용할 수도 있다.
     merged = _collect_member_schedules(
         member_names=member_names,
         date_from=date_from,
@@ -495,8 +443,6 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
         personal_schedules=_personal_schedules_for_current_scope(),
     )
 
-    # 앞의 wrapper들과 달리 여기서는 dict를 받았으므로 json_payload로 감싸 문자열로 만든다.
-    # 감싸지 않고 dict를 그대로 돌려주면 tool 반환 타입이 어긋나 LLM이 파이썬 표기를 그대로 읽는다.
     return json_payload(merged)
 
 
@@ -526,8 +472,7 @@ def week05_prompt_parts() -> list[str]:
 
     today = current_app_date_iso()
 
-    # 규칙 번호는 4주차의 ①~⑧에 이어 ⑨부터 쓴다. join_system_prompt가 뒤쪽 조각을 나중 지시로
-    # 취급하므로, 앞 주차 규칙을 다시 쓰지 않고 이번 주에 새로 생긴 판단만 덧붙인다.
+    # 규칙 번호는 4주차의 ①~⑧에 이어 ⑨부터 쓴다.
     return [
         *week04_prompt_parts(),
         (
