@@ -338,6 +338,9 @@ def _collect_member_schedules(
     return {
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
+        "queried_members": normalized_names,
+        "date_from": normalized_from,
+        "date_to": normalized_to,
     }
 
 
