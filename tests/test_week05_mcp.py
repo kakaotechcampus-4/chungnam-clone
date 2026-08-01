@@ -88,24 +88,8 @@ def call(tool: Any, **kwargs: Any) -> dict[str, Any]:
     return json.loads(tool.invoke(kwargs))
 
 
-@pytest.fixture(scope="module", autouse=True)
-def tmp_external_db(tmp_path_factory):
-    """모든 MCP 호출을 임시 외부 DB로 돌린다.
-
-    mcp_client가 호출 시점에 os.environ을 읽어 자식 프로세스에 넘기므로, 학생 코드를 고치지 않고
-    저장소만 갈아끼울 수 있다. 새 DB에도 서버가 뜰 때 seed()가 실습 데이터를 다시 넣어 준다.
-    monkeypatch fixture는 함수 단위라 module 단위 fixture에서는 인스턴스를 직접 만들어 쓴다.
-    """
-
-    path = tmp_path_factory.mktemp("week05_external") / "external_people.sqlite3"
-    patch = pytest.MonkeyPatch()
-    patch.setenv("KANANA_EXTERNAL_DB_PATH", str(path))
-    yield path
-    patch.undo()
-
-
 @pytest.fixture(scope="module")
-def seeded_controls(tmp_external_db):
+def seeded_controls():
     """무필터 기본값 분기를 검증할 음성 대조 row 2개를 심는다.
 
     하나는 기본 날짜 구간 밖(8월), 하나는 기본 멤버 목록에 없는 "나". 무필터 조회 결과에 이 둘이
@@ -114,7 +98,7 @@ def seeded_controls(tmp_external_db):
     실습 데이터 id를 쓰면 서버가 뜰 때 사라진다.
     """
 
-    store = ExternalPeopleSQLiteStore(tmp_external_db)
+    store = ExternalPeopleSQLiteStore(APP_CONFIG.external_db_path)
     store.create_shared_schedule(
         member_name="철수",
         title="구간 밖 일정",

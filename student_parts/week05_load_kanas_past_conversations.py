@@ -219,61 +219,91 @@ def json_payload(payload: dict[str, Any]) -> str:
 class SearchPreviousConversationsInput(BaseModel):
     """외부 이전 대화 검색 입력입니다."""
 
-    query: str
-    member_names: list[str] | None = None
-    limit: int = Field(default=5, ge=1, le=50)
+    query: str = Field(
+        description="대화 문장에 그대로 들어 있을 핵심 명사 하나. 부분 문자열로 대조하므로 여러 단어를 "
+        "이어 붙이거나 사용자가 덧붙인 말('준비', '일정')을 넣으면 0건이 된다. 멤버 이름은 넣지 않는다."
+    )
+    member_names: list[str] | None = Field(
+        default=None,
+        description="검색 대상 멤버 이름 목록. 생략하면 전체 멤버에서 찾는다. "
+        "빈 목록은 '대상 멤버 없음'이라 0건이 되므로, 누구인지 모를 때는 생략한다.",
+    )
+    limit: int = Field(default=5, ge=1, le=50, description="반환할 최대 대화 수")
 
 
 class LoadConversationMessagesInput(BaseModel):
     """외부 대화 메시지 조회 입력입니다."""
 
-    conversation_id: str
+    conversation_id: str = Field(
+        description="불러올 외부 대화의 id. 반드시 search_previous_conversations 결과에 있던 값을 쓰고 "
+        "지어내지 않는다."
+    )
 
 
 class ExtractSchedulesFromHistoryInput(BaseModel):
     """외부 멤버 일정 추출 입력입니다."""
 
-    member_names: list[str]
-    date_from: str
-    date_to: str
+    member_names: list[str] = Field(
+        description="일정을 확인할 외부 멤버 이름 목록. 빈 목록은 '대상 멤버 없음'이라 0건이 되므로, "
+        "대상이 정해지지 않았다면 먼저 search_previous_conversations로 확인한다."
+    )
+    date_from: str = Field(description="조회 시작일 YYYY-MM-DD")
+    date_to: str = Field(description="조회 종료일 YYYY-MM-DD")
 
 
 class CreateSharedScheduleInput(BaseModel):
     """공유 일정 생성 입력입니다."""
 
-    member_name: str
-    title: str
-    date: str
-    start_time: str
-    end_time: str = "미정"
-    notes: str | None = None
-    source_conversation_id: str | None = None
-    schedule_id: str | None = None
+    member_name: str = Field(description="일정 주인의 이름. 내 일정이면 '나'")
+    title: str = Field(description="일정 제목")
+    date: str = Field(description="일정 날짜 YYYY-MM-DD. 비우면 등록이 거부된다")
+    start_time: str = Field(description="시작 시각 HH:MM")
+    end_time: str = Field(default="미정", description="종료 시각 HH:MM. 모르면 '미정'")
+    notes: str | None = Field(default=None, description="메모. 생략하면 저장소가 기본값을 넣는다")
+    source_conversation_id: str | None = Field(
+        default=None,
+        description="이 일정이 어디서 왔는지 나타내는 출처. 나중에 이 값으로 찾아 지울 수 있으므로 함께 남긴다.",
+    )
+    schedule_id: str | None = Field(
+        default=None,
+        description="같은 id로 다시 등록하면 새로 만들지 않고 갱신한다. 재시도해도 중복되지 않게 하려면 지정한다.",
+    )
 
 
 class DeleteSharedScheduleInput(BaseModel):
     """공유 일정 삭제 입력입니다."""
 
-    schedule_id: str | None = None
-    source_conversation_id: str | None = None
+    schedule_id: str | None = Field(
+        default=None, description="지울 일정의 id. create_shared_schedule 결과로 받은 값을 그대로 쓴다."
+    )
+    source_conversation_id: str | None = Field(
+        default=None,
+        description="출처로 묶어서 지울 때 쓴다. 두 조건은 AND가 아니라 OR라, 함께 주면 어느 한쪽이라도 "
+        "맞는 row가 모두 지워진다.",
+    )
 
 
 class ListSharedSchedulesInput(BaseModel):
     """공유 일정 조회 입력입니다."""
 
-    member_names: list[str] | None = None
-    date_from: str | None = None
-    date_to: str | None = None
-    source_conversation_id: str | None = None
-    limit: int = Field(default=50, ge=1, le=200)
+    member_names: list[str] | None = Field(
+        default=None, description="조회할 멤버 이름 목록. 생략하면 전체, 빈 목록은 0건"
+    )
+    date_from: str | None = Field(default=None, description="조회 시작일 YYYY-MM-DD")
+    date_to: str | None = Field(default=None, description="조회 종료일 YYYY-MM-DD")
+    source_conversation_id: str | None = Field(default=None, description="출처로 좁혀 볼 때 쓴다")
+    limit: int = Field(default=50, ge=1, le=200, description="반환할 최대 일정 수")
 
 
 class CollectMemberSchedulesInput(BaseModel):
     """내 일정과 외부 멤버 busy-time 수집 입력입니다."""
 
-    member_names: list[str]
-    date_from: str
-    date_to: str
+    member_names: list[str] = Field(
+        description="외부 멤버 이름만 넣는다. 내 일정은 자동으로 포함되므로 '나'나 비서 이름을 넣지 않고, "
+        "빈 목록도 넘기지 않는다. 여러 멤버는 이 배열에 모두 넣어 한 번에 처리한다."
+    )
+    date_from: str = Field(description="조회 시작일 YYYY-MM-DD")
+    date_to: str = Field(description="조회 종료일 YYYY-MM-DD")
 
 
 def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequest:
@@ -528,13 +558,16 @@ def week05_prompt_parts() -> list[str]:
             "환산해 어떤 구간을 확인했는지 답변에 적는다. 날짜를 알 수 없으면 추측하지 말고 되묻는다. "
             "⑮ 여러 사람이 모두 가능한 최종 회의 시간을 확정하는 일은 다음 주차 범위다. 이번 주에는 "
             "누가 언제 바쁜지와 그 근거를 정리해 후보까지만 제시한다. "
-            "⑯ 일정·대화·저장 기록을 묻는 질문에는 반드시 해당 tool을 호출해 확인한 뒤 답한다. "
-            "앞선 답변이나 이미 받은 결과를 근거로 새 질문에 답하지 않는다. 날짜나 대상이 조금이라도 "
-            "달라지면 다시 조회한다. 조회 없이 '없습니다'라고 단정하지 않는다. "
+            "⑯ 일정·대화·저장 기록을 묻는 질문에는 **그 질문마다** 해당 tool을 호출해 확인한 뒤 답한다. "
+            "같은 대화에서 앞서 조회했더라도 새 질문에는 다시 호출한다. 앞선 답변에 적은 내용은 근거가 "
+            "아니라 이미 지나간 말이므로, 그것만 보고 답하지 않는다. 날짜나 대상이 조금이라도 달라지면 "
+            "반드시 다시 조회한다. tool을 한 번도 부르지 않은 채 '있다'거나 '없다'고 답하지 않는다. "
             "⑰ 대상을 지정하지 않은 질문(예: '그날 바쁜 사람 있어?')은 앞 대화에 나온 멤버로 좁히지 않는다. "
             "member_names를 넘기지 말고 list_shared_schedules로 전체를 조회한 뒤 답한다. "
-            "⑱ create_shared_schedule 결과의 schedule_id는 이후 삭제·수정에 그대로 쓴다. 방금 등록한 일정을 "
-            "지워 달라는 요청에 id를 사용자에게 되묻지 않는다."
+            "⑱ 이전 turn의 tool 결과는 대화 이력에 남지 않으므로 방금 등록한 일정의 schedule_id를 "
+            "기억하지 못할 수 있다. 그때 사용자에게 id를 되묻지 않는다. list_shared_schedules에 그 일정의 "
+            "멤버와 날짜를 넣어 조회하면 schedule_id가 나오므로, 그 값으로 delete_shared_schedule을 부른다. "
+            "같은 turn 안에서 받은 id는 그대로 쓴다."
         ),
     ]
 
