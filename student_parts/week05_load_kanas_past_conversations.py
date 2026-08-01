@@ -283,16 +283,24 @@ def _collect_member_schedules(
     personal_schedules: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
-
-    my_schedule = [{
+    my_schedule = []
+    for row in personal_schedules:
+        if not row.get("date") or not (date_from <= row["date"] <= date_to):
+            continue
+        end_time = row.get("end_time")
+        if end_time == "미정":
+            end_time = None
+        
+        sr = _structured_request_from_schedule_row({**row, "end_time": end_time})
+        
+        my_schedule.append({
         "member_name": "나",
-        "title": row.get("title"),
-        "date": row.get("date"),
-        "start_time": row.get("start_time"),
-        "end_time": row.get("end_time"),
+        "title": sr.title,
+        "date": sr.date,
+        "start_time": sr.start_time,
+        "end_time": sr.end_time,
         "notes": "",
-    } for row in personal_schedules
-    ]
+    })
     
     args = {
         "member_names": member_names,
