@@ -305,3 +305,23 @@ member_name="나", title="[오프라인검증] 개인 코칭", date=2026-07-17  
 ### 최종 확인
 
 리팩터링 후 20개 시나리오를 **3회 연속 전부 통과**했고, 자동 테스트 257종도 통과했다. 공유 저장소는 실습 seed 18건만 남아 있다.
+
+---
+
+## 발견한 실패를 e2e 회귀로 고정
+
+"수동 검증에서 실패를 발견하면 문서에만 남기지 않고 e2e 회귀 테스트로 옮긴다"는 규칙에 따라, 실제로 실패했던 입력을 그대로 `tests/test_week05_e2e.py`에 고정했다.
+
+| 회귀 테스트 | 고정한 실패 |
+| --- | --- |
+| `..._query_with_extra_words_still_finds_evidence` | 12번 — `'준비'` 한 단어로 부분 문자열 대조가 깨져 0건 |
+| `..._unknown_conversation_id_is_not_answered_with_other_talks` | 15번 — 없는 id에 내 지난 대화를 그 내용처럼 나열 |
+| `..._no_filter_listing_returns_practice_rows` | 6번 — 날짜를 묻지 않았는데 오늘 날짜 필터를 넣어 0건 |
+| `..._collect_does_not_pass_assistant_name` | 5번 — `member_names`에 비서 이름이 섞임 |
+| `..._unspecified_target_is_not_narrowed_to_previous_members` | 16번 — 앞 대화 멤버로 좁혀 하린을 놓침 |
+| `..._answer_requires_lookup` | 17번 — 조회 없이 단정 |
+| `..._delete_reuses_returned_schedule_id` | 20번 — 받은 `schedule_id`를 되물음 |
+
+16·17·20번은 대화 맥락에서 비롯된 실패라, 앱과 같은 방식(이력에 user/assistant 텍스트만 전달)으로 여러 턴을 이어 실행하는 헬퍼를 두고 재현했다.
+
+e2e는 10종에서 17종이 됐고, 3회 연속 통과했다. 전체 테스트는 264종이다.
