@@ -191,7 +191,9 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
 
     scope = current_session_scope()
     store = AppSQLiteStore(CONFIG.app_db_path)
-    stored: list[dict[str, Any]] = list(store.list_schedules(limit=200))
+    stored: list[dict[str, Any]] = list(
+        store.list_schedules(limit=200, kind="personal_schedule")
+    )
 
     seen: set[str] = set()
     for row in stored:
