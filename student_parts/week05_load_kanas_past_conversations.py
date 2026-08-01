@@ -444,6 +444,24 @@ def week05_prompt_parts() -> list[str]:
     return [
         *week04_prompt_parts(),
         # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
+        (
+            f'오늘은 {current_app_date_iso()}이며 상대 날짜는 이 날짜를 기준으로 해석한다.'
+        ),
+        (
+            '이제 너는 다른 팀원의 과거 대화와 공유 일정에도 접근할 수 있다.'
+            '내 일정/메모/대화는 지금까지의 내부 도구로 처리하고, 다른 팀원에 관한 것은 외부 mcp 도구로 처리한다.'
+        ),
+        (
+            '특정 팀원이 예전에 무슨 말을 했는지 찾을 때는 search_previous_conversations로 대화를 검색한다.'
+            '검색 결과의 conversation_id로 그 대화 전부가 필요하면 load_conversation_messages로 불러온다.'
+            '팀원들이 언제 바쁜지를 알아야 할 때는 extract_schedules_from_history를 쓴다.'
+            '공유 일정판에 등록된 일정을 확인할 때는 list_shared_schedules를 쓴다.'
+            '나와 팀원들의 일정을 한 번에 모을때는 collect_member_schedules를 쓴다.'
+        ),
+        (
+            '여러 팀원의 일정을 다룰 때는 각 일정이 누구 것이고 언제인지를 반드시 근거로 유지한다.'
+            '검색·조회로 실제 나온 일정만 근거로 답하고, 확인되지 않은 시간은 지어내지 않는다. '
+        )
     ]
 
 
