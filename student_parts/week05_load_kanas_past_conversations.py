@@ -192,7 +192,16 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 
 
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
+    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다.
+
+    list_schedules에 kind를 넘기지 않는 것은 의도한 선택입니다.
+    앱 schedules 테이블은 모든 row가 owner='me'로 저장되므로(fixed/app_store.py:92, :358)
+    personal_schedule과 group_schedule을 구분하지 않고 **모두 내 busy-time으로 봅니다.**
+    내가 잡아둔 회의를 빼면 Week 6이 이미 일정이 있는 시각을 "가능"으로 제안하게 됩니다.
+    그룹 일정의 참석자 목록은 그 row의 소유자를 바꾸지 않습니다. 참석자 쪽 busy-time은
+    공유 저장소 동기화가 별도 row로 만들고, 그건 외부 조회 경로(MCP)로 들어옵니다.
+    limit=200은 조회 상한일 뿐이며 kind 필터는 걸지 않습니다.
+    """
 
     db_rows = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=200)
     saved_ids = {str(row["schedule_id"]) for row in db_rows}
@@ -318,11 +327,15 @@ def _collect_member_schedules(
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to
     )
+    # 내 일정의 출처는 앱 SQLite로 이미 정해져 있습니다(가이드 :99). 공유 저장소에 있는 "나" row는
+    # 앱 저장 시 자동 동기화된 그 일정의 **사본**이라 외부 조회 대상이 아닙니다. 그대로 조회하면
+    # 같은 일정이 앱 원본 + 공유 사본 2행으로 나오므로, 응답을 나중에 걸러내는 대신 입력 단계에서 뺍니다.
+    external_members = [name for name in members if name != PERSONAL_SHARED_MEMBER_NAME]
     payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
             {
-                "member_names": members,
+                "member_names": external_members,
                 "date_from": normalized_date_from,
                 "date_to": normalized_date_to,
             },
@@ -372,11 +385,21 @@ def _collect_member_schedules(
     )
     # 4) 요약은 "합친 rows 전체"로 다시 만듭니다.
     #    MCP payload의 schedule_summary를 그대로 쓰면 외부 멤버만 요약돼 내 일정이 빠집니다.
+    # 5) filters에는 실제로 어떤 조건으로 조회했는지를 남깁니다(Week 3 personal_list_saved_schedules와 같은 관례).
+    #    어떤 멤버의 rows가 0건일 때 "조회했는데 일정이 없음"인지 "애초에 조회 대상이 아님"인지
+    #    이 값이 없으면 구분할 수 없습니다.
     return {
         "ok": True,
         "tool_name": "collect_member_schedules",
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
+        "filters": {
+            "requested_member_names": member_names,
+            "external_member_names": external_members,
+            "date_from": normalized_date_from,
+            "date_to": normalized_date_to,
+            "includes_personal_schedules": True,
+        },
     }
 
 
@@ -388,7 +411,9 @@ def search_previous_conversations(
 ) -> str:
     """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다.
 
-    저장소는 query 문자열을 통째로 대조하므로 조사나 수식어를 붙이지 말고 한 단어 핵심어를 넣습니다.
+    query에는 찾으려는 주제 명사 한 단어만 넣습니다. '얘기'·'대화'·'일정'처럼 질문에 들어 있을 뿐
+    주제가 아닌 낱말을 그대로 옮기지 않고, 조사와 수식어도 뺍니다. 저장소가 query 문자열을 통째로
+    대조하므로 '철수 일정 공유'처럼 여러 단어를 이어 붙이면 0건이 나옵니다.
     사람 이름은 query가 아니라 member_names로 넘깁니다.
     """
 
@@ -400,7 +425,11 @@ def search_previous_conversations(
 
 @tool(args_schema=LoadConversationMessagesInput)
 def load_conversation_messages(conversation_id: str) -> str:
-    """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
+    """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다.
+
+    사용자가 대화의 '내용'·'전체'·'그대로'·'오간 메시지'를 요구하면 이 도구를 씁니다.
+    conversation_id는 search_previous_conversations 결과에서 얻습니다.
+    """
 
     payload = call_external_tool_payload(
         "load_conversation_messages",
@@ -434,7 +463,13 @@ def create_shared_schedule(
     source_conversation_id: str | None = None,
     schedule_id: str | None = None,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
+    """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다.
+
+    사용자가 '공유 일정 저장소'에 등록해 달라고 지목할 때 씁니다. date는 YYYY-MM-DD,
+    start_time과 end_time은 HH:MM 형식입니다.
+    끝나는 시각을 말하지 않았으면 end_time 인자를 아예 넣지 않습니다. 생략하면 "미정"으로 채워지며,
+    null을 넣으면 문자열이 아니라 거부됩니다. notes도 넣을 내용이 없으면 생략합니다.
+    """
 
     return call_mcp_tool_sync(
         "create_shared_schedule",
@@ -456,7 +491,12 @@ def delete_shared_schedule(
     schedule_id: str | None = None,
     source_conversation_id: str | None = None,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
+    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다.
+
+    사용자가 '공유 일정 저장소'에서 지워 달라고 지목할 때 씁니다.
+    schedule_id 또는 source_conversation_id 중 최소 하나는 채워야 합니다.
+    둘 다 비운 채 호출하면 아무것도 삭제되지 않습니다.
+    """
 
     return call_mcp_tool_sync(
         "delete_shared_schedule",
@@ -472,7 +512,11 @@ def list_shared_schedules(
     source_conversation_id: str | None = None,
     limit: int = 50,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다."""
+    """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다.
+
+    공유 저장소에 등록된 row 자체를 확인할 때 씁니다.
+    date_from과 date_to는 YYYY-MM-DD 형식입니다.
+    """
 
     return call_mcp_tool_sync(
         "list_shared_schedules",
@@ -491,6 +535,8 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다.
 
     나와 팀원의 바쁜 시간을 한 rows로 모아 회의 시간을 조율할 때 씁니다.
+    내 일정은 member_names와 무관하게 항상 포함되므로 member_names에는 나를 빼고 팀원 이름만 넣습니다.
+    date_from과 date_to는 YYYY-MM-DD 형식입니다.
     """
 
     return json_payload(
@@ -556,23 +602,16 @@ def week05_prompt_parts() -> list[str]:
         "결과 rows는 검색어에 걸린 메시지 몇 개일 뿐 대화 전체가 아니다.\n"
         "- 반대로 외부 멤버 이름이 하나도 없이 '아까 우리가 무슨 얘기 했지?'처럼 나와 Kana가 이 앱에서 나눈 "
         "대화를 가리키면 Week 4의 search_conversation_messages로 찾는다.\n"
-        "- load_conversation_messages: 사용자가 대화의 '내용'·'전체'·'그대로'·'오간 메시지'를 요구하면 "
-        "search_previous_conversations 결과로 답을 끝내지 말고, 거기서 얻은 conversation_id로 이 도구를 반드시 한 번 더 호출한다. "
-        "검색 rows에 content가 있어도 그것은 대화 전체가 아니므로 충분하다고 판단하지 않는다.\n"
-        "- list_shared_schedules: 공유 일정 저장소에 등록된 row 자체를 확인할 때 쓴다.\n"
-        "- create_shared_schedule / delete_shared_schedule: 사용자가 '공유 일정 저장소'에 등록·삭제해 달라고 지목하면 이 도구를 쓴다. save_structured_request는 내 앱 일정 저장이라 공유 저장소에는 등록되지 않는다.\n"
-        "- 삭제할 때 schedule_id를 모르면 list_shared_schedules로 대상을 먼저 확인하고, 거기서 얻은 schedule_id나 "
-        "source_conversation_id를 넘긴다. 둘 다 비운 채 delete_shared_schedule을 부르면 아무것도 삭제되지 않는다.\n"
+        "- 대화 검색만으로 답을 끝내지 않는다. 검색 rows에 content가 있어도 그것은 대화 전체가 아니므로 "
+        "충분하다고 판단하지 말고 load_conversation_messages로 한 번 더 확인한다.\n"
+        "- 공유 일정을 지울 때는 list_shared_schedules로 대상을 먼저 확인하고, 거기서 얻은 schedule_id나 "
+        "source_conversation_id로 delete_shared_schedule을 부른다. 조회 없이 바로 삭제하면 대상을 못 찾아 "
+        "아무것도 지워지지 않는다.\n"
         "## Week 5 인자 규칙\n"
         "- date_from/date_to는 YYYY-MM-DD로 넣는다. '이번 주', '다음 주' 같은 상대 표현은 오늘 날짜를 기준으로 계산해 변환한다.\n"
         "- 기간을 말하지 않은 질문에는 date_from과 date_to를 같은 날로 좁히지 않는다. 오늘이 포함된 주처럼 "
         "충분히 넓은 범위로 조회한다. 좁게 조회해 rows가 비었을 때 그것을 '일정이 없다'는 근거로 삼지 않는다.\n"
         "- member_names에는 사용자가 실제로 말한 사람만 넣는다. 이름을 지어내지 않는다.\n"
-        "- search_previous_conversations의 query에는 찾으려는 **주제 명사** 한 단어만 넣는다. "
-        "'얘기'·'대화'·'일정'처럼 질문에 들어 있을 뿐 주제가 아닌 낱말을 그대로 옮기지 않는다. "
-        "조사·수식어도 뺀다. "
-        "외부 저장소는 query 문자열을 통째로 대조하므로 '철수 일정 공유'처럼 여러 단어를 이어 붙이면 0건이 나온다. "
-        "사람 이름은 query가 아니라 member_names로 넘긴다.\n"
         "- 아무 이름도 언급되지 않았으면 누구의 일정인지 되묻거나 멤버 필터 없이 조회한다. 빈 리스트 []는 '아무도 조회하지 않음'이라 결과가 비므로 '전체'라는 뜻으로 쓰지 않는다.\n"
         "- 예: '철수랑 영희랑 다음 주에 회의 잡고 싶은데 언제 비어?' → collect_member_schedules를 member_names=[\"철수\", \"영희\"], date_from/date_to=다음 주 시작·끝(오늘 기준 계산)로 한 번만 호출한다.\n"
         "- 예: '철수 이번 주 목요일에 뭐 있어?' → 한 사람만 물어도 남의 일정이므로 personal_list_saved_schedules를 부르지 않는다. "
