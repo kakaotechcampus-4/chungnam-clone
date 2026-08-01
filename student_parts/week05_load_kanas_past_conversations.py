@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -284,6 +285,77 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _in_date_range(date: str | None, date_from: str, date_to: str) -> bool:
+    """일정 날짜가 조회 범위 안에 있는지 확인합니다."""
+
+    if not date:
+        return False
+    if date_from and date < date_from:
+        return False
+    if date_to and date > date_to:
+        return False
+    return True
+
+
+def _personal_busy_rows(
+    personal_schedules: list[dict[str, Any]],
+    date_from: str,
+    date_to: str,
+) -> list[dict[str, Any]]:
+    """내 일정을 외부 멤버 일정과 같은 row 구조로 바꿉니다."""
+
+    rows: list[dict[str, Any]] = []
+    for schedule in personal_schedules:
+        request = _structured_request_from_schedule_row(schedule)
+        if not _in_date_range(request.date, date_from, date_to):
+            continue
+
+        rows.append(
+            {
+                "member_name": PERSONAL_SHARED_MEMBER_NAME,
+                "title": request.title or "제목 없음",
+                "date": request.date,
+                "start_time": request.start_time or "미정",
+                "end_time": request.end_time or "미정",
+                "notes": "앱에 저장된 내 일정",
+            }
+        )
+    return rows
+
+
+def _external_busy_rows(
+    member_names: list[str],
+    date_from: str,
+    date_to: str,
+) -> list[dict[str, Any]]:
+    """외부 MCP 일정 rows를 내 일정과 같은 row 구조로 바꿉니다."""
+
+    payload = json.loads(
+        call_mcp_tool_sync(
+            "extract_schedules_from_history",
+            {
+                "member_names": member_names,
+                "date_from": date_from,
+                "date_to": date_to,
+            },
+        )
+    )
+
+    rows: list[dict[str, Any]] = []
+    for row in payload.get("rows", []):
+        rows.append(
+            {
+                "member_name": row.get("member_name") or "이름 미정",
+                "title": row.get("title") or "제목 없음",
+                "date": row.get("date"),
+                "start_time": row.get("start_time") or "미정",
+                "end_time": row.get("end_time") or "미정",
+                "notes": row.get("notes") or "외부 대화에서 추출한 일정",
+            }
+        )
+    return rows
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -296,58 +368,16 @@ def _collect_member_schedules(
     # 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
 
     normalized_members = normalize_external_member_names(member_names)
+    external_members = [name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME] # PERSONAL_SHARED_MEMBER_NAME은 "나"를 가리킴
+
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to
     ) 
 
-    rows: list[dict[str, Any]] = []
-
-    for schedule in personal_schedules: # 내 거에서 들고 옴
-        request = _structured_request_from_schedule_row(schedule)
-
-        date = request.date
-        if not date:
-            continue
-        if normalized_date_from and date < normalized_date_from:
-            continue
-        if normalized_date_to and date > normalized_date_to:
-            continue
-
-        rows.append(
-            {
-                "member_name": "나",
-                "title": request.title or "제목 없음",
-                "date": date,
-                "start_time": request.start_time or "미정",
-                "end_time": request.end_time or "미정",
-                "notes": "앱에 저장된 내 일정",
-            }
-        )
-
-    # -외부 멤버 일정-
-    payload = json.loads(
-        call_mcp_tool_sync(
-            "extract_schedules_from_history",
-            {
-                "member_names": normalized_members,
-                "date_from": normalized_date_from,
-                "date_to": normalized_date_to,
-            },
-        )
-    )
-
-    for row in payload.get("rows", []):
-        rows.append(
-            {
-                "member_name": row.get("member_name") or "이름 미정",
-                "title": row.get("title") or "제목 없음",
-                "date": row.get("date"),
-                "start_time": row.get("start_time") or "미정",
-                "end_time": row.get("end_time") or "미정",
-                "notes": row.get("notes") or "외부 대화에서 추출한 일정",
-            }
-        )
-
+    rows = [
+        *_personal_busy_rows(personal_schedules, normalized_date_from, normalized_date_to),
+        *_external_busy_rows(external_members, normalized_date_from, normalized_date_to),
+    ]
     rows.sort(key=lambda row: (row["date"] or "", row["start_time"] or "", row["member_name"])) # 정렬 때리기
 
     return {
