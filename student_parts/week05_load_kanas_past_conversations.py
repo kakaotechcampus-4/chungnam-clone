@@ -1,12 +1,12 @@
 from __future__ import annotations
 
+from datetime import date
 import json
 from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
-
 from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
@@ -45,7 +45,9 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
-    sqlite_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=100)
+    sqlite_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
+        limit=100, kind="personal_schedule"
+    )
     sqlite_schedule_ids: set[str] = set()
 
     for schedule in sqlite_schedules:
@@ -135,8 +137,8 @@ class CollectMemberSchedulesInput(BaseModel):
     """내 일정과 외부 멤버 busy-time 수집 입력입니다."""
 
     member_names: list[str]
-    date_from: str
-    date_to: str
+    date_from: date
+    date_to: date
 
 
 def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequest:
@@ -181,18 +183,43 @@ def _collect_member_schedules(
         date_from,
         date_to,
     )
-
-    external_payload = json.loads(
-        call_mcp_tool_sync(
+    external_member_names = [
+        member_name for member_name in normalized_member_names if member_name != "나"
+    ]
+    try:
+        raw_payload = call_mcp_tool_sync(
             "extract_schedules_from_history",
             {
-                "member_names": normalized_member_names,
+                "member_names": external_member_names,
                 "date_from": normalized_date_from,
                 "date_to": normalized_date_to,
             },
         )
-    )
-    external_rows = external_payload.get("rows") or []
+        external_payload = json.loads(raw_payload)
+
+        if not isinstance(external_payload, dict):
+            raise ValueError("MCP 응답을 json.load한 결과가 dict가 아닙니다.")
+
+        external_rows = external_payload.get("rows") or []
+
+        if not isinstance(external_rows, list):
+            raise ValueError("MCP 응답의 rows가 list가 아닙니다.")
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "rows": [],
+            "schedule_summary": None,
+            "member_names": member_names,
+            "date_from": date_from,
+            "date_to": date_to,
+            "error": {
+                "code": "external_schedule_lookup_failed",
+                "type": type(e).__name__,
+                "message": "외부 멤버 일정 조회에 실패했습니다.",
+                "detail": str(e),
+            },
+        }
 
     personal_rows: list[dict[str, Any]] = []
 
@@ -221,8 +248,13 @@ def _collect_member_schedules(
     rows = [*personal_rows, *external_rows]
 
     return {
+        "ok": True,
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
+        "member_names": member_names,
+        "date_from": date_from,
+        "date_to": date_to,
+        "error": None,
     }
 
 
@@ -299,7 +331,12 @@ def delete_shared_schedule(
     schedule_id: str | None = None,
     source_conversation_id: str | None = None,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
+    """
+    외부 MCP 공유 일정 저장소에서 일정을 삭제합니다.
+    식별자는 반드시 직전 list_shared_schedules 결과에서 그대로 가져와야 합니다.
+    식별자를 추측하거나 생성해서는 안 되며, 사용자 확인 없이 호출하지 않습니다.
+    schedule_id와 source_conversation_id 중 하나만 전달합니다.
+    """
 
     return call_mcp_tool_sync(
         "delete_shared_schedule",
@@ -332,7 +369,7 @@ def list_shared_schedules(
 
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(
-    member_names: list[str], date_from: str, date_to: str
+    member_names: list[str], date_from: date, date_to: date
 ) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
@@ -340,8 +377,8 @@ def collect_member_schedules(
 
     payload = _collect_member_schedules(
         member_names=member_names,
-        date_from=date_from,
-        date_to=date_to,
+        date_from=date_from.isoformat(),
+        date_to=date_to.isoformat(),
         personal_schedules=personal_schedules,
     )
     return json_payload(payload)
@@ -388,12 +425,37 @@ def week05_prompt_parts() -> list[str]:
 
         사용자가 내 일정과 외부 멤버 일정을 비교하거나
         여러 사람과의 일정 조율을 요청하면 collect_member_schedules를 호출한다.
+        - 이때 반드시 조회 기간을 먼저 확인해야 한다. 
+        - 사용자가 오늘, 내일, 이번 주, 다음 주처럼 해석 가능한 기간을 말한 경우 현재 날짜를 기준으로 date_from과 date_to를 구체적인 ISO 날짜로 변환한다. 
+        - 조회 기간을 알 수 없는 경우에는 date_from과 date_to를 임의로 생성하지 않으며, collect_member_schedules를 호출하기 전에 먼저 사용자에게 조회 기간을 질문한 뒤 호출한다. 
+
+        collect_member_schedules를 호출할 때 date_from 또는 date_to가
+        비어 있거나 유효한 날짜 형식이 아니어서 입력 검증에 실패한 경우:
+
+        - 사용자에게 시스템 오류가 발생했다고 말하지 않는다.
+        - date_from과 date_to를 임의로 추측하여 다시 호출하지 않는다.
+        - 사용자에게 조회할 기간을 자연스럽게 질문하고 현재 답변을 종료한다.
+        - 사용자가 기간을 답하면 현재 날짜를 기준으로 구체적인 ISO 날짜 범위로 변환한 뒤
+        collect_member_schedules를 다시 호출한다.
+
+        예시 질문:
+        "어느 기간을 기준으로 일정을 확인할까요? 예를 들어 이번 주 또는 8월 3일부터 8월 9일까지처럼 알려주세요."
 
         사용자가 공유 일정 저장소에 등록된 일정을 직접 확인하려고 하면
         list_shared_schedules를 호출한다.
 
         사용자가 공유 일정의 등록 또는 삭제를 명시적으로 요청한 경우에만
         create_shared_schedule 또는 delete_shared_schedule을 호출한다.
+
+        공유 일정을 삭제할 때는 다음 절차를 반드시 따른다.
+
+        1. delete_shared_schedule을 호출하기 전에 list_shared_schedules를 호출해 삭제 후보를 조회한다.
+        2. schedule_id나 source_conversation_id를 추측하거나 새로 생성하지 않는다.
+        3. 반드시 list_shared_schedules의 최신 조회 결과에 포함된 식별자를 그대로 사용한다.
+        4. 조회한 일정의 멤버, 제목, 날짜, 시간을 사용자에게 보여주고 삭제 여부를 확인한다.
+        5. 사용자가 해당 대상을 명시적으로 확인한 경우에만 delete_shared_schedule을 호출한다.
+        6. 후보가 여러 개이거나 대상을 정확히 식별할 수 없으면 삭제하지 않고 사용자가 선택하게 한다.
+        7. schedule_id와 source_conversation_id를 동시에 전달하지 않는다.
         """,
     ]
 
