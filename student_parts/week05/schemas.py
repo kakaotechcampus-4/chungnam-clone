@@ -5,10 +5,10 @@ from pydantic import BaseModel, Field
 
 class SearchPreviousConversationsInput(BaseModel):
     """외부 이전 대화 검색 입력입니다."""
-
-    query: str
-    member_names: list[str] | None = None
-    limit: int = Field(default=5, ge=1, le=50)
+    include_messages: bool = Field(default=False,description="검색된 대화방의 전체 메시지까지 함께 조회할지 여부")
+    query: str=Field(description="이전 대화 검색에 사용할 짧은 핵심 검색어")
+    member_names: list[str] | None =Field(default=None,description="검색할 멤버 이름 목록. 지정하지 않으면 모든 멤버를 검색")
+    limit: int = Field(default=5, ge=1, le=50, description="반환할 최대 대화 수",)
 
 
 class LoadConversationMessagesInput(BaseModel):

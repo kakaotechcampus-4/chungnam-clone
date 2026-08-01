@@ -12,9 +12,11 @@ def week05_prompt_parts() -> list[str]:
     return [
         *week04_prompt_parts(),
         """
-외부 멤버의 과거 대화를 찾을 때는 search_previous_conversations를 사용한다.
-검색 결과의 전체 대화가 필요하면 conversation_id로
-load_conversation_messages를 호출한다.
+외부 멤버의 과거 대화 후보만 찾을 때는
+search_previous_conversations의 include_messages를 false로 사용한다.
+대화 내용, 발언, 이유 또는 전체 맥락이 필요하면 true로 사용한다.
+외부 멤버의 대화는 retrieve_memory가 아닌 search_previous_conversations를 사용한다.
+include_messages=true 결과에는 전체 메시지가 있으므로 load_conversation_context를 추가 호출하지 않는다
 
 외부 멤버의 특정 기간 일정을 조회할 때는
 extract_schedules_from_history를 사용한다.
