@@ -25,12 +25,25 @@ from fixed.mcp_client import (
 )
 from fixed.runtime_clock import current_app_date_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
-from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
+from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt, personal_list_schedules
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
-from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
+from student_parts.week03_build_nanas_logbook import (
+    get_saved_request,
+    list_saved_requests,
+    personal_list_saved_schedules,
+)
+from student_parts.week04_retrieve_nanas_memory import (
+    search_conversation_messages,
+    search_personal_references,
+    search_saved_requests,
+    week04_prompt_parts,
+    week04_tools,
+)
 
 
 _WEEK05_AGENT: Any | None = None
+# date_from/date_to로 걸러진 뒤의 "기간 내 최대 건수"라서, 며칠~몇 주 단위의 조율 질문에는
+# 100건이면 넉넉하다고 보고 필터 적용 전 값(과거 전체 기간 대상 100건)을 그대로 유지합니다.
 _PERSONAL_SQLITE_SCHEDULE_LIMIT = 100
 
 
@@ -188,12 +201,40 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
+def _personal_schedule_within_date_bounds(
+    date_value: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> bool:
+    """date_value가 date_from~date_to 범위 밖이면 걸러냅니다. 범위가 없으면 항상 통과합니다."""
+
+    if not date_from and not date_to:
+        return True
+    if not date_value:
+        return False
+    if date_from and date_value < date_from:
+        return False
+    if date_to and date_value > date_to:
+        return False
+    return True
+
+
+def _personal_schedules_for_current_scope(
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
+    """SQLite 저장 일정과 현재 대화의 임시 일정 중 date_from~date_to 범위에 속하는 것만 group 조율 후보로 사용합니다.
+
+    date_from/date_to를 넘기면 _PERSONAL_SQLITE_SCHEDULE_LIMIT은 "전체 기간 중 이른 N건"이 아니라
+    "해당 기간 안에서 최대 N건"을 의미하게 됩니다. 호출부는 normalize_external_schedule_date_bounds로
+    정규화한 값을 넘겨야 합니다.
+    """
 
     sqlite_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
         limit=_PERSONAL_SQLITE_SCHEDULE_LIMIT,
         kind="personal_schedule",
+        date_from=date_from,
+        date_to=date_to,
     )
     saved_schedule_ids = {
         str(schedule["schedule_id"]) for schedule in sqlite_schedules if schedule.get("schedule_id")
@@ -203,7 +244,11 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     pending_schedules = [
         schedule
         for schedule in PERSONAL_SCHEDULES
-        if _schedule_scope(schedule) == session_id and str(schedule.get("id")) not in saved_schedule_ids
+        if _schedule_scope(schedule) == session_id
+        and str(schedule.get("id")) not in saved_schedule_ids
+        # Week1 임시 일정(PERSONAL_SCHEDULES)도 SQLite 일정과 같은 범위로 걸러야, 질문한 기간과
+        # 무관한 임시 일정이 rows에 섞여 LLM이 잘못된 기간을 요약하는 것을 막을 수 있습니다.
+        and _personal_schedule_within_date_bounds(schedule.get("date"), date_from, date_to)
     ]
 
     return [*sqlite_schedules, *pending_schedules]
@@ -418,11 +463,17 @@ def list_shared_schedules(
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
-    personal_schedules = _personal_schedules_for_current_scope()
+    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
+        member_names, date_from, date_to
+    )
+    personal_schedules = _personal_schedules_for_current_scope(
+        date_from=normalized_date_from,
+        date_to=normalized_date_to,
+    )
     result = _collect_member_schedules(
         member_names=member_names,
-        date_from=date_from,
-        date_to=date_to,
+        date_from=normalized_date_from,
+        date_to=normalized_date_to,
         personal_schedules=personal_schedules,
     )
     return json_payload(result)
@@ -458,11 +509,19 @@ def week05_prompt_parts() -> list[str]:
             "Week 5부터 Nana는 질문의 대상이 '나' 자신인지, '나'가 아닌 다른 사람(예: 철수, 영희처럼 "
             "구체적인 이름이 언급된 사람)인지를 가장 먼저 구분합니다. 이 판단이 도구 선택을 결정합니다.\n"
             "판단 기준: 질문에 사용자 본인이 아닌 다른 사람의 이름이 등장하고, 그 사람의 이전 대화/발언/일정/"
-            "바쁜 시간을 묻는다면 그것은 항상 '다른 사람' 케이스입니다. "
-            "personal_list_saved_schedules, list_saved_requests, search_saved_requests, "
-            "search_conversation_messages 같은 Week 1~4 도구는 오직 '나' 자신의 개인 참고자료/SQLite 기록/"
-            "대화 발화만 담고 있으므로, 다른 사람 이름이 언급된 질문에는 그 도구들로 답을 찾을 수 없습니다. "
-            "다른 사람 이름이 없고 '내 일정', '내가 저장한' 처럼 본인 이야기일 때만 Week 1~4 도구를 그대로 사용합니다.\n"
+            "바쁜 시간을 묻는다면, 그 답은 대부분 외부 SQLite/MCP 저장소에 있으므로 이 파일의 Week 5 도구를 "
+            "우선 고려합니다. 다만 예외가 있습니다: '철수랑 잡은 회의를 이미 저장해뒀는지'처럼 다른 사람과 "
+            "이미 논의해서 내 앱에 등록해 둔 그룹 일정/요청을 찾는 질문은, 다른 사람 이름이 있어도 답이 "
+            f"이미 내 앱 SQLite DB에 있을 수 있습니다. {personal_list_saved_schedules.name}을 "
+            f"kind='group_schedule'로 호출하면 다른 사람과 함께 잡은 그룹 일정을 찾을 수 있고, "
+            f"{search_saved_requests.name}이 검색하는 저장된 구조화 요청에는 members 필드가 들어 있어 참여자 "
+            f"이름으로도 매칭됩니다. 이런 질문에는 Week 5 도구와 {personal_list_saved_schedules.name}/"
+            f"{search_saved_requests.name}을 모두 시도해서, 내 앱 DB에 이미 저장된 결과가 있으면 그것부터 "
+            "답으로 사용합니다. "
+            f"반대로 {personal_list_schedules.name}(Week 1 임시 메모리), {list_saved_requests.name}, "
+            f"{get_saved_request.name}, {search_personal_references.name}, "
+            f"{search_conversation_messages.name}은 '나' 자신의 개인 참고자료/SQLite 기록/대화 발화만 담고 "
+            "있으므로, 다른 사람 이름이 없고 '내 일정', '내가 저장한' 처럼 본인 이야기일 때만 사용합니다.\n"
             f"다른 사람에 대한 질문에는 반드시 이 파일의 외부 SQLite/MCP wrapper 도구를 사용하되, 질문 성격에 맞는 "
             "도구를 고릅니다. 그 사람의 '일정', '바쁜 시간', '스케줄'처럼 날짜/시간 정보 자체를 물으면 "
             f"{extract_schedules_from_history.name}로 바로 그 사람의 일정 row를 조회합니다(대화 내용을 먼저 검색할 "
