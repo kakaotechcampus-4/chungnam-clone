@@ -309,6 +309,8 @@ def _collect_member_schedules(
             "notes": s.get("reason") or "",
         }
         for s in personal_schedules
+        if s.get("date") and norm_from <= s.get("date", "") <= norm_to 
+
     ]
 
     # 외부 멤버 일정 rows
