@@ -430,6 +430,10 @@ def week05_prompt_parts() -> list[str]:
     return [
         *week04_prompt_parts(),
         (
+            'personal_create_schedule 쓰지마라.'
+            '대신 일정/할 일/알림을 저장/기록/등록 해달라는 요청은 personal_create_schedule 쓰지말고 extract_schedule_request로 먼저 구조화한 뒤 그 결과의 필드를 save_structured_request로 저장한다.'
+        ),
+        (
             f'오늘은 {current_app_date_iso()}이며 상대 날짜는 이 날짜를 기준으로 해석한다.'
         ),
         (
