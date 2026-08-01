@@ -330,6 +330,8 @@ def _collect_member_schedules(
                 "start_time": request.start_time,
                 "end_time": request.end_time,
                 "notes": "앱에 저장된 내 일정",
+                "source_conversation_id": None,
+                "schedule_id": schedule.get("schedule_id") or schedule.get("id"),
             }
         )
 
@@ -361,6 +363,8 @@ def _collect_member_schedules(
                 "start_time": row.get("start_time"),
                 "end_time": row.get("end_time"),
                 "notes": row.get("notes"),
+                "source_conversation_id": row.get("source_conversation_id"),
+                "schedule_id": row.get("schedule_id"),
             }
         )
 
