@@ -306,6 +306,93 @@ print('COLLECT_OK rows =', len(rows))
 합쳐지고 `schedule_summary`가 함께 온다. 내 일정 row의 `member_name`은 `"나"`
 (`fixed/external_people_store.py:21` `PERSONAL_SHARED_MEMBER_NAME`)여야 외부 row와 같은 축으로 읽힌다.
 
+## 8-b. collect_member_schedules — 내 일정 사본 중복 차단 + 조회 조건 보고
+```bash
+uv run python -X utf8 -c "
+import json, os, tempfile
+from dataclasses import replace
+from pathlib import Path
+_tmp = Path(tempfile.mkdtemp())
+os.environ['KANANA_EXTERNAL_DB_PATH'] = str(_tmp / 'external.sqlite3')
+from fixed.config import CONFIG
+import fixed.app_store as store_mod
+import student_parts.week03_build_nanas_logbook as w3
+import student_parts.week05_load_kanas_past_conversations as m
+m.CONFIG = replace(CONFIG, app_db_path=_tmp / 'app.sqlite3', external_db_path=_tmp / 'external.sqlite3')
+w3.CONFIG = m.CONFIG
+
+store = store_mod.AppSQLiteStore(_tmp / 'app.sqlite3')
+saved = store.save_structured_request({'kind':'personal_schedule','title':'내 개인 일정','date':'2026-07-08','start_time':'14:00','end_time':'15:00'})
+assert (saved.get('shared_sync') or {}).get('ok'), '전제 실패: 공유 저장소 사본이 안 생겼다면 이 검사는 빈 값으로 통과한다 ' + str(saved.get('shared_sync'))
+
+def collect(names):
+    return json.loads(m.collect_member_schedules.invoke({'member_names': names, 'date_from': '2026-07-07', 'date_to': '2026-07-17'}))
+
+# (a) '나'가 들어와도 내 일정은 1건 — 앱 원본과 공유 사본이 겹쳐 잡히면 안 된다
+out = collect(['나', '철수'])
+mine = [r for r in out['rows'] if r['title'] == '내 개인 일정']
+synced = [r for r in out['rows'] if r.get('notes') == '앱 개인 일정 자동 동기화']
+print('내 일정 rows =', len(mine), '| 동기화 사본 rows =', len(synced))
+assert len(mine) == 1 and not synced, '같은 일정이 앱 원본 + 공유 사본으로 중복됨: ' + str(mine + synced)
+
+# (b) 반대 축 — '나'를 빼면서 외부 멤버까지 깎으면 안 된다
+only_ext = collect(['철수'])
+a = [r for r in out['rows'] if r['member_name'] == '철수']
+b = [r for r in only_ext['rows'] if r['member_name'] == '철수']
+print('철수 rows =', len(a), 'vs', len(b))
+assert a and a == b, '자기 제외가 외부 멤버 rows까지 깎음'
+
+# (c) member_names=['나']만 와도 내 일정은 남는다 (전부 비우는 구현 차단)
+solo = collect(['나'])
+assert [r for r in solo['rows'] if r['title'] == '내 개인 일정'], 'member_names=[\"나\"]에서 내 일정이 사라짐'
+print('solo rows =', len(solo['rows']))
+
+# (d) 조회 조건이 결과에 남는가 — 0건 멤버가 '조회했는데 없음'인지 '조회 대상 아님'인지 구분
+f = collect(['나', '철수', '설하']).get('filters') or {}
+print('filters =', json.dumps(f, ensure_ascii=False))
+assert f.get('requested_member_names') == ['나', '철수', '설하'], f
+assert '나' not in (f.get('external_member_names') or []), f
+assert '설하' in (f.get('external_member_names') or []), 'fixture에 없는 멤버도 조회했다는 사실이 남아야 한다'
+assert f.get('date_from') == '2026-07-07' and f.get('date_to') == '2026-07-17', f
+assert f.get('includes_personal_schedules') is True, f
+print('SELF_DEDUP_AND_FILTERS_OK')
+" | grep -v "Processing request of type\|ListToolsRequest\|CallToolRequest\|server.py:"
+```
+확인 포인트: `member_names`에 `"나"`가 들어와도 내 일정이 **1건**이고 공유 사본(`notes="앱 개인 일정 자동 동기화"`)이 섞이지 않는다.
+동시에 **(b)(c)로 과잉 제거가 아님**을 확인한다 — 자기 제외가 외부 멤버나 내 일정 자체를 깎으면 실패다.
+`filters`는 week03 `personal_list_saved_schedules`의 기존 키 관례를 따른다.
+
+> ⚠️ 첫 줄의 `shared_sync` 단언이 **이 검사의 전제**다. 공유 사본이 애초에 안 생기면 (a)는
+> "빈 값으로 통과한 검사"가 된다(`verifier.md` 검증 설계 원칙).
+
+## 8-c. collect_member_schedules — 그룹 일정도 내 busy-time
+```bash
+uv run python -X utf8 -c "
+import json, os, tempfile
+from dataclasses import replace
+from pathlib import Path
+_tmp = Path(tempfile.mkdtemp())
+os.environ['KANANA_EXTERNAL_DB_PATH'] = str(_tmp / 'external.sqlite3')
+from fixed.config import CONFIG
+import fixed.app_store as store_mod
+import student_parts.week03_build_nanas_logbook as w3
+import student_parts.week05_load_kanas_past_conversations as m
+m.CONFIG = replace(CONFIG, app_db_path=_tmp / 'app.sqlite3', external_db_path=_tmp / 'external.sqlite3')
+w3.CONFIG = m.CONFIG
+store_mod.AppSQLiteStore(_tmp / 'app.sqlite3').save_structured_request(
+    {'kind':'group_schedule','title':'팀 워크샵','date':'2026-07-09','start_time':'15:00','end_time':'16:00','members':['철수']})
+rows = json.loads(m.collect_member_schedules.invoke({'member_names':['철수'],'date_from':'2026-07-07','date_to':'2026-07-17'}))['rows']
+mine = [r for r in rows if r['title'] == '팀 워크샵' and r['member_name'] == '나']
+print('내 busy-time 그룹 일정 =', mine)
+assert len(mine) == 1, '내가 잡아둔 그룹 일정이 busy-time에서 빠짐 — kind 필터를 새로 걸면 여기서 실패한다'
+print('GROUP_BUSY_OK')
+" | grep -v "Processing request of type\|ListToolsRequest\|CallToolRequest\|server.py:"
+```
+확인 포인트: 앱 `schedules` 테이블은 모든 row가 `owner='me'`이므로(`fixed/app_store.py:92`·`:358`)
+`personal_schedule`과 `group_schedule`을 구분하지 않고 **모두 내 busy-time으로 본다**.
+`list_schedules`에 `kind='personal_schedule'`을 넣는 순간 내가 잡아둔 회의가 busy-time에서 사라지고,
+Week 6이 이미 일정이 있는 시각을 "가능"으로 제안하게 된다.
+
 ## 9. 안전규칙 — 중복 제거 + 대화 범위 격리
 ```bash
 uv run python -X utf8 -c "

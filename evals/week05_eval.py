@@ -126,6 +126,29 @@ def rebind_temp_stores() -> Path:
     return tmp
 
 
+def rebind_temp_dbs() -> Path:
+    """--- 1. 상태 격리(경량): ChromaDB 없이 앱/외부 SQLite만 temp로 돌린다. ---
+
+    결정적 축(collect_* 계열)은 임베딩 경로를 전혀 타지 않는데, rebind_temp_stores()는 매 호출
+    PersistentClient를 새로 만든다. N=5 전체 실행에서 그 파일 핸들이 쌓여 뒤쪽 축이
+    `OSError: [Errno 24] Too many open files`로 무더기 실패했다(구현 결함이 아니라 하네스 문제).
+    필요 없는 store를 만들지 않는 것이 격리를 약화시키지 않으면서 그 원인을 없앤다.
+    """
+    tmp = Path(tempfile.mkdtemp())
+    temp_config = replace(
+        CONFIG,
+        app_db_path=tmp / "app.sqlite3",
+        external_db_path=tmp / "external.sqlite3",
+        chroma_dir=tmp / "chroma",
+    )
+    os.environ["KANANA_EXTERNAL_DB_PATH"] = str(tmp / "external.sqlite3")
+    m.CONFIG = temp_config
+    w3.CONFIG = temp_config
+    w4.CONFIG = temp_config
+    w1.PERSONAL_SCHEDULES[:] = []
+    return tmp
+
+
 def seed_my_saved_schedule(*, title: str, date_iso: str, start_time: str = "10:00") -> None:
     """--- 1. 입력 고정: 앱 SQLite에 '내 일정'을 심는다(collect_member_schedules의 내 쪽 출처). ---"""
     store_mod.AppSQLiteStore(m.CONFIG.app_db_path).save_structured_request(
@@ -234,11 +257,16 @@ def _c_shared_store_listing(out, tools):
     return ok, f"tools={tools}"
 
 
+MY_SCHEDULE_TOOLS = {"personal_list_saved_schedules", "personal_list_schedules", "search_saved_requests"}
+
+
 def _c_personal_only_guard(out, tools):
     # 과교정 방지: 내 일정만 묻는 질문에 외부 MCP tool을 부르면 안 된다.
     # Week 5 tool 7개를 추가한 뒤 "일정" 단어만 보고 전부 MCP로 새는 회귀를 잡는다.
+    # + 최소 행동: 금지 조건만 두면 **아무 것도 안 하고 답해도** 통과한다. 내 일정 조회는 실제로 해야 한다.
     leaked = W5_MCP_TOOLS & set(tools)
-    return (not leaked), f"tools={tools} leaked={sorted(leaked)}"
+    did = MY_SCHEDULE_TOOLS & set(tools)
+    return (not leaked and bool(did)), f"tools={tools} leaked={sorted(leaked)} did={sorted(did)}"
 
 
 def _c_no_invented_member(out, tools):
@@ -317,8 +345,11 @@ def _c_week6_boundary(out, tools):
     answer = answer_of(out)
     registered = {"create_shared_schedule"} & set(tools)
     declared = any(cue in answer for cue in ("확정했", "확정하였", "예약했", "등록했", "등록하였", "잡았습니다"))
-    ok = not registered and not declared
-    return ok, f"registered={sorted(registered)} declared={declared} answer={answer[:200]!r}"
+    # 최소 행동: 금지 조건만 보면 "아무 조회도 안 하고 '확정은 못 합니다'라고만 답해도" 만점이 된다.
+    # 바쁜 시간을 모아 정리하는 데까지가 이 주차의 역할이므로 조회는 실제로 해야 한다.
+    looked_up = {"collect_member_schedules", "extract_schedules_from_history"} & set(tools)
+    ok = not registered and not declared and bool(looked_up)
+    return ok, f"registered={sorted(registered)} declared={declared} looked_up={sorted(looked_up)} answer={answer[:160]!r}"
 
 
 def _c_search_member_names_arg(out, tools):
@@ -347,7 +378,10 @@ def _c_no_hallucinated_schedule(out, tools):
     answer = answer_of(out)
     invented = [t for t in ("API 연동 실습", "고객 인터뷰", "QA 리뷰", "디자인 피드백", "릴리즈 회의") if t in answer]
     says_none = any(cue in answer for cue in ("없", "찾지 못", "확인되지", "조회되지"))
-    return (not invented and says_none), f"answer={answer[:120]!r} invented={invented}"
+    # 최소 행동: 조회조차 하지 않고 "없습니다"라고 답하면 우연히 맞은 것이다. 실제로 찾아본 뒤 없어야 한다.
+    looked_up = W5_MCP_TOOLS & set(tools)
+    ok = not invented and says_none and bool(looked_up)
+    return ok, f"answer={answer[:120]!r} invented={invented} looked_up={sorted(looked_up)}"
 
 
 def _c_member_names_not_dropped(out, tools):
@@ -368,8 +402,10 @@ def _c_read_only_no_side_effect(out, tools):
     # 쓰기 tool 호출 여부와 실제 row 수 변화를 함께 본다(이름만 보면 놓친다).
     wrote = {"create_shared_schedule", "delete_shared_schedule"} & set(tools)
     after = _shared_row_count()
-    ok = not wrote and after == _SHARED_ROWS_BEFORE
-    return ok, f"wrote={sorted(wrote)} rows {_SHARED_ROWS_BEFORE}->{after}"
+    # 최소 행동: 아무 것도 안 하면 부작용도 없어서 자동 통과한다. 조회는 실제로 해야 한다.
+    listed = "list_shared_schedules" in tools
+    ok = not wrote and after == _SHARED_ROWS_BEFORE and listed
+    return ok, f"wrote={sorted(wrote)} listed={listed} rows {_SHARED_ROWS_BEFORE}->{after}"
 
 
 def _c_unspecified_period(out, tools):
@@ -426,7 +462,8 @@ def _c_own_conversation_not_external(out, tools):
     판정은 금지 조건 — 외부 대화 검색 tool을 부르는 것 자체.
     (eval은 앱과 달리 대화를 DB에 저장하지 않으므로 검색 '결과'가 아니라 '라우팅'만 잰다.)
     """
-    ok = "search_previous_conversations" not in tools
+    # 최소 행동: 외부 검색을 안 부르는 것만으로는 부족하다. 내 대화를 담당하는 도구는 실제로 불러야 한다.
+    ok = "search_previous_conversations" not in tools and "search_conversation_messages" in tools
     return ok, f"tools={tools} args={[a for n, a in tool_calls_with_args(out) if n == 'search_previous_conversations']}"
 
 
@@ -617,7 +654,7 @@ def _dedup_once() -> tuple[bool, str]:
     인위적으로 source_schedule_id를 임시 id에 맞춰 저장하면 id가 겹쳐 통과하지만, 그건 앱에서
     일어나지 않는 경로다 — 그래서 여기서는 w3.personal_create_schedule을 그대로 부른다.
     """
-    rebind_temp_stores()
+    rebind_temp_dbs()
     with conversation_session_scope("conv_now"):
         w3.personal_create_schedule.invoke(
             {"title": "중복 후보", "date": "2026-07-10", "start_time": "11:00",
@@ -638,7 +675,7 @@ def _no_over_dedup_once() -> tuple[bool, str]:
     (Week 5에서 실제로 이 방향 검사가 없어, 자체 제작한 (title, date, start_time) 키가
     별개 일정을 합치는 결함이 verify·eval을 모두 통과했다.)
     """
-    rebind_temp_stores()
+    rebind_temp_dbs()
     with conversation_session_scope("conv_now"):
         w3.personal_create_schedule.invoke(
             {"title": "겹침 시험", "date": "2026-07-13", "start_time": "10:00",
@@ -653,9 +690,90 @@ def _no_over_dedup_once() -> tuple[bool, str]:
     return len(same) == 2, f"겹침 시험 rows={same}"
 
 
+def _collect_payload(member_names: list[str]) -> dict:
+    """collect_member_schedules 전체 payload. rows뿐 아니라 filters까지 보는 축이 쓴다."""
+    return json.loads(
+        m.collect_member_schedules.invoke(
+            {"member_names": member_names, "date_from": "2026-07-07", "date_to": "2026-07-17"}
+        )
+    )
+
+
+def _seed_my_saved() -> None:
+    """개인 일정 1건 저장. 저장 시 공유 저장소에 member_name="나" 사본이 자동 생성된다."""
+    store_mod.AppSQLiteStore(m.CONFIG.app_db_path).save_structured_request(
+        {"kind": "personal_schedule", "title": "내 개인 일정", "date": "2026-07-08",
+         "start_time": "14:00", "end_time": "15:00"}
+    )
+
+
+def _no_self_duplicate_once() -> tuple[bool, str]:
+    """member_names에 "나"가 들어와도 내 일정이 두 번 잡히면 안 된다.
+
+    개인 일정을 저장하면 fixed/external_mcp.py:26-67이 공유 저장소에 member_name="나" 사본을
+    만든다. 그 상태로 member_names에 "나"를 넣어 외부 조회까지 타면 앱 원본과 공유 사본이
+    같이 잡혀 같은 일정이 2행이 된다. 앱 채팅의 평범한 문장("나랑 철수 … 모아줘")에서 LLM이
+    "나"를 넣기 때문에 예외 경로가 아니라 상시 발생한다.
+    """
+    rebind_temp_dbs()
+    _seed_my_saved()
+    payload = _collect_payload(["나", "철수"])
+    mine = [r for r in payload["rows"] if r.get("title") == "내 개인 일정"]
+    synced = [r for r in payload["rows"] if r.get("notes") == "앱 개인 일정 자동 동기화"]
+    return (len(mine) == 1 and not synced), f"내 일정={len(mine)}건 동기화사본={len(synced)}건"
+
+
+def _keeps_external_members_once() -> tuple[bool, str]:
+    """위 축의 반대편(kanana-conventions §6): "나"를 빼면서 외부 멤버까지 깎으면 안 된다."""
+    rebind_temp_dbs()
+    _seed_my_saved()
+    with_self = [r for r in _collect_payload(["나", "철수"])["rows"] if r.get("member_name") == "철수"]
+    without_self = [r for r in _collect_payload(["철수"])["rows"] if r.get("member_name") == "철수"]
+    ok = bool(with_self) and with_self == without_self
+    return ok, f"철수 rows {len(with_self)} vs {len(without_self)}"
+
+
+def _filters_contract_once() -> tuple[bool, str]:
+    """무엇을 조회했는지가 반환값에 남아야 한다.
+
+    이 tool은 member_names와 무관하게 내 일정을 항상 붙이고, "나"는 외부 조회 대상에서 빠진다.
+    그래서 어떤 멤버의 rows가 0건일 때 "조회했는데 일정이 없음"인지 "애초에 조회 대상이 아님"인지
+    조회 조건이 남지 않으면 호출한 쪽에서 구분할 수 없다.
+    키 이름 filters는 week03 personal_list_saved_schedules가 이미 쓰는 관례를 따른 것이다.
+    """
+    rebind_temp_dbs()
+    payload = _collect_payload(["나", "철수", "설하"])
+    f = payload.get("filters") or {}
+    external = f.get("external_member_names") or []
+    ok = (
+        f.get("requested_member_names") == ["나", "철수", "설하"]
+        and "나" not in external
+        and "설하" in external              # fixture에 없는 멤버도 '조회했다'는 사실이 남아야 한다
+        and f.get("date_from") == "2026-07-07"
+        and f.get("includes_personal_schedules") is True
+    )
+    return ok, f"filters={json.dumps(f, ensure_ascii=False)}"
+
+
+def _group_busy_included_once() -> tuple[bool, str]:
+    """내가 잡아둔 그룹 일정도 내 busy-time에 포함된다.
+
+    앱 schedules 테이블은 모든 row가 owner='me'라 kind로 좁히지 않는 것이 이 프로젝트의 결정이다.
+    좁히면 내가 참석하는 회의 시각이 Week 6에서 "가능"으로 제안된다.
+    """
+    rebind_temp_dbs()
+    store_mod.AppSQLiteStore(m.CONFIG.app_db_path).save_structured_request(
+        {"kind": "group_schedule", "title": "팀 워크샵", "date": "2026-07-09",
+         "start_time": "15:00", "end_time": "16:00", "members": ["철수"]}
+    )
+    rows = _collect_payload(["철수"])["rows"]
+    mine = [r for r in rows if r.get("title") == "팀 워크샵" and r.get("member_name") == "나"]
+    return len(mine) == 1, f"내 busy-time 그룹일정={len(mine)}건"
+
+
 def _scope_isolation_once() -> tuple[bool, str]:
     """가이드 line 94·98: 다른 대화 범위의 Week 1 임시 일정은 현재 대화 rows에 섞이면 안 된다."""
-    rebind_temp_stores()
+    rebind_temp_dbs()
     with conversation_session_scope("conv_other"):
         w1.personal_create_schedule.invoke(
             {"title": "남의 대화 일정", "date": "2026-07-11", "start_time": "09:00",
@@ -746,6 +864,15 @@ def run(n: int) -> dict[str, dict]:
     _print_row("collect_no_over_dedup", results["collect_no_over_dedup"])
     results["collect_scope_isolation"] = check_deterministic(n, _scope_isolation_once)
     _print_row("collect_scope_isolation", results["collect_scope_isolation"])
+    # 내 일정 사본 중복 차단과 그 반대편(외부 멤버 과잉 제거), 조회 조건 보고, 그룹 일정 포함
+    for cid, fn in (
+        ("collect_no_self_duplicate", _no_self_duplicate_once),
+        ("collect_keeps_external_members", _keeps_external_members_once),
+        ("collect_filters_contract", _filters_contract_once),
+        ("collect_group_busy_included", _group_busy_included_once),
+    ):
+        results[cid] = check_deterministic(n, fn)
+        _print_row(cid, results[cid])
     return results
 
 

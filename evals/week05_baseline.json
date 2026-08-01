@@ -176,6 +176,34 @@
       "critical": true,
       "ambiguous": false,
       "notes": []
+    },
+    "collect_no_self_duplicate": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_keeps_external_members": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_filters_contract": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_group_busy_included": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
     }
   }
 }
