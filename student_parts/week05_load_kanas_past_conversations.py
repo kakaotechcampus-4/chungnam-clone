@@ -196,7 +196,9 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
 
     current_scope = current_session_scope()
 
-    sqlite_rows = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=200)
+    # group_schedule은 팀원들의 일정이기도 하므로 MCP를 통해 각 멤버 행으로 따로 처리
+    # "나"의 바쁜 시간 후보는 개인 일정(personal_schedule)만 사용
+    sqlite_rows = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=200, kind="personal_schedule")
     sqlite_ids = {str(row.get("schedule_id") or "") for row in sqlite_rows}
 
     tmp_schedules = [
@@ -221,7 +223,10 @@ def personal_list_saved_schedules(
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> str:
-    """앱 DB에 저장된 내 일정을 조회합니다. kind 미지정 시 개인·그룹 일정 모두 반환됩니다."""
+    """앱 DB에 저장된 내 일정을 조회합니다.
+
+    kind를 생략하면 personal_schedule(개인 일정)과 group_schedule(그룹·팀 일정)을 모두 반환합니다.
+    특정 종류만 보고 싶을 때는 kind="personal_schedule" 또는 kind="group_schedule"을 명시하세요."""
 
     schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
         limit=limit, kind=kind, date_from=date_from, date_to=date_to
@@ -317,7 +322,9 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    normalized_names = normalize_external_member_names(member_names)
+    # "나"는 personal_schedules 경로에서 이미 처리되므로 외부 MCP 쿼리 대상에서 제외
+    external_names = [n for n in member_names if n != "나"]
+    normalized_names = normalize_external_member_names(external_names)
     norm_date_from, norm_date_to = normalize_external_schedule_date_bounds(member_names, date_from, date_to)
 
     my_rows: list[dict[str, Any]] = []
@@ -351,7 +358,18 @@ def _collect_member_schedules(
             pass
 
     all_rows = my_rows + external_rows
-    return {"rows": all_rows, "schedule_summary": external_schedule_summary(all_rows)}
+    queried_members = ["나"] + external_names  # 실제 조회 대상 (나 + 외부 멤버)
+    found_members = list({r.get("member_name") for r in all_rows if r.get("member_name")})
+    return {
+        "rows": all_rows,
+        "schedule_summary": external_schedule_summary(all_rows),
+        "query_params": {
+            "member_names": queried_members,
+            "date_from": norm_date_from,
+            "date_to": norm_date_to,
+        },
+        "members_with_no_schedule": [m for m in queried_members if m not in found_members],
+    }
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
@@ -421,7 +439,11 @@ def delete_shared_schedule(
     schedule_id: str | None = None,
     source_conversation_id: str | None = None,
 ) -> str:
-    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
+    """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다.
+
+    반드시 list_shared_schedules로 삭제 대상을 먼저 확인한 뒤,
+    사용자에게 제목·날짜를 보여주고 명시적 삭제 확인을 받은 후에만 호출하세요.
+    schedule_id 또는 source_conversation_id는 list_shared_schedules 결과의 해당 필드에서 가져옵니다."""
 
     args: dict[str, Any] = {}
     if schedule_id is not None:
@@ -503,6 +525,11 @@ def week05_prompt_parts() -> list[str]:
         """[Week 5 외부 멤버 일정 조회 규칙 — 반드시 준수]
 아래 tool은 외부 팀원 일정 조회 전용입니다. 나 혼자의 일정 저장/조회는 기존 Week 3 규칙을 따르세요.
 
+[내 일정 조회 보충 규칙]
+"내 일정 보여줘" 등 나의 일정을 조회할 때는 Week 3의 personal_list_saved_schedules를 사용합니다.
+kind를 생략하면 개인 일정(personal_schedule)과 그룹·팀 일정(group_schedule)이 모두 반환됩니다.
+특정 종류만 보고 싶은 경우에만 kind를 명시하세요 (예: kind="personal_schedule").
+
 1. 팀원 과거 대화 검색 ("~의 대화 찾아줘", "~가 뭐라고 했는지", "이전 대화 검색")
    → search_previous_conversations(query=핵심어, member_names=[...])
    ※ 반환 JSON top-level 키: "rows"
@@ -525,7 +552,15 @@ def week05_prompt_parts() -> list[str]:
    ※ 반환 JSON top-level 키: "rows", "schedule_summary"
 
 공유 일정 직접 등록/삭제가 필요한 경우:
-   → create_shared_schedule(...) / delete_shared_schedule(...)""",
+   → create_shared_schedule(...) / delete_shared_schedule(...)
+
+[공유 일정 삭제 안전 규칙 — 반드시 준수]
+delete_shared_schedule은 공유 저장소의 데이터를 영구 삭제합니다. 아래 순서를 반드시 지키세요.
+① list_shared_schedules를 먼저 호출해 삭제 후보 목록을 가져옵니다.
+② 사용자에게 삭제 대상의 제목·날짜·멤버를 보여주고 "삭제할까요?"로 명시적 확인을 받습니다.
+③ 사용자가 확인한 경우에만 delete_shared_schedule을 호출합니다.
+   schedule_id 또는 source_conversation_id는 ①의 결과에서 가져오며, 직접 추측하지 않습니다.
+※ 사용자 확인 없이 delete_shared_schedule을 선제 호출해서는 안 됩니다.""",
     ]
 
 
