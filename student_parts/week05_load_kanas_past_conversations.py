@@ -282,6 +282,24 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _filter_schedules_by_date_range(
+    schedules: list[dict[str, Any]], date_from: str, date_to: str
+) -> list[dict[str, Any]]:
+    """일정 목록을 날짜 범위(date_from ~ date_to) 내 항목으로 필터링합니다."""
+
+    filtered: list[dict[str, Any]] = []
+    for schedule in schedules:
+        date = schedule.get("date")
+        if not date:
+            continue
+        if date_from and date < date_from:
+            continue
+        if date_to and date > date_to:
+            continue
+        filtered.append(schedule)
+    return filtered
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -309,14 +327,7 @@ def _collect_member_schedules(
     external_rows = external_payload.get("rows", [])
 
     my_rows: list[dict[str, Any]] = []
-    for schedule in personal_schedules:
-        date = schedule.get("date")
-        if not date:
-            continue
-        if normalized_date_from and date < normalized_date_from:
-            continue
-        if normalized_date_to and date > normalized_date_to:
-            continue
+    for schedule in _filter_schedules_by_date_range(personal_schedules, normalized_date_from, normalized_date_to):
         request = _structured_request_from_schedule_row(schedule)
         my_rows.append(
             {
@@ -399,10 +410,16 @@ def list_shared_schedules(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다."""
 
+    # member_names=None("필터 없음")과 정규화 후 빈 리스트를 구분해야 기본 공유 일정 fallback이 깨지지 않습니다.
+    normalized_members = normalize_external_member_names(member_names) if member_names is not None else None
+    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
+        member_names, date_from, date_to
+    )
+
     args = {
-        "member_names": member_names,
-        "date_from": date_from,
-        "date_to": date_to,
+        "member_names": normalized_members,
+        "date_from": normalized_date_from or None,
+        "date_to": normalized_date_to or None,
         "source_conversation_id": source_conversation_id,
         "limit": limit,
     }
@@ -455,6 +472,9 @@ def week05_prompt_parts() -> list[str]:
             "팀원들의 일정이나 바쁜 시간을 물어보면 extract_schedules_from_history를 써. "
             "공유 일정 저장소에 등록된 일정 자체를 확인할 때는 list_shared_schedules를 써. "
             "나와 여러 팀원의 일정을 한 번에 모아 비교해야 하면 collect_member_schedules를 써. "
+            "'내 일정', '내가 추가한 참고자료' 등 사용자 본인에 대한 질문은 오직 Week 1~4 개인 도구만 써. "
+            "일정 조율이나 멤버별 일정 비교 시에는 collect_member_schedules 하나만 호출하면 내 일정과 외부 일정이 모두 수집되니, "
+            "personal_list_saved_schedules나 search_saved_requests 같은 Week 3 개인 일정 도구를 이중으로 호출하지 마. "
             "assistant가 예전에 한 말만 그대로 믿지 말고, 항상 위 tool 결과로 다시 확인한 뒤 답해."
         ),
     ]
