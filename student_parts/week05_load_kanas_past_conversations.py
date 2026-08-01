@@ -313,10 +313,15 @@ def _collect_member_schedules(
     # 1) 내 일정을 외부 멤버 row와 같은 구조로 변환한다.
     for schedule in personal_schedules:
         request = _structured_request_from_schedule_row(schedule)
-        if request.date and normalized_from and request.date < normalized_from:
+        
+        # 날짜 범위 조회이므로 date가 없는 일정은 범위를 판정할 수 없어 제외한다.
+        if not request.date:
             continue
-        if request.date and normalized_to and request.date > normalized_to:
+        if normalized_from and request.date < normalized_from:
             continue
+        if normalized_to and request.date > normalized_to:
+            continue
+        
         rows.append(
             {
                 "member_name": PERSONAL_SHARED_MEMBER_NAME,
