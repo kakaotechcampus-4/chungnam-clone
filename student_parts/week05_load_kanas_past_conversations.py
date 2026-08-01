@@ -183,15 +183,10 @@ load_langchain_mcp_tools = load_local_mcp_tools
 load_langchain_mcp_tools_sync = load_local_mcp_tools_sync
 
 
-#   - [메인] _schedule_scope(schedule)
-#     Week 1 임시 일정이 어느 대화 범위에 속하는지 읽습니다. session_id가 없으면 기본 scope로 처리합니다.
 def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-#   - [메인] _personal_schedules_for_current_scope()
-#     Week 3 이후 SQLite에 저장된 내 일정과 현재 대화에만 남아 있는 Week 1 임시 일정을 합칩니다.
-#     이미 SQLite에 저장된 일정과 임시 일정이 중복되지 않도록 schedule_id/id를 기준으로 한 번 걸러냅니다.
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
@@ -288,9 +283,6 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
-#   - [메인] _collect_member_schedules(...)
-#     내 일정과 외부 멤버 일정을 같은 member_name/title/date/start_time/end_time/notes row 구조로 합칩니다.
-#     외부 멤버 이름과 날짜 범위는 fixed/external_people_store.py helper로 정규화합니다. ??? 뭔소리야 이게 저 함수들이 뭐 이상한 문자열도 멀쩡한 날짜랑 이룸으로 바꿔준다는건가
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -347,10 +339,6 @@ def extract_schedules_from_history(member_names: list[str], date_from: str, date
     return call_mcp_tool_sync(tool_name='extract_schedules_from_history', args=args)
 
 
-#   1. create_shared_schedule / delete_shared_schedule
-#      - 각각 call_mcp_tool_sync("create_shared_schedule" / "delete_shared_schedule", args)를 호출합니다.
-#      - 공유 일정 저장소 row를 생성/삭제할 때 MCP tool 결과를 그대로 전달합니다.
-#      - schedule_id 또는 source_conversation_id를 보존해야 나중에 수정/삭제 동기화가 가능합니다.
 @tool(args_schema=CreateSharedScheduleInput)
 def create_shared_schedule(
     member_name: str,
@@ -381,8 +369,6 @@ def delete_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
 
-    # TODO: call_mcp_tool_sync("delete_shared_schedule", args)로 공유 일정을 삭제하세요.
-    ...
     args = { 'schedule_id': schedule_id, 'source_conversation_id': source_conversation_id }
     return call_mcp_tool_sync(tool_name='delete_shared_schedule', args=args)
 
@@ -443,7 +429,6 @@ def week05_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
-        # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
         (
             f'오늘은 {current_app_date_iso()}이며 상대 날짜는 이 날짜를 기준으로 해석한다.'
         ),
