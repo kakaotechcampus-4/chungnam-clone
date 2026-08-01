@@ -324,16 +324,24 @@ def _collect_member_schedules(
         )
 
     external_names = [name for name in normalized_names if name != "나"]
+    external_lookup: dict[str, Any] = {"ok": True}
     if external_names:
-        raw = call_mcp_tool_sync(
-            "extract_schedules_from_history",
-            {
-                "member_names": external_names,
-                "date_from": normalized_from,
-                "date_to": normalized_to,
-            },
-        )
-        rows.extend(json.loads(raw).get("rows", []))
+        try:
+            raw = call_mcp_tool_sync(
+                "extract_schedules_from_history",
+                {
+                    "member_names": external_names,
+                    "date_from": normalized_from,
+                    "date_to": normalized_to,
+                },
+            )
+            rows.extend(json.loads(raw).get("rows", []))
+        except Exception as exc:
+            external_lookup = {
+                "ok": False,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
 
     return {
         "rows": rows,
@@ -341,6 +349,7 @@ def _collect_member_schedules(
         "queried_members": normalized_names,
         "date_from": normalized_from,
         "date_to": normalized_to,
+        "external_lookup": external_lookup,
     }
 
 
@@ -487,6 +496,9 @@ def week05_prompt_parts() -> list[str]:
         "'다음 주', '이번 주' 같은 상대적 기간 표현은 현재 날짜를 기준으로 "
         "date_from/date_to를 YYYY-MM-DD 범위로 바꿔서 넘긴다. 기간이 명시되지 않으면 "
         "하루가 아니라 앞뒤로 여유 있는 범위를 잡는다.",
+        "collect_member_schedules 결과의 external_lookup.ok가 false이면, 해당 외부 멤버의 "
+        "일정을 '없음'이나 '찾지 못함'이라고 하지 않고 '조회에 실패해 확인할 수 없음'이라고 "
+        "명확히 알린다.",
     ]
 
 
