@@ -78,6 +78,22 @@ def delete_saved_ids(ids: list[str]) -> None:
         conn.execute(f"DELETE FROM structured_requests WHERE request_id IN ({marks})", tuple(ids))
 
 
+@pytest.fixture(scope="module", autouse=True)
+def tmp_external_db(tmp_path_factory):
+    """저장 tool이 공유 일정 저장소에 자동 동기화하는 row를 임시 DB로 돌린다.
+
+    앱 row를 raw SQL로 지우면 동기화 해제 훅이 돌지 않아 공유 저장소에 미러 row가 그대로 남는다.
+    남은 row는 이후 실제 대화의 조회 결과에 섞여 답변을 오염시키므로, 테스트는 임시 파일에 쓰고 버린다.
+    mcp_client가 호출 시점에 os.environ을 읽으므로 agent를 먼저 만들어도 적용된다.
+    """
+
+    path = tmp_path_factory.mktemp("week04_e2e_external") / "external_people.sqlite3"
+    patch = pytest.MonkeyPatch()
+    patch.setenv("KANANA_EXTERNAL_DB_PATH", str(path))
+    yield path
+    patch.undo()
+
+
 @pytest.fixture()
 def cleanup_saved_ids():
     """테스트가 만든 row만 id로 정리한다.
