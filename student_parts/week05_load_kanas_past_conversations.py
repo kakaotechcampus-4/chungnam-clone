@@ -368,6 +368,16 @@ def _collect_member_schedules(
             }
         )
 
+    # 내 일정과 외부 일정이 출처 순으로 붙어 있어 시간순이 아니다. 같은 시간대 충돌을
+    # LLM 이 바로 읽을 수 있도록 (날짜, 시작 시각, 이름) 기준으로 정렬한다.
+    rows.sort(
+        key=lambda row: (
+            row.get("date") or "",
+            row.get("start_time") or "",
+            row.get("member_name") or "",
+        )
+    )
+
     result = {
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
