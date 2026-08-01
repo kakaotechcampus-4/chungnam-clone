@@ -313,15 +313,19 @@ def _collect_member_schedules(
 
     ]
 
+
     # 외부 멤버 일정 rows
-    ext_result = call_mcp_tool_sync(
-        "extract_schedules_from_history",
-        {"member_names": normalized_names, "date_from": norm_from, "date_to": norm_to},
-    )
-    try:
-        ext_data = json.loads(ext_result) if isinstance(ext_result, str) else ext_result
-        ext_rows = ext_data.get("rows", []) if isinstance(ext_data, dict) else []
-    except Exception:
+    if normalized_names:
+        ext_result = call_mcp_tool_sync(
+            "extract_schedules_from_history",
+            {"member_names": normalized_names, "date_from": norm_from, "date_to": norm_to},
+        )
+        try:
+            ext_data = json.loads(ext_result) if isinstance(ext_result, str) else ext_result
+            ext_rows = ext_data.get("rows", []) if isinstance(ext_data, dict) else []
+        except Exception:
+            ext_rows = []
+    else:
         ext_rows = []
 
     all_rows = my_rows + ext_rows
@@ -454,6 +458,7 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
     # TODO: 내 일정과 외부 멤버 busy-time rows를 모아 JSON 문자열로 반환하세요.
+    
     personal = _personal_schedules_for_current_scope()
     result = _collect_member_schedules(
         member_names=member_names,
