@@ -187,17 +187,33 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
+def _personal_schedules_for_current_scope(
+    *,
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
+    """SQLite 저장 일정과 현재 대화의 임시 일정 중, 주어진 날짜 범위에 속하는 것만 group 조율 후보로 사용합니다."""
 
-    saved_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=200)
+    saved_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
+        date_from=date_from, date_to=date_to, limit=100
+    )
     saved_ids = {row.get("schedule_id") for row in saved_schedules}
+
+    def _in_range(schedule: dict[str, Any]) -> bool:
+        date = schedule.get("date") or ""
+        if date_from and date < date_from:
+            return False
+        if date_to and date > date_to:
+            return False
+        return True
 
     current_scope = current_session_scope()
     temp_schedules = [
         schedule
         for schedule in PERSONAL_SCHEDULES
-        if _schedule_scope(schedule) == current_scope and schedule.get("id") not in saved_ids
+        if _schedule_scope(schedule) == current_scope
+        and schedule.get("id") not in saved_ids
+        and _in_range(schedule)
     ]
 
     return [*saved_schedules, *temp_schedules]
@@ -306,7 +322,8 @@ def _collect_member_schedules(
             }
         )
 
-    normalized_names = normalize_external_member_names(member_names)
+    external_member_names = [name for name in member_names if name != PERSONAL_SHARED_MEMBER_NAME]
+    normalized_names = normalize_external_member_names(external_member_names)
     normalized_from, normalized_to = normalize_external_schedule_date_bounds(member_names, date_from, date_to)
     external_result = json.loads(
         call_mcp_tool_sync(
@@ -404,7 +421,7 @@ def list_shared_schedules(
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
-    personal_schedules = _personal_schedules_for_current_scope()
+    personal_schedules = _personal_schedules_for_current_scope(date_from=date_from, date_to=date_to)
     result = _collect_member_schedules(
         member_names=member_names,
         date_from=date_from,
