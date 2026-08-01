@@ -191,9 +191,8 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
 
     # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
     # 영구 저장 되는 정보
-    # 
     sqlite_saved = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=100)
-    saved_ids = {row["schedule_id"] for row in sqlite_saved}
+    saved_ids = {row.get("schedule_id") for row in sqlite_saved}
     # 현재 내 대화방 정보
     current_row = [s for s in PERSONAL_SCHEDULES if _schedule_scope(s) == current_session_scope() and s["id"] not in saved_ids]
     return sqlite_saved + current_row
@@ -209,9 +208,14 @@ def json_payload(payload: dict[str, Any]) -> str:
 class SearchPreviousConversationsInput(BaseModel):
     """외부 이전 대화 검색 입력입니다."""
 
-    query: str
-    member_names: list[str] | None = None
-    limit: int = Field(default=5, ge=1, le=50)
+    query: str = Field(
+    description="이전 대화를 검색할 때 사용할 핵심 검색어를 넣으세요. "
+                "이 검색은 문장을 그대로 부분 문자열로 찾기 때문에, "
+                "여러 주제를 한 번에 합쳐서 넣으면 안 됩니다 (예: 'A B'는 실패할 수 있음). "
+                "한 번에 하나의 핵심 키워드만 넣고, 여러 주제를 찾고 싶으면 tool을 여러 번 나눠서 호출하세요.",
+    )
+    member_names: list[str] | None = Field(default=None, description="질문에 특정 사람의 이름이 있으면 그 사람의 이름을 넣어서 검색하세요. 이름이 없으면 비워두고 전체 멤버를 대상으로 하고 검색하세요.")
+    limit: int = Field(default=5, ge=1, le=50, description="검색 할 최대 대화 수를 넣으세요.")
 
 
 class LoadConversationMessagesInput(BaseModel):
@@ -300,6 +304,7 @@ def _collect_member_schedules(
             "notes": None,
         }
         for row in personal_schedules
+        if row.get("date") and date_from <= row.get("date") <= date_to
     ]
 
     # 2단계 - external_rows를 통해 외부 멤버 일정 가져오기
@@ -311,6 +316,7 @@ def _collect_member_schedules(
     return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
 
 
+@tool(args_schema=SearchPreviousConversationsInput)
 def search_previous_conversations(
     query: str,
     member_names: list[str] | None = None,
@@ -355,7 +361,9 @@ def create_shared_schedule(
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
     # TODO: call_mcp_tool_sync("create_shared_schedule", args)로 공유 일정 row를 생성/갱신하세요.
-    ...
+    args = {"member_name": member_name, "title": title, "date": date, "start_time": start_time, "end_time": end_time,
+            "notes": notes, "source_conversation_id": source_conversation_id, "schedule_id": schedule_id}
+    return call_mcp_tool_sync("create_shared_schedule", args)
 
 
 @tool(args_schema=DeleteSharedScheduleInput)
@@ -366,7 +374,8 @@ def delete_shared_schedule(
     """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
 
     # TODO: call_mcp_tool_sync("delete_shared_schedule", args)로 공유 일정을 삭제하세요.
-    ...
+    args = {"schedule_id": schedule_id, "source_conversation_id": source_conversation_id}
+    return call_mcp_tool_sync("delete_shared_schedule", args)
 
 @tool(args_schema=ListSharedSchedulesInput)
 def list_shared_schedules(
@@ -434,10 +443,24 @@ def week05_prompt_parts() -> list[str]:
         "특정 멤버의 과거 대화를 찾을 땐 search_previous_conversations를 먼저 호출한다.",
         "conversation_id를 실제로 알고 있을 때만 load_conversation_messages를 호출한다.",
         "멤버들의 특정 기간 busy-time은 extract_schedules_from_history로 조회한다.",
-        "공유 일정 저장소 자체를 확인할 땐 list_shared_schedules를 호출한다.",
+        "공유 일정 저장소 자체를 확인할 땐 list_shared_schedules를 호출하여 전체 일정을 조회하게 한다",
         "여러 사람의 일정을 한 번에 모아 비교할 땐 collect_member_schedules를 호출한다.",
         "conversation_id는 검색으로 찾은 값만 쓰고 임의로 만들지 않는다.",
         "외부 멤버의 일정을 추측하지 말고, 실제 tool 조회 결과에 근거해 답한다.",
+        "답할 때 취소선 문법인 물결 두 개(~~)를 사용하지 않는다.",
+        "'내 일정', '내가 추가한 참고자료' 등 사용자 본인에 대한 질문은 Week 1~4 개인 도구를 사용한다",
+        "collect_member_schedules를 호출하면 내 일정과 외부 일정이 모두 수집된다",
+        "사용자가 특정 사람이나 날짜를 언급하지 않고 '전체'/'모든' 공유 일정을 보여달라고 하면, "
+        "이전 대화에서 등록/조회했던 특정 멤버나 날짜 필터를 재사용하지 말고, "
+        "member_names는 비운 채로 date_from/date_to를 아주 넓은 범위(예: 2020-01-01~2030-12-31)로 지정해서 "
+        "list_shared_schedules를 다시 호출한다. 날짜까지 비우면 7월 예시 데이터만 나오니 주의한다.",
+        "delete_shared_schedule은 schedule_id 또는 source_conversation_id로만 삭제할 수 있고, "
+        "이름이나 제목만으로는 삭제할 수 없다. 그러므로 이름/제목으로 삭제 요청을 받으면, "
+        "먼저 list_shared_schedules로 조회해서 해당 일정의 schedule_id를 확인한 뒤, "
+        "그 schedule_id로 delete_shared_schedule을 호출한다.",
+        "tool 결과에 여러 사람의 일정이 들어있으면, 사용자가 특정 사람만 콕 집어 묻지 않은 이상 "
+        "직전 대화에서 언급된 사람으로 답변을 임의로 좁히지 말고, 조회된 전체 결과를 답변에 반영한다.",
+
     ]
 
 
