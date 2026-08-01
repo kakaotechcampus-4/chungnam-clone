@@ -15,7 +15,11 @@ from fixed.app_store import AppSQLiteStore
 from fixed.reference_store import PersonalReferenceStore
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import join_system_prompt
-from student_parts.week03_build_nanas_logbook import week03_prompt_parts, week03_tools
+from student_parts.week03_build_nanas_logbook import (
+    WEEK03_PERSONAL_SCHEDULE_LOOKUP_PROMPT,
+    week03_prompt_parts,
+    week03_tools,
+)
 
 
 REFERENCE_STORE = PersonalReferenceStore(CONFIG.chroma_dir)
@@ -484,9 +488,15 @@ def week04_tools() -> list[Any]:
 
 
 def week04_system_prompt() -> str:
-    """4주차 단일 agent가 따르는 시스템 프롬프트입니다."""
+    """4주차 단일 agent가 따르는 시스템 프롬프트입니다.
 
-    return join_system_prompt(week04_prompt_parts())
+    WEEK03_PERSONAL_SCHEDULE_LOOKUP_PROMPT는 week04_prompt_parts()(누적 체인)이 아니라 여기서
+    직접 붙인다. Week 4는 아직 collect_member_schedules가 없어 이 "내 일정 조회" 지침이 그대로
+    필요하지만, Week 5부터는 collect_member_schedules가 같은 역할을 대신하므로 그쪽으로 새지
+    않게 한다.
+    """
+
+    return join_system_prompt([*week04_prompt_parts(), WEEK03_PERSONAL_SCHEDULE_LOOKUP_PROMPT])
 
 
 def week04_prompt_parts() -> list[str]:
@@ -503,7 +513,7 @@ def week04_prompt_parts() -> list[str]:
   personal_list_saved_schedules가 처리하는 영역이므로 혼동하지 않는다.
 - add_personal_reference: "이거 기억해 둬", "내 선호는 이거야"처럼 일정/할 일/알림이 아닌 자유
   형식 메모를 새로 등록해 달라는 요청에 호출한다. 구조화된 일정/할 일/알림 저장은 여전히 Week 3의
-  save_structured_request를 사용한다.
+  저장 도구(personal_create_schedule/save_structured_request)를 사용한다.
 - search_personal_references/search_saved_requests 결과가 비어 있으면 근거 없이 답을 지어내지
   않고, 참고자료나 저장 기록이 없다고 답한다. 또한 이전 프롬프트에 의존하지 않고, 툴을 실행하여서 확인한다.""",
     ]
