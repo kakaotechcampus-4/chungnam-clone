@@ -186,12 +186,18 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
+def _personal_schedules_for_current_scope(
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
     # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
     store = AppSQLiteStore(CONFIG.app_db_path)
-    saved_schedules = store.list_schedules()
+    saved_schedules = store.list_schedules(
+        date_from=date_from,
+        date_to=date_to,
+    )
 
     saved_ids = {row["schedule_id"] for row in saved_schedules}
 
@@ -417,7 +423,9 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
     # TODO: 내 일정과 외부 멤버 busy-time rows를 모아 JSON 문자열로 반환하세요.
-    personal_schedules = _personal_schedules_for_current_scope()
+    personal_schedules = _personal_schedules_for_current_scope(
+        date_from=date_from, date_to=date_to
+    )
     result = _collect_member_schedules(
         member_names=member_names,
         date_from=date_from,
@@ -455,12 +463,13 @@ def week05_system_prompt() -> str:
 
 def week05_prompt_parts() -> list[str]:
     """1~5주차 system prompt 조각을 누적합니다."""
-
+            
     return [
         *week04_prompt_parts(),
         # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
         (
-            "맴버 이름이 문장에 있으면 이는 외부 맴버에 대한 요청이다."
+            "<instructions>\n"
+            "멤버 이름이 문장에 있으면 이는 외부 멤버에 대한 요청이다."
             "이럴 때는 personal_list_saved_schedules, search_saved_requests, list_saved_requests, "
             "get_saved_request처럼 '나'의 개인 저장 기록을 다루는 tool을 사용하지 않는다. "
             "반드시 search_previous_conversations, load_conversation_messages, "
@@ -482,7 +491,50 @@ def week05_prompt_parts() -> list[str]:
 
             "외부 멤버의 대화와 일정은 앱 내부 DB와는 별개인 외부 MCP 저장소에 있다. "
             "이 정보를 추측하지 말고 반드시 tool을 호출해 확인한 뒤 답하라. "
-            "tool 결과가 비어 있으면 없다고 답하고 지어내지 않는다."
+            "tool 결과가 비어 있으면 없다고 답하고 지어내지 않는다.\n"
+            "</instructions>\n\n"
+            
+            "<examples>\n"
+            
+            "<example>\n"
+            "<user_query>지난주 철수랑 나눈 대화에서 철수 일정 뽑아줘</user_query>\n"
+            "<reasoning>멤버 이름(\"철수\")과 날짜 범위(\"지난주\")를 모두 문장에서 알 수 있음. "
+            "\"나\"는 조율 대상이 아니라 화자일 뿐이므로 collect_member_schedules 대상 아님. "
+            "따라서 search_previous_conversations를 거치지 않고 바로 추출한다.</reasoning>\n"
+            "<tool_call>extract_schedules_from_history(member_names=[\"철수\"], date_from=\"...\", date_to=\"...\")</tool_call>\n"
+            "</example>\n"
+
+            "<example>\n"
+            "<user_query>철수 일정 좀 알려줘</user_query>\n"
+            "<reasoning>멤버 이름(\"철수\")은 있지만 날짜 범위가 없음. "
+            "extract_schedules_from_history를 바로 호출하기엔 날짜 범위가 없으므로, "
+            "먼저 관련 대화를 찾아 날짜 범위를 확인해야 한다.</reasoning>\n"
+            "<tool_call>search_previous_conversations(query=\"철수 일정\", member_names=[\"철수\"])</tool_call>\n"
+            "</example>\n"
+
+            "<example>\n"
+            "<user_query>(위 검색 결과가 비어 있거나, 사용자가 \"그때 나눈 얘기 그대로 보여줘\"라고 요청)</user_query>\n"
+            "<reasoning>search_previous_conversations만으로 답하기 부족하거나 원문 요청이 있으므로, "
+            "찾은 conversation_id로 원문을 이어서 조회한다.</reasoning>\n"
+            "<tool_call>load_conversation_messages(conversation_id=\"...\")</tool_call>\n"
+            "</example>\n"
+
+            "<example>\n"
+            "<user_query>나랑 철수 다음주에 언제 시간 맞는지 봐줘</user_query>\n"
+            "<reasoning>\"나랑\"이라는 표현으로 '나'가 조율 대상에 포함됨이 명시됨. "
+            "extract_schedules_from_history는 '나'의 일정을 포함하지 않으므로 이 케이스에서는 부적합. "
+            "멤버 이름과 날짜 범위를 알아도, \"나\"가 조율 대상이면 이 규칙이 다른 모든 분기보다 우선한다.</reasoning>\n"
+            "<tool_call>collect_member_schedules(member_names=[\"나\", \"철수\"], date_from=\"...\", date_to=\"...\")</tool_call>\n"
+            "</example>\n"
+
+            "<example>\n"
+            "<user_query>내 다음주 일정 뭐 있어?</user_query>\n"
+            "<reasoning>멤버 이름이 문장에 없음(오직 '나'만 언급됨). 이건 외부 멤버 요청이 아니라 "
+            "순수 개인 일정 조회이므로, 이 규칙 전체가 적용되지 않고 개인 tool을 그대로 사용한다.</reasoning>\n"
+            "<tool_call>personal_list_saved_schedules(date_range=\"다음주\")</tool_call>\n"
+            "</example>\n"
+
+            "</examples>"
 
         ),
     ]
