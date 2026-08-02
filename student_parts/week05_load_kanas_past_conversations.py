@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -27,8 +28,6 @@ from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
 from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
-
-_APP_STORE = AppSQLiteStore(CONFIG.app_db_path)
 
 _WEEK05_AGENT: Any | None = None
 
@@ -190,7 +189,7 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
 
-    sqlite_schedules = _APP_STORE.list_schedules(limit=200)
+    sqlite_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(limit=200)
     saved_ids = {row.get("schedule_id") for row in sqlite_schedules if row.get("schedule_id")}
 
     session_id = current_session_scope()
@@ -298,14 +297,14 @@ def _collect_member_schedules(
     my_rows: list[dict[str, Any]] = []
     for schedule in personal_schedules:
         structured = _structured_request_from_schedule_row(schedule)
-        schedule_date = structured.date
+        schedule_date = str(structured.date).split("T", 1)[0].strip() if structured.date else None
         if normalized_date_from and (not schedule_date or schedule_date < normalized_date_from):
             continue
         if normalized_date_to and (not schedule_date or schedule_date > normalized_date_to):
             continue
         my_rows.append(
             {
-                "member_name": "나",
+                "member_name": PERSONAL_SHARED_MEMBER_NAME,
                 "title": structured.title,
                 "date": schedule_date,
                 "start_time": structured.start_time,
@@ -318,7 +317,7 @@ def _collect_member_schedules(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
             {
-                "member_names": normalize_external_member_names([name for name in member_names if name != "나"]),
+                "member_names": normalize_external_member_names([name for name in member_names if name != PERSONAL_SHARED_MEMBER_NAME]),
                 "date_from": normalized_date_from,
                 "date_to": normalized_date_to,
             },
@@ -463,7 +462,7 @@ def week05_prompt_parts() -> list[str]:
         "extract_schedules_from_history로 일정을 뽑아라. "
         "여러 사람의 busy time을 한 번에 보려면 collect_member_schedules를 사용하고, "
         "이미 등록된 공유 일정 자체를 확인할 때는 list_shared_schedules를 사용해라.",
-        ]
+    ]
 
 
 def build_week05_agent() -> object:
