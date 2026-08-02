@@ -216,15 +216,20 @@ def _resolve_schedule_date_range(
     return resolved_from, resolved_to, None
 
 
-def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
+def _personal_schedules_for_current_scope(date_from: str, date_to: str) -> list[dict[str, Any]]:
+    """SQLite 저장 일정과 현재 대화의 임시 일정 중 date_from~date_to 범위에 속한 것만 group 조율 후보로 사용합니다."""
 
-    saved_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules()
+    saved_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
+        date_from=date_from, date_to=date_to, limit=200
+    )
     saved_schedule_ids = {row["schedule_id"] for row in saved_schedules}
 
     current_scope = current_session_scope()
     scoped_temp_schedules = [
-        schedule for schedule in PERSONAL_SCHEDULES if _schedule_scope(schedule) == current_scope
+        schedule
+        for schedule in PERSONAL_SCHEDULES
+        if _schedule_scope(schedule) == current_scope
+        and date_from <= (schedule.get("date") or "") <= date_to
     ]
     unsaved_temp_schedules = [
         schedule for schedule in scoped_temp_schedules if schedule.get("id") not in saved_schedule_ids
@@ -338,7 +343,7 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         original_text=str(row.get("title") or ""),
     )
 
-
+# 아웃풋 {member_name, title, date, start_time, end_time, notes}
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -348,25 +353,38 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
+    normalized_members = normalize_external_member_names(member_names)
+    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
+        member_names, date_from, date_to
+    )
     external_payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
-            {"member_names": member_names, "date_from": date_from, "date_to": date_to},
+            {
+                "member_names": normalized_members,
+                "date_from": normalized_date_from,
+                "date_to": normalized_date_to,
+            },
         )
     )
-    external_rows = external_payload.get("rows", [])
-
-    my_rows = [
-        {
-            "member_name": "나",
-            "title": schedule.get("title"),
-            "date": schedule.get("date"),
-            "start_time": schedule.get("start_time"),
-            "end_time": schedule.get("end_time"),
-            "notes": None,
-        }
-        for schedule in personal_schedules
+    external_rows = [
+        {key: value for key, value in row.items() if key != "source_conversation_id"}
+        for row in external_payload.get("rows", [])
     ]
+
+    my_rows = []
+    for schedule in personal_schedules:
+        structured = _structured_request_from_schedule_row(schedule)
+        my_rows.append(
+            {
+                "member_name": "나",
+                "title": structured.title,
+                "date": structured.date,
+                "start_time": structured.start_time,
+                "end_time": structured.end_time,
+                "notes": None,
+            }
+        )
 
     rows = my_rows + external_rows
     return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
@@ -490,7 +508,7 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     if error:
         return json_payload({"ok": False, "tool_name": "collect_member_schedules", "error": error})
 
-    personal_schedules = _personal_schedules_for_current_scope()
+    personal_schedules = _personal_schedules_for_current_scope(resolved_from, resolved_to)
     collected = _collect_member_schedules(
         member_names=member_names,
         date_from=resolved_from,
@@ -515,8 +533,6 @@ def week05_tools() -> list[Any]:
         search_previous_conversations,
         load_conversation_messages,
         extract_schedules_from_history,
-        create_shared_schedule,
-        delete_shared_schedule,
         list_shared_schedules,
         collect_member_schedules,
     ]
