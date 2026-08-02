@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -335,15 +336,16 @@ def _collect_member_schedules(
             }
         )
 
+    external_member_names = [name for name in member_names if name != PERSONAL_SHARED_MEMBER_NAME]
     external_payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
-            {"member_names": member_names, "date_from": date_from, "date_to": date_to},
+            {"member_names": external_member_names, "date_from": date_from, "date_to": date_to},
         )
     )
     rows.extend(external_payload.get("rows", []))
 
-    return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
+    return {"rows": rows, "schedule_summary": external_schedule_summary(rows), "members": member_names}
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
@@ -383,6 +385,7 @@ def extract_schedules_from_history(member_names: list[str], date_from: str, date
         "date_from": date_from,
         "date_to": date_to
     }
+    
     return call_mcp_tool_sync("extract_schedules_from_history", args)
 
 
@@ -399,7 +402,6 @@ def create_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
-    # TODO: call_mcp_tool_sync("create_shared_schedule", args)로 공유 일정 row를 생성/갱신하세요.
     args = {
         "member_name": member_name,
         "title": title,
@@ -410,6 +412,7 @@ def create_shared_schedule(
         "source_conversation_id": source_conversation_id,
         "schedule_id": schedule_id,
     }
+
     return call_mcp_tool_sync("create_shared_schedule", args)
 
 
@@ -463,6 +466,7 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
         {
             "ok": True,
             "tool_name": "collect_member_schedules",
+            "members": result["members"],
             "rows": result["rows"],
             "schedule_summary": result["schedule_summary"],
         }
