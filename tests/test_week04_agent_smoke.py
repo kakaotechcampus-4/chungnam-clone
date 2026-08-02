@@ -45,8 +45,14 @@ _cfg.CONFIG = dataclasses.replace(
     external_db_path=_TMP / "external.sqlite3",
 )
 
-import student_parts.week04_retrieve_nanas_memory as w4
+# 아래 import들은 위 CONFIG 패치 "뒤"에 와야 한다: week04 모듈은 import 시점에
+# CONFIG를 읽어 전역 store를 만들기 때문에, 순서가 바뀌면 실제 data/에 파일이 생긴다.
+import fixed.app_store
+import fixed.conversation_rag_store
+import fixed.llm
+import fixed.reference_store
 import student_parts.week03_build_nanas_logbook as w3
+import student_parts.week04_retrieve_nanas_memory as w4
 
 
 def _calls_and_answer(result: dict) -> tuple[list[str], str]:
@@ -60,12 +66,6 @@ class Week04AgentSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         # 실제 토큰 config를 스스로 구성(다른 테스트의 CONFIG 오염과 무관)한 뒤 store 재생성.
-        import fixed.config
-        import fixed.llm
-        import fixed.reference_store
-        import fixed.conversation_rag_store
-        import fixed.app_store
-
         cfg = dataclasses.replace(
             _REAL,
             chroma_dir=_TMP / "chroma",

@@ -47,6 +47,13 @@ _cfg.CONFIG = dataclasses.replace(
     external_db_path=_TMP / "external.sqlite3",
 )
 
+# 아래 import들은 위 CONFIG 패치 "뒤"에 와야 한다: week04/05 모듈은 import 시점에
+# CONFIG를 읽어 전역 store를 만들기 때문에, 순서가 바뀌면 실제 data/에 파일이 생긴다.
+import fixed.app_store
+import fixed.conversation_rag_store
+import fixed.llm
+import fixed.reference_store
+import student_parts.week04_retrieve_nanas_memory as w4
 import student_parts.week05_load_kanas_past_conversations as w5
 
 
@@ -61,13 +68,6 @@ class Week05AgentSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
         # 실제 LLM/임베딩이 필요하므로 자기 설정을 스스로 구성한다(다른 테스트의 CONFIG 오염과 무관).
-        import fixed.config
-        import fixed.llm
-        import fixed.reference_store
-        import fixed.conversation_rag_store
-        import fixed.app_store
-        import student_parts.week04_retrieve_nanas_memory as w4
-
         cfg = dataclasses.replace(
             _REAL,
             chroma_dir=_TMP / "chroma",
