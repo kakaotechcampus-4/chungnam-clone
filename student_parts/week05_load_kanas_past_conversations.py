@@ -155,6 +155,32 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _external_schedule_failure_result(
+    *,
+    code: str,
+    exc: Exception,
+    external_member_names: list[str],
+    date_from: str,
+    date_to: str,
+) -> dict[str, Any]:
+    """외부 일정 조회 실패를 LLM이 구분할 수 있는 공통 응답으로 만듭니다."""
+
+    return {
+        "ok": False,
+        "rows": [],
+        "schedule_summary": None,
+        "external_member_names": external_member_names,
+        "date_from": date_from,
+        "date_to": date_to,
+        "error": {
+            "code": code,
+            "type": type(exc).__name__,
+            "message": "외부 멤버 일정 조회에 실패했습니다.",
+            "detail": str(exc),
+        },
+    }
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -187,31 +213,47 @@ def _collect_member_schedules(
                 "date_to": normalized_date_to,
             },
         )
+    except Exception as exc:
+        return _external_schedule_failure_result(
+            code="mcp_call_failed",
+            exc=exc,
+            external_member_names=external_member_names,
+            date_from=normalized_date_from,
+            date_to=normalized_date_to,
+        )
+
+    try:
         external_payload = json.loads(raw_payload)
+    except (json.JSONDecodeError, TypeError) as exc:
+        return _external_schedule_failure_result(
+            code="mcp_invalid_json",
+            exc=exc,
+            external_member_names=external_member_names,
+            date_from=normalized_date_from,
+            date_to=normalized_date_to,
+        )
 
-        if not isinstance(external_payload, dict):
-            raise ValueError("MCP 응답을 json.load한 결과가 dict가 아닙니다.")
+    if not isinstance(external_payload, dict):
+        exc = ValueError("MCP 응답의 JSON 파싱 결과가 dict가 아닙니다.")
+        return _external_schedule_failure_result(
+            code="mcp_invalid_response",
+            exc=exc,
+            external_member_names=external_member_names,
+            date_from=normalized_date_from,
+            date_to=normalized_date_to,
+        )
 
-        external_rows = external_payload.get("rows") or []
+    external_rows = external_payload.get("rows")
 
-        if not isinstance(external_rows, list):
-            raise ValueError("MCP 응답의 rows가 list가 아닙니다.")
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "rows": [],
-            "schedule_summary": None,
-            "member_names": member_names,
-            "date_from": date_from,
-            "date_to": date_to,
-            "error": {
-                "code": "external_schedule_lookup_failed",
-                "type": type(e).__name__,
-                "message": "외부 멤버 일정 조회에 실패했습니다.",
-                "detail": str(e),
-            },
-        }
+    if not isinstance(external_rows, list):
+        exc = ValueError("MCP 응답의 rows가 list가 아닙니다.")
+        return _external_schedule_failure_result(
+            code="mcp_invalid_response",
+            exc=exc,
+            external_member_names=external_member_names,
+            date_from=normalized_date_from,
+            date_to=normalized_date_to,
+        )
 
     personal_rows: list[dict[str, Any]] = []
 
@@ -243,9 +285,9 @@ def _collect_member_schedules(
         "ok": True,
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
-        "member_names": member_names,
-        "date_from": date_from,
-        "date_to": date_to,
+        "external_member_names": external_member_names,
+        "date_from": normalized_date_from,
+        "date_to": normalized_date_to,
         "error": None,
     }
 
