@@ -11,9 +11,8 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
-    normalize_external_member_names,
-    normalize_external_schedule_date_bounds,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -353,17 +352,14 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    normalized_members = normalize_external_member_names(member_names)
-    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
-        member_names, date_from, date_to
-    )
+    external_member_names = [name for name in member_names if name != PERSONAL_SHARED_MEMBER_NAME]
     external_payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
             {
-                "member_names": normalized_members,
-                "date_from": normalized_date_from,
-                "date_to": normalized_date_to,
+                "member_names": external_member_names,
+                "date_from": date_from,
+                "date_to": date_to,
             },
         )
     )
@@ -560,15 +556,19 @@ ex)철수가 남긴 메시지 , 영희가 남긴 일정
         """load_conversation_messages 툴은 search_previous_conversations로 찾은 특정 대화의 자세한 내용을 확인 할 필요가 있을때 이어서 사용한다.
 필요한 경우가 아니면 바로 직전 대화에서 완전히 파악된 대화와 같은 대화를
 다시 검색하지 않는다. """,
-        """extract_schedules_from_history 툴은 '공유 저장소'에서 '단일 멤버'와 '특정 기간'의 일정을 묻는 맥락에서 사용된다.
-ex)철수 일정좀 알려줘, 이번달 영희 바빠?
-날짜를 모르면 date_from/date_to를 비워도 되며 그 방향 전체 기간이 조회되고, 종료일이 시작일보다
-빠르면 다른 tool을 더 부르지 않고 그 응답의 에러 메시지로 바로 답한다.
-답변은 단순히 일정을 나열하는 것이 아닌, 질문에서 제공된 의문점 위주로 답변한다.
+        """extract_schedules_from_history 툴은 load_conversation_messages 툴의 사용 이후, 메시지에서도 잘 나와있지 않은 일정의 상세내용이나
+메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  
+메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  
+ex)(이전에 질문이 메시지에대한 정보를 묻는 맥락일때) 이 메시지일정이 공유저장소에 등록되어있어?  
+조회된 일정에서, 메시지에 언급되지 않은 일정은 자세히 설명하지 않고, 필요한 경우에만 설명한다.
+, 질문에서 제공된 의문점 위주로 답변한다.
+""",
+        """메시지에 등장한 일정을 조회하는 맥락에서는 list_shared_schedules를 절대 사용하지 않는다.
 """,
         """list_shared_schedules는 내가 포함되지 않은 일정의 조율 및 공유 일정 저장소에 등록된 일정 자체를 확인하고 응답하기 위한 툴이다.  
-        ex)민수, 철수는 이번달 일정 비는 날있어?
-        공유 저장소에서, '여러명의 인물'(혹은 인물이 명확치 않을때)의 일정을 조회할 맥락에서 사용된다.
+메시지일정에 관한 세부 내용을 묻는 맥락은  extract_schedules_from_history를 이용하고 해당 툴을 이용하지 않는다.
+ex)민수, 철수는 이번달 일정 비는 날있어?
+공유 저장소에서, '여러명의 인물'(혹은 인물이 명확치 않을때)의 일정을 조회할 맥락에서 사용된다.
 특히 이전 대화 맥락에서 명확한 source_conversation_id가 드러나고, 이를 이용해야한 공유저장소의 일정 조회시에 사용한다.
 * source_conversation_id는 search_previous_conversations나 load_conversation_messages로 실제 확인한
 conversation_id가 있을 때만 채우고, 그런 근거가 없으면 항상 비워둔다.  
