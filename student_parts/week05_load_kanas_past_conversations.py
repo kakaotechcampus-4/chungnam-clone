@@ -306,6 +306,7 @@ def _collect_member_schedules(
             continue
         rows.append({
             "member_name": PERSONAL_SHARED_MEMBER_NAME,
+            "attendees": request.members,
             "title": request.title,
             "date": date,
             "start_time": request.start_time,
@@ -318,9 +319,13 @@ def _collect_member_schedules(
         "date_to": normalized_to,
     }))
     rows.extend(payload.get("rows", []))
+
+    # 일정에 담긴 멤버 추가 조회 가능
+    members = list(dict.fromkeys(row["member_name"] for row in rows if row.get("member_name")))
     return {
         "ok": True,
         "tool_name": "collect_member_schedules",
+        "members": members,
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
     }
@@ -436,8 +441,6 @@ def week05_tools() -> list[Any]:
         search_previous_conversations,
         load_conversation_messages,
         extract_schedules_from_history,
-        create_shared_schedule,
-        delete_shared_schedule,
         list_shared_schedules,
         collect_member_schedules,
     ]
