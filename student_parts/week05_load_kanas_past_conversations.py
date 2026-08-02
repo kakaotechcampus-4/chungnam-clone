@@ -158,22 +158,14 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
 def _collect_member_schedules(
     *,
     member_names: list[str],
-    date_from: str,
-    date_to: str,
+    date_from: date,
+    date_to: date,
     personal_schedules: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """
     내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다.
     멤버와 일정 조율을 위해서는 서로의 일정을 알 필요가 있습니다.
     이를 위해 인자로 입력한 멤버들의 일정들과 나의 일정을 합쳐 조회합니다.
-
-    반환 형식
-    ```python
-    {
-        "rows": rows,
-        "schedule_summary": external_schedule_summary(rows),
-    }
-    ```
     """
 
     normalized_member_names = normalize_external_member_names(member_names)
