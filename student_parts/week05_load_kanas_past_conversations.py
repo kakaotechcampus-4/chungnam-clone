@@ -12,8 +12,6 @@ from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
     external_schedule_summary,
-    normalize_external_member_names,
-    normalize_external_schedule_date_bounds,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -22,12 +20,10 @@ from fixed.mcp_client import (
     load_local_mcp_tools,
     load_local_mcp_tools_sync,
 )
-from fixed.runtime_clock import current_app_date_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
 from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
-
 
 _WEEK05_AGENT: Any | None = None
 
