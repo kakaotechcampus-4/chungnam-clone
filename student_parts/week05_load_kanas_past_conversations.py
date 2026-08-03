@@ -149,6 +149,9 @@ def _collect_member_schedules(
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
     normalized_member_names = normalize_external_member_names(member_names)
+    external_member_names = [
+        name for name in normalized_member_names if name != PERSONAL_SHARED_MEMBER_NAME
+    ]
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to
     )
@@ -177,7 +180,7 @@ def _collect_member_schedules(
     external_payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
-            {"member_names": normalized_member_names, "date_from": date_from, "date_to": date_to},
+            {"member_names": external_member_names, "date_from": date_from, "date_to": date_to},
         )
     )
     for row in external_payload.get("rows", []):
@@ -282,7 +285,8 @@ def list_shared_schedules(
 
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
-    """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
+    """여러 사람의 일정을 조율할 때 씁니다. 반환 rows에는 내("나") 일정도 이미 포함되어 있으니
+    이 도구를 쓸 때는 personal_list_saved_schedules를 따로 호출하지 않습니다."""
 
     result = _collect_member_schedules(
         member_names=member_names,
@@ -324,6 +328,8 @@ def week05_prompt_parts() -> list[str]:
             "예전 대화를 찾을 때는 search_previous_conversations로 검색하고 필요하면 load_conversation_messages로 원문을 읽는다. "
             "특정 멤버의 바쁜 시간은 extract_schedules_from_history로 조회하고, "
             "내 일정과 여러 멤버 일정을 함께 봐야 하면 collect_member_schedules를 쓴다. "
+            "collect_member_schedules 결과에는 내 일정도 이미 들어 있으니, "
+            "이때는 personal_list_saved_schedules를 따로 부르지 않는다. "
             "공유 일정 저장소 자체를 조회/등록/삭제할 때는 list_shared_schedules, create_shared_schedule, delete_shared_schedule를 쓴다."
         ),
     ]
