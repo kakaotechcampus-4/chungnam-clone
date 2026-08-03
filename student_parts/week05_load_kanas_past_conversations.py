@@ -319,17 +319,21 @@ def _collect_member_schedules(
         external_rows=[]
 
     rows = []
+    excluded_schedules = 0
     for elem in personal_schedules:
         structured = _structured_request_from_schedule_row(elem)
         if not structured.date:
+            excluded_schedules+=1
             continue
         row_date = normalize_date_bound(structured.date) # fixed/schedule_decision
         # 값이 있는 경우만 해당 방향으로 체크하도록 해야 함
         if normalized_date_from and row_date < normalized_date_from:
+            excluded_schedules+=1
             continue
         # date_from은 비어있어도 무방하나 date_to의 경우에는 비어있는 경우 내 일정이 모두 걸러진다는 위험이 존재 -> 이를 방지하기 위한 필터 추가
         # 1주차 personal_list_schedules에서 date_from/date_to 필터를 나눠 작성했던 것을 기억할 것
         if normalized_date_to and row_date > normalized_date_to:
+            excluded_schedules+=1
             continue
         
         # end_time은 "미정" 또는 None이어도 그대로 넘기기: 사용자도 불확실하기 때문에 end_time을 임의로 판단하는 것보다 그대로 넘기는 것이 안전하다고 생각함
@@ -345,6 +349,9 @@ def _collect_member_schedules(
     return {
         "rows":rows,
         "schedule_summary":external_schedule_summary(rows),
+        "date_from": normalized_date_from,
+        "date_to": normalized_date_to,
+        "excluded_schedules":excluded_schedules,
     }
 
 
