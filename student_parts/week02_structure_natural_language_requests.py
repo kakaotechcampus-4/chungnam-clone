@@ -270,6 +270,11 @@ def week02_system_prompt() -> str:
             personal_create_schedule tool을 호출한 경우, tool 결과 JSON의 created_schedule 값을 읽어
             title, date, start_time, end_time, members 필드를 채운다.
 
+            사용자의 요청으로부터 일정 종류(kind)를 추출할 때 다음 기준으로 채운다. 
+            - 사용자 본인만의 개인 일정이면 kind="personal_shcedule"로 분류한다. 
+            - 사용자 외의 참석자가 한 명 이상 명시된 공동의 일정이면 kind="group_schedule"로 분류하고 참석자 이름을 members에 넣는다. 
+            - 사용자가 "그룹 일정으로 저장해줘"라고 명시하면 반드시 kind="group_schedule"로 분류한다. 
+
             일정 조회/삭제처럼 StructuredRequest의 kind에 정확히 맞지 않는 요청은 kind="unknown"으로 구조화한다.
             tool 결과가 비어 있거나 조회 결과가 없어도 일반 문장으로 답하지 말고 반드시 StructuredRequestBatch structured_response만 만든다.
 
