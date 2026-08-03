@@ -23,6 +23,16 @@ SQLITE_STORE = AppSQLiteStore(CONFIG.app_db_path)
 CONVERSATION_RAG_STORE = ConversationRAGStore(CONFIG.chroma_dir)
 _WEEK04_AGENT: Any | None = None
 
+WEEK04_MEMORY_PROMPT = (
+    "Week 4부터 Nana는 개인 참고자료와 앱 SQLite 기록을 분리해 검색합니다. "
+    "사용자가 '내가 적어 둔 메모/참고자료/선호/규칙'과 같은 개인 문서나 메모를 묻는다면 "
+    "search_personal_references를 사용하세요. "
+    "사용자가 이미 저장된 일정/할 일/알림/구조화 기록을 찾거나 조회하라고 하면 "
+    "search_saved_requests를 사용하세요. "
+    "이 두 도구는 서로 다른 출처를 다루므로 질문 성격에 맞는 도구를 먼저 선택하세요. "
+    "참고자료와 저장 기록이 모두 필요하면 각 출처에 맞는 도구를 적절히 병행할 수 있습니다."
+)
+
 
 # [4주차 수강생 구현 가이드]
 #
@@ -225,8 +235,17 @@ def add_personal_reference_dict(
 ) -> dict[str, Any]:
     """개인 참고자료를 vector store에 추가하고 backend 정보를 반환합니다."""
 
-    # TODO: PersonalReferenceStore.add_personal_reference(...)로 개인 참고자료를 저장하세요.
-    ...
+    normalized_tags = tags or []
+    reference = reference_store.add_personal_reference(
+        title=title,
+        content=content,
+        tags=normalized_tags,
+    )
+    reference.pop("backend", None)
+    return {
+        "reference_backend": reference_store.backend_info(),
+        "reference": reference,
+    }
 
 
 def search_personal_reference_hits(
@@ -237,8 +256,22 @@ def search_personal_reference_hits(
 ) -> list[dict[str, Any]]:
     """ChromaDB 검색 결과를 tool이 바로 반환하기 쉬운 hit 구조로 정리합니다."""
 
-    # TODO: 개인 참고자료 검색 결과를 id/content/distance/metadata 구조로 정리하세요.
-    ...
+    limit = safe_limit(top_k, default=2, maximum=20)
+    raw_hits = reference_store.search_personal_references(query=query, limit=limit)
+    hits: list[dict[str, Any]] = []
+    for hit in raw_hits:
+        hits.append(
+            {
+                "id": hit.get("id"),
+                "content": hit.get("content", ""),
+                "distance": hit.get("distance"),
+                "metadata": {
+                    "title": hit.get("title", ""),
+                    "tags": hit.get("tags", ""),
+                },
+            }
+        )
+    return hits
 
 
 def search_saved_request_rows(
@@ -249,8 +282,8 @@ def search_saved_request_rows(
 ) -> list[dict[str, Any]]:
     """SQLite 저장 요청을 검색하고 실제 검색 결과만 반환합니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하세요.
-    ...
+    limit = safe_limit(top_k, default=3, maximum=50)
+    return sqlite_store.search_saved_requests(query=query, limit=limit)
 
 
 def search_conversation_messages_dict(
@@ -284,24 +317,39 @@ def search_conversation_message_rows(
 def add_personal_reference(title: str, content: str, tags: list[str] | None = None) -> str:
     """개인 참고자료를 ChromaDB에 추가합니다."""
 
-    # TODO: 개인 참고자료를 저장하고 JSON 문자열로 반환하세요.
-    ...
+    payload = add_personal_reference_dict(
+        REFERENCE_STORE,
+        title=title,
+        content=content,
+        tags=tags,
+    )
+    return json_payload(payload)
 
 
 @tool(args_schema=SearchPersonalReferencesInput)
 def search_personal_references(query: str, top_k: int = 2) -> str:
     """개인 참고자료를 ChromaDB와 OpenAI embedding 기반으로 검색합니다."""
 
-    # TODO: query/top_k로 개인 참고자료 vector store를 검색하고 top-level hits를 반환하세요.
-    ...
+    normalized_top_k = safe_limit(top_k, default=2, maximum=20)
+    hits = search_personal_reference_hits(
+        REFERENCE_STORE,
+        query=query,
+        top_k=normalized_top_k,
+    )
+    return json_payload({"hits": hits})
 
 
 @tool(args_schema=SearchSavedRequestsInput)
 def search_saved_requests(query: str, top_k: int = 3) -> str:
     """SQLite에 저장된 구조화 일정/할 일/알림 row를 검색합니다. query에는 LLM이 고른 일정/할 일/알림 핵심어를 넣습니다."""
 
-    # TODO: AppSQLiteStore.search_saved_requests(...)로 저장 요청을 검색하고 top-level rows를 반환하세요.
-    ...
+    normalized_top_k = safe_limit(top_k, default=3, maximum=50)
+    rows = search_saved_request_rows(
+        SQLITE_STORE,
+        query=query,
+        top_k=normalized_top_k,
+    )
+    return json_payload({"rows": rows})
 
 
 @tool(args_schema=SearchConversationMessagesInput)
@@ -337,7 +385,6 @@ def week04_tools() -> list[Any]:
         add_personal_reference,
         search_personal_references,
         search_saved_requests,
-        search_conversation_messages,
     ]
 
 
@@ -352,7 +399,7 @@ def week04_prompt_parts() -> list[str]:
 
     return [
         *week03_prompt_parts(),
-        # TODO: Week 4 Nana memory agent system prompt를 자유롭게 추가하세요.
+        WEEK04_MEMORY_PROMPT,
     ]
 
 
