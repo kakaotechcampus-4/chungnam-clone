@@ -1,0 +1,1122 @@
+{
+  "label": "after-optimization",
+  "created_at": "2026-08-02T03:16:32.758175+09:00",
+  "active_week": 5,
+  "case_count": 20,
+  "summary": {
+    "total": 20,
+    "passed": 18,
+    "accuracy": 0.9,
+    "errors": 0,
+    "average_seconds": 5.906,
+    "latency_seconds": {
+      "total": 118.116,
+      "average": 5.906,
+      "p50": 6.012,
+      "p95": 6.854
+    },
+    "core_checks": {
+      "execution": {
+        "passed": 20,
+        "total": 20
+      },
+      "result": {
+        "passed": 18,
+        "total": 20
+      },
+      "tool_sequence": {
+        "passed": 18,
+        "total": 20
+      }
+    },
+    "quality_checks": {
+      "answer": {
+        "passed": 16,
+        "total": 20
+      },
+      "arguments": {
+        "passed": 16,
+        "total": 20
+      },
+      "exact_tool_sequence": {
+        "passed": 11,
+        "total": 20
+      }
+    },
+    "warning_counts": {
+      "answer": 4,
+      "arguments": 4,
+      "exact_tool_sequence": 9
+    },
+    "by_category": {
+      "collect_schedule": {
+        "passed": 4,
+        "total": 4,
+        "accuracy": 1.0
+      },
+      "conversation_load": {
+        "passed": 4,
+        "total": 4,
+        "accuracy": 1.0
+      },
+      "conversation_search": {
+        "passed": 2,
+        "total": 4,
+        "accuracy": 0.5
+      },
+      "external_schedule": {
+        "passed": 4,
+        "total": 4,
+        "accuracy": 1.0
+      },
+      "shared_schedule": {
+        "passed": 4,
+        "total": 4,
+        "accuracy": 1.0
+      }
+    },
+    "tool_sequences": {
+      "collect_member_schedules": 1,
+      "collect_member_schedules -> personal_list_saved_schedules": 3,
+      "extract_schedules_from_history": 4,
+      "list_shared_schedules": 4,
+      "retrieve_memory": 2,
+      "search_previous_conversations": 2,
+      "search_previous_conversations -> load_conversation_context": 4
+    },
+    "tool_call_counts": {
+      "collect_member_schedules": 4,
+      "extract_schedules_from_history": 4,
+      "list_shared_schedules": 4,
+      "load_conversation_context": 4,
+      "personal_list_saved_schedules": 3,
+      "retrieve_memory": 2,
+      "search_previous_conversations": 6
+    },
+    "total_mcp_calls": 18,
+    "estimated_mcp_process_starts": 18,
+    "mcp_process_start_estimate": {
+      "case_cache_warm_at_start": true,
+      "case_tool_invocations": 18,
+      "case_discovery_starts": 0,
+      "case_total_starts": 18,
+      "preflight_tool_invocations": 5,
+      "preflight_total_starts": 6,
+      "run_total_starts": 24,
+      "assumption": "cached tool discovery starts one MCP process; each MCP tool invocation starts one stdio process"
+    },
+    "preflight": {
+      "passed": 5,
+      "total": 5,
+      "results": [
+        {
+          "name": "search_previous_conversations_brief",
+          "passed": true,
+          "elapsed_seconds": 4.294,
+          "error": null,
+          "error_type": null
+        },
+        {
+          "name": "search_previous_conversations_full",
+          "passed": true,
+          "elapsed_seconds": 1.78,
+          "error": null,
+          "error_type": null
+        },
+        {
+          "name": "extract_schedules_from_history",
+          "passed": true,
+          "elapsed_seconds": 1.781,
+          "error": null,
+          "error_type": null
+        },
+        {
+          "name": "list_shared_schedules",
+          "passed": true,
+          "elapsed_seconds": 1.377,
+          "error": null,
+          "error_type": null
+        },
+        {
+          "name": "collect_member_schedules",
+          "passed": true,
+          "elapsed_seconds": 1.793,
+          "error": null,
+          "error_type": null
+        }
+      ]
+    }
+  },
+  "results": [
+    {
+      "id": "conversation_search_01",
+      "repeat": 1,
+      "input": "철수와 나눈 과거 대화에서 API 연동 실습 관련 기록을 찾아줘.",
+      "category": "conversation_search",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "retrieve_memory"
+      ],
+      "tool_calls": [
+        "retrieve_memory"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "retrieve_memory",
+          "arguments": {},
+          "id": "call_QHXr5NF0wvtASEB6eA3HDtpA"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": false,
+        "result": false
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": false,
+        "answer": true
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "arguments"
+      ],
+      "passed": false,
+      "answer": "철수와 나눈 과거 대화에서 API 연동 실습 관련 기록은 현재 기억에 없습니다. 다른 도움 필요하시면 말씀해 주세요.",
+      "elapsed_seconds": 6.79,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_search_02",
+      "repeat": 1,
+      "input": "영희의 이전 대화에서 콘텐츠 점검 관련 기록을 검색해줘.",
+      "category": "conversation_search",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations"
+      ],
+      "tool_calls": [
+        "search_previous_conversations"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "콘텐츠 점검",
+            "member_names": [
+              "영희"
+            ],
+            "limit": 5,
+            "include_messages": true
+          },
+          "id": "call_VM3y88yIhvD7KS8FcfJuObHt"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": false,
+        "answer": true
+      },
+      "warnings": [
+        "arguments"
+      ],
+      "passed": true,
+      "answer": "영희의 이전 대화에서 콘텐츠 점검 관련 기록은 7월 10일 10시에 콘텐츠 점검 일정이 있다는 내용입니다. 더 필요한 정보가 있으면 알려주세요.",
+      "elapsed_seconds": 4.552,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_search_03",
+      "repeat": 1,
+      "input": "서연과 나눈 과거 대화에서 UX 워크숍 이야기를 찾아줘.",
+      "category": "conversation_search",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "retrieve_memory"
+      ],
+      "tool_calls": [
+        "retrieve_memory"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "retrieve_memory",
+          "arguments": {},
+          "id": "call_eAQV8uK8lnHJiIsSEbF3xMU4"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": false,
+        "result": false
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": false,
+        "answer": true
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "arguments"
+      ],
+      "passed": false,
+      "answer": "서연과 나눈 과거 대화 중에 UX 워크숍에 관한 내용은 저장된 기록에 없습니다. 다른 도움 필요하시면 말씀해 주세요.",
+      "elapsed_seconds": 3.84,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_search_04",
+      "repeat": 1,
+      "input": "하린의 이전 대화 중 파트너 콜 관련 내용을 검색해줘.",
+      "category": "conversation_search",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations"
+      ],
+      "tool_calls": [
+        "search_previous_conversations"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "파트너 콜",
+            "include_messages": true,
+            "limit": 5,
+            "member_names": [
+              "하린"
+            ]
+          },
+          "id": "call_MmLySlMZ3vClBYS1YsXpR04z"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": false,
+        "answer": true
+      },
+      "warnings": [
+        "arguments"
+      ],
+      "passed": true,
+      "answer": "하린의 이전 대화에서 \"7월 10일 14시에 파트너 콜\" 일정이 있었습니다. 더 필요한 내용이나 다른 검색이 있으면 알려주세요.",
+      "elapsed_seconds": 4.854,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_load_01",
+      "repeat": 1,
+      "input": "민준의 과거 대화에서 백엔드 리뷰를 검색한 다음 그 대화 전체 내용을 보여줘.",
+      "category": "conversation_load",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_calls": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "백엔드 리뷰",
+            "include_messages": true,
+            "member_names": [
+              "민준"
+            ],
+            "limit": 5
+          },
+          "id": "call_5vJ2lHTOTxFlOj8OYnMpMtmF"
+        },
+        {
+          "tool_name": "load_conversation_context",
+          "arguments": {
+            "conversation_id": "ext_mj"
+          },
+          "id": "call_71csVHyxBK5EhMZ9cpv9YdyC"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": false
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "answer"
+      ],
+      "passed": true,
+      "answer": "민준의 과거 대화에서 '백엔드 리뷰' 관련 대화가 검색되었으나, 해당 대화 전체 내용을 불러올 권한이 없어 보여드릴 수 없습니다. 다른 요청이나 궁금한 점 있으시면 알려주세요.",
+      "elapsed_seconds": 5.721,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_load_02",
+      "repeat": 1,
+      "input": "철수의 과거 대화에서 고객 인터뷰를 검색하고 해당 대화의 전체 메시지를 불러와줘.",
+      "category": "conversation_load",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_calls": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "고객 인터뷰",
+            "member_names": [
+              "철수"
+            ],
+            "limit": 5,
+            "include_messages": true
+          },
+          "id": "call_3a2MON2BWQUkPe2eUggw8eSU"
+        },
+        {
+          "tool_name": "load_conversation_context",
+          "arguments": {
+            "conversation_id": "ext_cs"
+          },
+          "id": "call_YBgD1VCeF5xHOsoA4e9RkqYI"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": false
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "answer"
+      ],
+      "passed": true,
+      "answer": "철수의 과거 대화에서 고객 인터뷰가 7월 9일 14시에 있었던 일정으로 확인되나, 해당 대화의 전체 메시지를 불러오는 데 권한 문제가 있어 불러올 수 없습니다. 다른 도움 필요하시면 말씀해 주세요.",
+      "elapsed_seconds": 6.387,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_load_03",
+      "repeat": 1,
+      "input": "영희의 이전 대화에서 디자인 피드백을 찾고 그 대화 전문을 보여줘.",
+      "category": "conversation_load",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_calls": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "디자인 피드백",
+            "member_names": [
+              "영희"
+            ],
+            "limit": 5,
+            "include_messages": true
+          },
+          "id": "call_MpH3xwY2qmveQRHA6RySmx48"
+        },
+        {
+          "tool_name": "load_conversation_context",
+          "arguments": {
+            "conversation_id": "ext_yh"
+          },
+          "id": "call_4IsYvLeBU6oVvr5QDfQwQ1uv"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": false
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "answer"
+      ],
+      "passed": true,
+      "answer": "영희의 이전 대화에서 \"디자인 피드백\" 관련 대화 전문을 불러오려 했으나, 해당 대화 내용은 접근 권한 문제로 불러올 수 없습니다. 다른 요청이나 도움이 필요하시면 말씀해 주세요.",
+      "elapsed_seconds": 6.248,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "conversation_load_04",
+      "repeat": 1,
+      "input": "지훈의 과거 대화에서 보안 점검을 검색한 뒤 전체 대화 내용을 확인해줘.",
+      "category": "conversation_load",
+      "expected_tools": [
+        "search_previous_conversations"
+      ],
+      "actual_tools": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_calls": [
+        "search_previous_conversations",
+        "load_conversation_context"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "search_previous_conversations",
+          "arguments": {
+            "query": "보안 점검",
+            "member_names": [
+              "지훈"
+            ],
+            "limit": 5,
+            "include_messages": true
+          },
+          "id": "call_Dwfb95dCgm7CyiM3TCIEZ2Xm"
+        },
+        {
+          "tool_name": "load_conversation_context",
+          "arguments": {
+            "conversation_id": "ext_jh"
+          },
+          "id": "call_M02SCq2nThj2NSylSgSsIg9e"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": false
+      },
+      "warnings": [
+        "exact_tool_sequence",
+        "answer"
+      ],
+      "passed": true,
+      "answer": "지훈의 과거 대화에서 \"보안 점검\" 관련 내용은 7월 14일 10시에 보안 점검 일정이 있다는 간단한 언급이 있었습니다. 그러나 전체 대화 내용을 불러오는 데 권한 문제가 있어 더 자세한 내용을 확인하지 못했습니다. 다른 도움이 필요하시면 말씀해 주세요.",
+      "elapsed_seconds": 6.171,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "external_schedule_01",
+      "repeat": 1,
+      "input": "민준의 2026년 7월 7일부터 7월 17일까지 일정을 알려줘.",
+      "category": "external_schedule",
+      "expected_tools": [
+        "extract_schedules_from_history"
+      ],
+      "actual_tools": [
+        "extract_schedules_from_history"
+      ],
+      "tool_calls": [
+        "extract_schedules_from_history"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "extract_schedules_from_history",
+          "arguments": {
+            "member_names": [
+              "민준"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_nUngkaLxspoR9BsVwdCv8yhw"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 09:30~10:30: 데이터 정리\n- 7월 9일 11:00~12:00: 백엔드 리뷰\n- 7월 14일 15:00~16:30: 운영 회의\n필요하시면 더 도와드릴까요?",
+      "elapsed_seconds": 6.591,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "external_schedule_02",
+      "repeat": 1,
+      "input": "서연의 2026년 7월 7일부터 7월 17일까지 바쁜 시간을 조회해줘.",
+      "category": "external_schedule",
+      "expected_tools": [
+        "extract_schedules_from_history"
+      ],
+      "actual_tools": [
+        "extract_schedules_from_history"
+      ],
+      "tool_calls": [
+        "extract_schedules_from_history"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "extract_schedules_from_history",
+          "arguments": {
+            "member_names": [
+              "서연"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_YoTejd85HuCGuqnVU3w9zWKY"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "서연의 2026년 7월 7일부터 7월 17일까지 바쁜 시간은 다음과 같습니다.\n- 7월 8일 13:30부터 14:30까지 사용자 테스트\n- 7월 10일 16:00부터 17:00까지 보고서 정리\n- 7월 15일 10:00부터 11:00까지 UX 워크숍\n필요한 다른 일정이나 정보가 있으면 알려주세요.",
+      "elapsed_seconds": 5.622,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "external_schedule_03",
+      "repeat": 1,
+      "input": "지훈이 2026년 7월 7일부터 7월 17일까지 언제 바쁜지 알려줘.",
+      "category": "external_schedule",
+      "expected_tools": [
+        "extract_schedules_from_history"
+      ],
+      "actual_tools": [
+        "extract_schedules_from_history"
+      ],
+      "tool_calls": [
+        "extract_schedules_from_history"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "extract_schedules_from_history",
+          "arguments": {
+            "member_names": [
+              "지훈"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_TT4QnpNqiSwy9vRfHQ9BQyu4"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "지훈이는 2026년 7월 7일 15:00부터 16:00까지 모델 평가 일정이 있고, 7월 14일 10:00부터 11:30까지 보안 점검 일정, 7월 16일 13:00부터 14:00까지 릴리즈 회의 일정이 있어 그 시간대에 바쁩니다.",
+      "elapsed_seconds": 6.007,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "external_schedule_04",
+      "repeat": 1,
+      "input": "하린의 2026년 7월 7일부터 7월 17일까지 일정을 조회해줘.",
+      "category": "external_schedule",
+      "expected_tools": [
+        "extract_schedules_from_history"
+      ],
+      "actual_tools": [
+        "extract_schedules_from_history"
+      ],
+      "tool_calls": [
+        "extract_schedules_from_history"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "extract_schedules_from_history",
+          "arguments": {
+            "member_names": [
+              "하린"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_WOyVShJgkPm7GhsizeFOaaJ6"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "하린의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 11:00-12:00: 온보딩 세션\n- 7월 10일 14:00-15:00: 파트너 콜\n- 7월 17일 09:00-10:00: 회고 준비\n필요한 일정에 대해 더 도와드릴까요?",
+      "elapsed_seconds": 5.89,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "collect_schedule_01",
+      "repeat": 1,
+      "input": "내 일정과 민준의 일정을 2026년 7월 7일부터 7월 17일까지 함께 조회해줘.",
+      "category": "collect_schedule",
+      "expected_tools": [
+        "collect_member_schedules"
+      ],
+      "actual_tools": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_calls": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "collect_member_schedules",
+          "arguments": {
+            "member_names": [
+              "민준"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_jnpBShjXl1BiT8mocTFlxD6v"
+        },
+        {
+          "tool_name": "personal_list_saved_schedules",
+          "arguments": {
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_j2muYLP2Ahi5S9xwkZQ0uJ9i"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [
+        "exact_tool_sequence"
+      ],
+      "passed": true,
+      "answer": "2026년 7월 7일부터 7월 17일까지의 일정입니다.\n\n민준의 일정:\n- 7월 8일 09:30-10:30: 데이터 정리\n- 7월 9일 11:00-12:00: 백엔드 리뷰\n- 7월 14일 15:00-16:30: 운영 회의\n\n사용자님의 일정은 해당 기간에 등록된 일정이 없습니다.",
+      "elapsed_seconds": 6.547,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "collect_schedule_02",
+      "repeat": 1,
+      "input": "2026년 7월 7일부터 7월 17일까지 내 일정과 서연의 바쁜 시간을 같이 보여줘.",
+      "category": "collect_schedule",
+      "expected_tools": [
+        "collect_member_schedules"
+      ],
+      "actual_tools": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_calls": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "collect_member_schedules",
+          "arguments": {
+            "member_names": [
+              "서연"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_HjRsSs1tY2hxBKO8JTSwFa63"
+        },
+        {
+          "tool_name": "personal_list_saved_schedules",
+          "arguments": {
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_vKgpQavQvN9DDBKiw3a5ZT4N"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [
+        "exact_tool_sequence"
+      ],
+      "passed": true,
+      "answer": "2026년 7월 7일부터 7월 17일까지의 일정과 서연의 바쁜 시간은 다음과 같습니다.\n\n서연의 일정:\n- 7월 8일 13:30~14:30: 사용자 테스트\n- 7월 10일 16:00~17:00: 보고서 정리\n- 7월 15일 10:00~11:00: UX 워크숍\n\n사용자님의 일정은 해당 기간에 등록된 일정이 없습니다.",
+      "elapsed_seconds": 6.854,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "collect_schedule_03",
+      "repeat": 1,
+      "input": "나와 철수의 2026년 7월 7일부터 7월 17일까지 일정을 한 번에 모아줘.",
+      "category": "collect_schedule",
+      "expected_tools": [
+        "collect_member_schedules"
+      ],
+      "actual_tools": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_calls": [
+        "collect_member_schedules",
+        "personal_list_saved_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "collect_member_schedules",
+          "arguments": {
+            "member_names": [
+              "나",
+              "철수"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_2eDlOg5h9UOW8NV2Bbw14NRH"
+        },
+        {
+          "tool_name": "personal_list_saved_schedules",
+          "arguments": {
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_Z7N88U1miFpeTQQev3xU1rnJ"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": false,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [
+        "exact_tool_sequence"
+      ],
+      "passed": true,
+      "answer": "2026년 7월 7일부터 7월 17일까지의 일정입니다.\n\n철수 일정:\n- 7월 7일 10:00-11:00: API 연동 실습\n- 7월 9일 14:00-15:30: 고객 인터뷰\n- 7월 15일 16:00-17:00: QA 리뷰\n\n사용자님의 일정은 해당 기간에 등록된 일정이 없습니다.",
+      "elapsed_seconds": 7.144,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "collect_schedule_04",
+      "repeat": 1,
+      "input": "내 일정과 영희의 일정을 2026년 7월 7일부터 7월 17일까지 같이 확인해줘.",
+      "category": "collect_schedule",
+      "expected_tools": [
+        "collect_member_schedules"
+      ],
+      "actual_tools": [
+        "collect_member_schedules"
+      ],
+      "tool_calls": [
+        "collect_member_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "collect_member_schedules",
+          "arguments": {
+            "member_names": [
+              "나",
+              "영희"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_GT3ApzqQFJzSohx6cUsoVHV8"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "2026년 7월 7일부터 7월 17일까지 내 일정은 현재 확인된 것이 없습니다.\n영희의 일정은 다음과 같습니다:\n- 7월 7일 13:00-14:00 디자인 피드백\n- 7월 10일 10:00-11:30 콘텐츠 점검\n- 7월 16일 15:00-16:00 발표 리허설\n\n더 확인하거나 추가할 일정이 있으면 알려주세요.",
+      "elapsed_seconds": 6.058,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "shared_schedule_01",
+      "repeat": 1,
+      "input": "공유 일정 저장소에 등록된 철수의 2026년 7월 7일부터 7월 17일까지 일정을 직접 확인해줘.",
+      "category": "shared_schedule",
+      "expected_tools": [
+        "list_shared_schedules"
+      ],
+      "actual_tools": [
+        "list_shared_schedules"
+      ],
+      "tool_calls": [
+        "list_shared_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "list_shared_schedules",
+          "arguments": {
+            "member_names": [
+              "철수"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_aNypbpO1YzgzgyzUFEa2j3YK"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "철수의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\n- 7월 7일 10:00-11:00: API 연동 실습\n- 7월 9일 14:00-15:30: 고객 인터뷰\n- 7월 15일 16:00-17:00: QA 리뷰\n필요한 일정에 대해 더 자세히 알려드릴까요?",
+      "elapsed_seconds": 6.014,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "shared_schedule_02",
+      "repeat": 1,
+      "input": "공유 일정 저장소에서 민준의 2026년 7월 7일부터 7월 17일까지 등록 일정을 조회해줘.",
+      "category": "shared_schedule",
+      "expected_tools": [
+        "list_shared_schedules"
+      ],
+      "actual_tools": [
+        "list_shared_schedules"
+      ],
+      "tool_calls": [
+        "list_shared_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "list_shared_schedules",
+          "arguments": {
+            "member_names": [
+              "민준"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_db3k7DyAihUQvK2XnV8KJoMm"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "민준의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\n\n- 7월 8일 09:30-10:30: 데이터 정리\n- 7월 9일 11:00-12:00: 백엔드 리뷰\n- 7월 14일 15:00-16:30: 운영 회의\n\n필요한 일정 관련 추가 요청 있으시면 알려주세요.",
+      "elapsed_seconds": 6.012,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "shared_schedule_03",
+      "repeat": 1,
+      "input": "공유 일정 저장소에 있는 지훈의 2026년 7월 7일부터 7월 17일까지 일정을 직접 보여줘.",
+      "category": "shared_schedule",
+      "expected_tools": [
+        "list_shared_schedules"
+      ],
+      "actual_tools": [
+        "list_shared_schedules"
+      ],
+      "tool_calls": [
+        "list_shared_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "list_shared_schedules",
+          "arguments": {
+            "member_names": [
+              "지훈"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_djXUwF3WYrkY52bjF9uBCJX2"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 있는 일정은 다음과 같습니다.\n\n- 7월 7일 15:00-16:00: 모델 평가\n- 7월 14일 10:00-11:30: 보안 점검\n- 7월 16일 13:00-14:00: 릴리즈 회의\n\n필요한 다른 일정이나 정보가 있으면 알려주세요.",
+      "elapsed_seconds": 5.485,
+      "error": null,
+      "error_type": null
+    },
+    {
+      "id": "shared_schedule_04",
+      "repeat": 1,
+      "input": "공유 일정 저장소에서 하린의 2026년 7월 7일부터 7월 17일까지 일정을 직접 확인해줘.",
+      "category": "shared_schedule",
+      "expected_tools": [
+        "list_shared_schedules"
+      ],
+      "actual_tools": [
+        "list_shared_schedules"
+      ],
+      "tool_calls": [
+        "list_shared_schedules"
+      ],
+      "tool_call_details": [
+        {
+          "tool_name": "list_shared_schedules",
+          "arguments": {
+            "member_names": [
+              "하린"
+            ],
+            "date_from": "2026-07-07",
+            "date_to": "2026-07-17"
+          },
+          "id": "call_sKMtkk6obJusxcnF3HCkNFmo"
+        }
+      ],
+      "core_checks": {
+        "execution": true,
+        "tool_sequence": true,
+        "result": true
+      },
+      "quality_checks": {
+        "exact_tool_sequence": true,
+        "arguments": true,
+        "answer": true
+      },
+      "warnings": [],
+      "passed": true,
+      "answer": "하린의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\n\n- 7월 8일 11:00~12:00: 온보딩 세션\n- 7월 10일 14:00~15:00: 파트너 콜\n- 7월 17일 09:00~10:00: 회고 준비\n\n필요한 다른 일정이나 정보가 있으면 알려주세요.",
+      "elapsed_seconds": 5.329,
+      "error": null,
+      "error_type": null
+    }
+  ]
+}

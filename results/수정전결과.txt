@@ -1,0 +1,303 @@
+created_at: 2026-07-29T21:10:50.219806+09:00
+run_id: 20260729210829_854ebe26
+overall: 18/20 (90.00%)
+errors: 0
+core_checks: {'execution': {'passed': 20, 'total': 20}, 'tool_sequence': {'passed': 18, 'total': 20}, 'result': {'passed': 18, 'total': 20}}
+quality_checks: {'exact_tool_sequence': {'passed': 13, 'total': 20}, 'arguments': {'passed': 11, 'total': 20}, 'answer': {'passed': 19, 'total': 20}}
+warning_counts: {'exact_tool_sequence': 7, 'arguments': 9, 'answer': 1}
+by_category: {'collect_schedule': {'passed': 4, 'total': 4, 'accuracy': 1.0}, 'conversation_load': {'passed': 4, 'total': 4, 'accuracy': 1.0}, 'conversation_search': {'passed': 2, 'total': 4, 'accuracy': 0.5}, 'external_schedule': {'passed': 4, 'total': 4, 'accuracy': 1.0}, 'shared_schedule': {'passed': 4, 'total': 4, 'accuracy': 1.0}}
+tool_sequences: {'retrieve_memory': 2, 'search_previous_conversations -> load_conversation_context': 2, 'search_previous_conversations -> load_conversation_messages': 4, 'extract_schedules_from_history': 4, 'collect_member_schedules -> personal_list_saved_schedules': 3, 'collect_member_schedules': 1, 'list_shared_schedules': 4}
+total_mcp_calls: 22
+estimated_mcp_process_starts: 44
+
+[PREFLIGHT]
+PASS search_previous_conversations time=1.75s error=None
+PASS load_conversation_messages time=1.607s error=None
+PASS extract_schedules_from_history time=1.498s error=None
+PASS list_shared_schedules time=1.618s error=None
+PASS collect_member_schedules time=1.536s error=None
+
+[CASES]
+[FAIL] conversation_search_01 repeat=1 category=conversation_search
+question: 철수와 나눈 과거 대화에서 API 연동 실습 관련 기록을 찾아줘.
+expected_tools: ['search_previous_conversations']
+actual_tools: ['retrieve_memory']
+core_checks: {'execution': True, 'tool_sequence': False, 'result': False}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 4.91
+error: None
+answer: 철수와 나눈 과거 대화에서 API 연동 실습 관련 기록은 현재 저장된 대화 내역에 없습니다. 다른 키워드나 관련 내용을 알려주시면 다시 찾아보겠습니다.
+
+[PASS] conversation_search_02 repeat=1 category=conversation_search
+question: 영희의 이전 대화에서 콘텐츠 점검 관련 기록을 검색해줘.
+expected_tools: ['search_previous_conversations']
+actual_tools: ['search_previous_conversations', 'load_conversation_context']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 5.563
+error: None
+answer: 영희의 이전 대화에서 콘텐츠 점검 관련 기록이 7월 10일 10시에 있다는 내용이 검색되었습니다. 다만, 해당 대화 내용은 현재 불러올 수 없는 상태입니다. 다른 도움 필요하시면 말씀해 주세요.
+
+[FAIL] conversation_search_03 repeat=1 category=conversation_search
+question: 서연과 나눈 과거 대화에서 UX 워크숍 이야기를 찾아줘.
+expected_tools: ['search_previous_conversations']
+actual_tools: ['retrieve_memory']
+core_checks: {'execution': True, 'tool_sequence': False, 'result': False}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 6.883
+error: None
+answer: 서연과 나눈 과거 대화에서 UX 워크숍 이야기는 저장된 기록에 없습니다. 다른 도움 필요하시면 말씀해 주세요.
+
+[PASS] conversation_search_04 repeat=1 category=conversation_search
+question: 하린의 이전 대화 중 파트너 콜 관련 내용을 검색해줘.
+expected_tools: ['search_previous_conversations']
+actual_tools: ['search_previous_conversations', 'load_conversation_context']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 5.763
+error: None
+answer: 하린의 이전 대화 중 파트너 콜 관련 내용이 7월 10일 14시에 파트너 콜 일정이 있다는 내용이 있습니다. 더 자세한 대화 내용은 현재 불러올 수 없습니다. 다른 도움이 필요하시면 말씀해 주세요.
+
+[PASS] conversation_load_01 repeat=1 category=conversation_load
+question: 민준의 과거 대화에서 백엔드 리뷰를 검색한 다음 그 대화 전체 내용을 보여줘.
+expected_tools: ['search_previous_conversations', 'load_conversation_messages']
+actual_tools: ['search_previous_conversations', 'load_conversation_messages']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': False, 'answer': True}
+warnings: ['arguments']
+elapsed_seconds: 7.754
+error: None
+answer: 민준의 과거 대화에서 "백엔드 리뷰" 관련 내용은 다음과 같습니다.
+
+"민준: 7월 8일 9시 30분은 데이터 정리, 7월 9일 11시는 백엔드 리뷰, 7월 14일 15시는 운영 회의가 있어요."
+
+이 대화가 백엔드 리뷰와 관련된 전체 내용입니다. 더 필요한 내용이나 다른 검색이 있으면 알려주세요.
+
+[PASS] conversation_load_02 repeat=1 category=conversation_load
+question: 철수의 과거 대화에서 고객 인터뷰를 검색하고 해당 대화의 전체 메시지를 불러와줘.
+expected_tools: ['search_previous_conversations', 'load_conversation_messages']
+actual_tools: ['search_previous_conversations', 'load_conversation_messages']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 7.612
+error: None
+answer: 철수의 과거 대화에서 "고객 인터뷰" 관련 내용은 7월 9일 14시에 고객 인터뷰 일정이 있다는 내용이 있습니다. 대화 전체 메시지는 다음과 같습니다.
+
+"철수: 7월 7일 10시는 API 연동 실습, 7월 9일 14시는 고객 인터뷰, 7월 15일 16시는 QA 리뷰가 있어요."
+
+[PASS] conversation_load_03 repeat=1 category=conversation_load
+question: 영희의 이전 대화에서 디자인 피드백을 찾고 그 대화 전문을 보여줘.
+expected_tools: ['search_previous_conversations', 'load_conversation_messages']
+actual_tools: ['search_previous_conversations', 'load_conversation_messages']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': False, 'answer': True}
+warnings: ['arguments']
+elapsed_seconds: 7.245
+error: None
+answer: 영희의 이전 대화에서 디자인 피드백 관련 내용은 7월 7일 13시에 디자인 피드백 일정이 있다는 내용입니다. 대화 전문은 다음과 같습니다.
+
+"영희: 7월 7일 13시는 디자인 피드백, 7월 10일 10시는 콘텐츠 점검, 7월 16일 15시는 발표 리허설입니다."
+
+[PASS] conversation_load_04 repeat=1 category=conversation_load
+question: 지훈의 과거 대화에서 보안 점검을 검색한 뒤 전체 대화 내용을 확인해줘.
+expected_tools: ['search_previous_conversations', 'load_conversation_messages']
+actual_tools: ['search_previous_conversations', 'load_conversation_messages']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': False}
+warnings: ['answer']
+elapsed_seconds: 7.122
+error: None
+answer: 지훈의 과거 대화에서 보안 점검 관련 내용은 7월 14일 10시에 보안 점검 일정이 있다는 내용이 있습니다. 추가로 확인할 내용이 있으면 알려주세요.
+
+[PASS] external_schedule_01 repeat=1 category=external_schedule
+question: 민준의 2026년 7월 7일부터 7월 17일까지 일정을 알려줘.
+expected_tools: ['extract_schedules_from_history']
+actual_tools: ['extract_schedules_from_history']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.654
+error: None
+answer: 민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.
+- 7월 8일 09:30~10:30: 데이터 정리
+- 7월 9일 11:00~12:00: 백엔드 리뷰
+- 7월 14일 15:00~16:30: 운영 회의
+필요하신 다른 일정이나 정보가 있으면 알려주세요.
+
+[PASS] external_schedule_02 repeat=1 category=external_schedule
+question: 서연의 2026년 7월 7일부터 7월 17일까지 바쁜 시간을 조회해줘.
+expected_tools: ['extract_schedules_from_history']
+actual_tools: ['extract_schedules_from_history']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.975
+error: None
+answer: 서연의 2026년 7월 7일부터 7월 17일까지 바쁜 시간은 다음과 같습니다.
+- 7월 8일 13:30부터 14:30까지 사용자 테스트
+- 7월 10일 16:00부터 17:00까지 보고서 정리
+- 7월 15일 10:00부터 11:00까지 UX 워크숍
+입니다.
+
+[PASS] external_schedule_03 repeat=1 category=external_schedule
+question: 지훈이 2026년 7월 7일부터 7월 17일까지 언제 바쁜지 알려줘.
+expected_tools: ['extract_schedules_from_history']
+actual_tools: ['extract_schedules_from_history']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.23
+error: None
+answer: 지훈이는 2026년 7월 7일 15:00부터 16:00까지 모델 평가 일정이 있고, 7월 14일 10:00부터 11:30까지 보안 점검 일정이 있으며, 7월 16일 13:00부터 14:00까지 릴리즈 회의 일정이 있어 그 시간대에 바쁩니다.
+
+[PASS] external_schedule_04 repeat=1 category=external_schedule
+question: 하린의 2026년 7월 7일부터 7월 17일까지 일정을 조회해줘.
+expected_tools: ['extract_schedules_from_history']
+actual_tools: ['extract_schedules_from_history']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.365
+error: None
+answer: 하린의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.
+- 7월 8일 11:00~12:00: 온보딩 세션
+- 7월 10일 14:00~15:00: 파트너 콜
+- 7월 17일 09:00~10:00: 회고 준비
+필요하신 다른 일정이나 정보가 있으면 알려주세요.
+
+[PASS] collect_schedule_01 repeat=1 category=collect_schedule
+question: 내 일정과 민준의 일정을 2026년 7월 7일부터 7월 17일까지 함께 조회해줘.
+expected_tools: ['collect_member_schedules']
+actual_tools: ['collect_member_schedules', 'personal_list_saved_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 14.208
+error: None
+answer: 2026년 7월 7일부터 7월 17일까지의 일정입니다.
+
+민준의 일정:
+- 7월 8일 09:30-10:30 데이터 정리
+- 7월 9일 11:00-12:00 백엔드 리뷰
+- 7월 14일 15:00-16:30 운영 회의
+
+사용자님의 일정은 해당 기간에 등록된 일정이 없습니다.
+
+[PASS] collect_schedule_02 repeat=1 category=collect_schedule
+question: 2026년 7월 7일부터 7월 17일까지 내 일정과 서연의 바쁜 시간을 같이 보여줘.
+expected_tools: ['collect_member_schedules']
+actual_tools: ['collect_member_schedules', 'personal_list_saved_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': False, 'arguments': True, 'answer': True}
+warnings: ['exact_tool_sequence']
+elapsed_seconds: 7.004
+error: None
+answer: 2026년 7월 7일부터 7월 17일까지 서연의 바쁜 일정은 다음과 같습니다.
+- 7월 8일 13:30~14:30: 사용자 테스트
+- 7월 10일 16:00~17:00: 보고서 정리
+- 7월 15일 10:00~11:00: UX 워크숍
+
+해당 기간 동안 귀하의 개인 일정은 등록된 것이 없습니다.
+
+[PASS] collect_schedule_03 repeat=1 category=collect_schedule
+question: 나와 철수의 2026년 7월 7일부터 7월 17일까지 일정을 한 번에 모아줘.
+expected_tools: ['collect_member_schedules']
+actual_tools: ['collect_member_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': False, 'answer': True}
+warnings: ['arguments']
+elapsed_seconds: 4.97
+error: None
+answer: 2026년 7월 7일부터 7월 17일까지 나와 철수의 일정은 다음과 같습니다.
+
+- 철수: API 연동 실습, 7월 7일 10:00-11:00
+- 철수: 고객 인터뷰, 7월 9일 14:00-15:30
+- 철수: QA 리뷰, 7월 15일 16:00-17:00
+
+나의 일정은 해당 기간에 저장된 일정이 없습니다. 추가로 확인할 내용이 있으면 알려주세요.
+
+[PASS] collect_schedule_04 repeat=1 category=collect_schedule
+question: 내 일정과 영희의 일정을 2026년 7월 7일부터 7월 17일까지 같이 확인해줘.
+expected_tools: ['collect_member_schedules']
+actual_tools: ['collect_member_schedules', 'personal_list_saved_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': False, 'arguments': False, 'answer': True}
+warnings: ['exact_tool_sequence', 'arguments']
+elapsed_seconds: 6.845
+error: None
+answer: 2026년 7월 7일부터 7월 17일까지의 일정 확인 결과, 영희의 일정은 다음과 같습니다.
+- 7월 7일 13:00-14:00 디자인 피드백
+- 7월 10일 10:00-11:30 콘텐츠 점검
+- 7월 16일 15:00-16:00 발표 리허설
+
+사용자님의 일정은 해당 기간에 등록된 일정이 없습니다.
+
+[PASS] shared_schedule_01 repeat=1 category=shared_schedule
+question: 공유 일정 저장소에 등록된 철수의 2026년 7월 7일부터 7월 17일까지 일정을 직접 확인해줘.
+expected_tools: ['list_shared_schedules']
+actual_tools: ['list_shared_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.168
+error: None
+answer: 철수의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.
+
+- 7월 7일 10:00-11:00: API 연동 실습
+- 7월 9일 14:00-15:30: 고객 인터뷰
+- 7월 15일 16:00-17:00: QA 리뷰
+
+필요한 다른 일정이나 정보가 있으면 알려주세요.
+
+[PASS] shared_schedule_02 repeat=1 category=shared_schedule
+question: 공유 일정 저장소에서 민준의 2026년 7월 7일부터 7월 17일까지 등록 일정을 조회해줘.
+expected_tools: ['list_shared_schedules']
+actual_tools: ['list_shared_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.283
+error: None
+answer: 민준의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.
+- 7월 8일 09:30~10:30: 데이터 정리
+- 7월 9일 11:00~12:00: 백엔드 리뷰
+- 7월 14일 15:00~16:30: 운영 회의
+필요한 일정에 대해 더 자세한 정보가 필요하면 알려주세요.
+
+[PASS] shared_schedule_03 repeat=1 category=shared_schedule
+question: 공유 일정 저장소에 있는 지훈의 2026년 7월 7일부터 7월 17일까지 일정을 직접 보여줘.
+expected_tools: ['list_shared_schedules']
+actual_tools: ['list_shared_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 7.097
+error: None
+answer: 지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 있는 일정은 다음과 같습니다.
+
+- 7월 7일 15:00-16:00: 모델 평가
+- 7월 14일 10:00-11:30: 보안 점검
+- 7월 16일 13:00-14:00: 릴리즈 회의
+
+필요한 다른 일정이나 정보가 있으면 알려주세요.
+
+[PASS] shared_schedule_04 repeat=1 category=shared_schedule
+question: 공유 일정 저장소에서 하린의 2026년 7월 7일부터 7월 17일까지 일정을 직접 확인해줘.
+expected_tools: ['list_shared_schedules']
+actual_tools: ['list_shared_schedules']
+core_checks: {'execution': True, 'tool_sequence': True, 'result': True}
+quality_checks: {'exact_tool_sequence': True, 'arguments': True, 'answer': True}
+warnings: []
+elapsed_seconds: 5.219
+error: None
+answer: 하린의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.
+- 7월 8일 11:00~12:00 온보딩 세션
+- 7월 10일 14:00~15:00 파트너 콜
+- 7월 17일 09:00~10:00 회고 준비
+필요한 일정에 대해 더 도와드릴까요?
+
