@@ -327,17 +327,18 @@ def _collect_member_schedules(
         if normalized_date_to and (not row_date or row_date > normalized_date_to):
             continue
 
-        # schedules 테이블에는 personal_schedule과 group_schedule이 함께 들어 있고 owner는 항상 'me'라,
-        # 종류만으로는 내가 참석하는 일정인지 알 수 없어 참석자 목록으로 판단합니다.
-        # 개인 일정은 항상 내 busy로 보고, 그룹 일정은 참석자에 내가 있을 때만 내 busy로 봅니다.
-        # 참석자에 내가 없는 그룹 일정은 내가 대신 잡아 준 남의 일정이고,
-        # sync_group_schedule_to_shared가 참석자별 공유 row를 이미 만들어 두므로
-        # 그 멤버를 조회할 때 외부 rows로 잡힙니다. 여기서 또 세면 내 후보만 줄어듭니다.
+        # schedules 테이블에는 personal_schedule과 group_schedule이 함께 들어 있는데,
+        # 두 종류 모두 내 busy로 봅니다. 내가 참석하지 않는 일정만 빼고 싶었지만 그럴 신호가 없습니다.
+        # owner는 저장 시 항상 'me'로 박히고, week02의 _sync_kind_with_members가 members 유무만으로
+        # kind를 정하며, members 설명에는 사용자 본인을 넣으라는 지시가 없습니다. 그래서
+        # "민준이랑 점심"도 group_schedule / attendees=['민준']이 되고, 참석자에 "나"가 없다는 이유로
+        # 빼면 내가 확실히 가는 일정이 busy에서 사라집니다.
+        # 과다 차단은 사용자가 "왜 이 시간이 안 돼?"라고 그 자리에서 되물어 고칠 수 있지만,
+        # 과소 차단은 이미 일정이 있는 시간을 후보로 내보내 당일에야 드러나므로 더 비쌉니다.
+        # 대신 notes에 그룹 일정과 참석자를 남겨 LLM이 참석 여부를 확인하도록 합니다.
         attendees = request.members or []
         request_kind = str(schedule.get("request_kind") or "personal_schedule")
         is_group_schedule = request_kind == "group_schedule"
-        if is_group_schedule and attendees and PERSONAL_SHARED_MEMBER_NAME not in attendees:
-            continue
 
         # 시간 판정은 Week 6 busy 계산이 쓰는 parse_time_minutes로 통일해 "미정" 해석이 갈리지 않게 합니다.
         start_minutes = parse_time_minutes(request.start_time, _UNSPECIFIED_TIME_MINUTES)
