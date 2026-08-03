@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -23,6 +24,7 @@ from fixed.mcp_client import (
     load_local_mcp_tools_sync,
 )
 from fixed.runtime_clock import current_app_date_iso
+from fixed.schedule_decision import normalize_date_bound
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
@@ -296,8 +298,8 @@ def _collect_member_schedules(
     # LLM이 member_names에 "나"를 포함해도 무시한다.
     # member_name에 "나"로 설정했으므로, 걸러내지 않으면
     # extract_schedules_from_history, personal_schedules 둘다, 그러니까 개인 일정과 외부 멤버 일정 양쪽에 포함되어 중복으로 rows에 들어갈 수 있다.
-    member_names = [name for name in member_names if name!="나"]
     normalized_names = normalize_external_member_names(member_names)
+    normalized_names = [name for name in normalized_names if name !=PERSONAL_SHARED_MEMBER_NAME]
     normalized_date_from,normalized_date_to=normalize_external_schedule_date_bounds(member_names,date_from,date_to)
     # 이 MCP 호출/파싱이 실패해도 여기서 예외를 던져서 빈 rows로 조용히 넘어가지 않게 한다.
     # LangChain이 tool 예외를 잡아 에러 메시지로 LLM에 전달해주므로, 실패와 데이터가 없음을 확실히 구분해야한다.
@@ -319,17 +321,25 @@ def _collect_member_schedules(
     rows = []
     for elem in personal_schedules:
         structured = _structured_request_from_schedule_row(elem)
-        if not structured.date or not (normalized_date_from <= structured.date <=normalized_date_to):
+        if not structured.date:
             continue
-
+        row_date = normalize_date_bound(structured.date) # fixed/schedule_decision
+        # 값이 있는 경우만 해당 방향으로 체크하도록 해야 함
+        if normalized_date_from and row_date < normalized_date_from:
+            continue
+        # date_from은 비어있어도 무방하나 date_to의 경우에는 비어있는 경우 내 일정이 모두 걸러진다는 위험이 존재 -> 이를 방지하기 위한 필터 추가
+        # 1주차 personal_list_schedules에서 date_from/date_to 필터를 나눠 작성했던 것을 기억할 것
+        if normalized_date_to and row_date > normalized_date_to:
+            continue
+        
         # end_time은 "미정" 또는 None이어도 그대로 넘기기: 사용자도 불확실하기 때문에 end_time을 임의로 판단하는 것보다 그대로 넘기는 것이 안전하다고 생각함
         rows.append({
-            "member_name":"나",
+            "member_name":PERSONAL_SHARED_MEMBER_NAME,
             "title":structured.title,
-            "date": structured.date,
+            "date": row_date,
             "start_time":structured.start_time,
             "end_time":structured.end_time,
-            "notes": "내 SQLite 저장 일정",
+            "notes": "내 SQLite 저장 일정" if elem.get("schedule_id") else "현재 대화의 아직 저장 안된 임시 일정",
         })
     rows= rows + external_rows
     return {
@@ -502,8 +512,7 @@ def week05_prompt_parts() -> list[str]:
         "search_previous_conversations로 찾은 특정 대화의 전체 내용을 자세히 봐야한다면 load_conversation_messages로 conversation_id를 넣어 조회한다.",
         "특정 멤버가 이미 바빠서 안 되는 시간대가 궁금하면 extract_schedules_from_history로 그 사람의 busy-time(바쁜 시간대)을 추출한다.",
         "이미 등록된 공유 일정 저장소 자체를 확인하고 싶으면 list_shared_schedules를 사용한다.",
-        "여러 명이 참여하는 일정을 조율하려면, collect_member_schedules를 사용한다.",
-        "member_names에는 외부 멤버 이름만 넣고, 나 자신은 넣지 않는다.",
+        "여러 명이 참여하는 일정을 조율하려면, collect_member_schedules를 사용한다. 이 tool은 내 일정을 자동으로 합쳐주므로, member_names에는 외부 멤버 이름만 넣고, 나 자신은 넣지 않는다.",
         "collect_member_schedules는 바쁜 시간 후보(rows)만 모아줄 뿐, 실제로 만날 시간을 정하는 것은 이 tool의 역할이 아니다. rows에 없는 시간을 스스로 만들어내 답하지 않는다.",
         "공유 일정 저장소에 새 일정을 등록하거나 삭제해야한다면, create_shared_schedule/delete_shared_schedule를 사용하고, source_conversation_id나 schedule_id를 통해 나중에 수정 및 삭제가 가능하게 한다.",
         ]
