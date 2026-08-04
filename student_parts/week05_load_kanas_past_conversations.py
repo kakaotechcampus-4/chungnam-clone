@@ -501,6 +501,10 @@ def week05_prompt_parts() -> list[str]:
             "외부 멤버의 바쁜 시간을 알고 싶으면 extract_schedules_from_history를 사용하세요. "
             "나와 팀원의 일정을 한꺼번에 모을 때는 collect_member_schedules를 사용하세요. "
             "공유 일정 저장소를 확인할 때는 list_shared_schedules를 사용하세요. "
+            "'공유 일정으로 저장/등록'해달라는 요청은 반드시 create_shared_schedule을 사용하고, "
+            "'공유 일정을 삭제/취소'해달라는 요청은 반드시 delete_shared_schedule을 사용하세요. "
+            "이 두 tool은 개인 일정 tool(personal_create_schedule/personal_delete_schedule)과 "
+            "다르니 혼동하지 마세요. "
             "Week 5에서는 최종 회의 시간 결정은 하지 않고 일정 수집과 바쁜 시간 파악까지만 담당합니다."
         ),
     ]
