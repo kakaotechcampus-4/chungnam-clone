@@ -723,6 +723,24 @@ def _no_self_duplicate_once() -> tuple[bool, str]:
     return (len(mine) == 1 and not synced), f"내 일정={len(mine)}건 동기화사본={len(synced)}건"
 
 
+def _manual_shared_mine_included_once() -> tuple[bool, str]:
+    """앱 DB에 원본이 없는 "나" 공유 row도 내 busy-time에 든다.
+
+    _no_self_duplicate_once의 **반대 축**이다. 사본 중복을 막는 가장 쉬운 방법은 "나"를 외부 조회
+    대상에서 빼는 것인데, 그러면 create_shared_schedule로 공유 저장소에 직접 등록한 일정은 앱 DB에
+    원본이 없어 어느 경로로도 안 잡힌다. 그 시각이 Week 6에서 "가능"으로 제안된다 —
+    _group_busy_included_once가 막는 결함과 같은 부류다.
+    """
+    rebind_temp_dbs()
+    m.create_shared_schedule.invoke(
+        {"member_name": "나", "title": "수동 등록 회의", "date": "2026-07-10",
+         "start_time": "13:00", "end_time": "14:00"}
+    )
+    rows = _collect_rows(["나", "철수"])
+    hit = [r for r in rows if r.get("title") == "수동 등록 회의"]
+    return len(hit) == 1, f"수동 등록 rows={[(r.get('member_name'), r.get('start_time')) for r in hit]}"
+
+
 def _keeps_external_members_once() -> tuple[bool, str]:
     """위 축의 반대편(kanana-conventions §6): "나"를 빼면서 외부 멤버까지 깎으면 안 된다."""
     rebind_temp_dbs()
@@ -736,10 +754,15 @@ def _keeps_external_members_once() -> tuple[bool, str]:
 def _filters_contract_once() -> tuple[bool, str]:
     """무엇을 조회했는지가 반환값에 남아야 한다.
 
-    이 tool은 member_names와 무관하게 내 일정을 항상 붙이고, "나"는 외부 조회 대상에서 빠진다.
-    그래서 어떤 멤버의 rows가 0건일 때 "조회했는데 일정이 없음"인지 "애초에 조회 대상이 아님"인지
-    조회 조건이 남지 않으면 호출한 쪽에서 구분할 수 없다.
+    이 tool은 member_names와 무관하게 내 일정을 항상 붙이고, 요청된 멤버는 "나"까지 전부 외부
+    조회 대상이다. 그래서 어떤 멤버의 rows가 0건일 때 "조회했는데 일정이 없음"인지 "애초에
+    조회 대상이 아님"인지 조회 조건이 남지 않으면 호출한 쪽에서 구분할 수 없다.
     키 이름 filters는 week03 personal_list_saved_schedules가 이미 쓰는 관례를 따른 것이다.
+
+    "나"를 외부 조회에서 빼지 않는 것이 이 프로젝트의 결정이다. 공유 저장소의 "나" row 대부분은
+    앱 저장 시 자동 동기화된 사본이지만, create_shared_schedule로 직접 등록해 앱 DB에 원본이 없는
+    row도 있다. 입력 단계에서 "나"를 빼면 그 row가 어느 경로로도 안 잡혀 busy-time이 사라지므로,
+    사본 중복은 _dedupe_schedule_rows가 응답 단계에서 걸러낸다(_no_self_duplicate_once가 그 축이다).
     """
     rebind_temp_dbs()
     payload = _collect_payload(["나", "철수", "설하"])
@@ -747,7 +770,7 @@ def _filters_contract_once() -> tuple[bool, str]:
     external = f.get("external_member_names") or []
     ok = (
         f.get("requested_member_names") == ["나", "철수", "설하"]
-        and "나" not in external
+        and "나" in external                # 사본 아닌 "나" 공유 row를 놓치지 않도록 조회 대상에 든다
         and "설하" in external              # fixture에 없는 멤버도 '조회했다'는 사실이 남아야 한다
         and f.get("date_from") == "2026-07-07"
         and f.get("includes_personal_schedules") is True
@@ -867,6 +890,7 @@ def run(n: int) -> dict[str, dict]:
     # 내 일정 사본 중복 차단과 그 반대편(외부 멤버 과잉 제거), 조회 조건 보고, 그룹 일정 포함
     for cid, fn in (
         ("collect_no_self_duplicate", _no_self_duplicate_once),
+        ("collect_manual_shared_mine", _manual_shared_mine_included_once),
         ("collect_keeps_external_members", _keeps_external_members_once),
         ("collect_filters_contract", _filters_contract_once),
         ("collect_group_busy_included", _group_busy_included_once),

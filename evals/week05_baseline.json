@@ -184,6 +184,13 @@
       "ambiguous": false,
       "notes": []
     },
+    "collect_manual_shared_mine": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
     "collect_keeps_external_members": {
       "passed": 5,
       "n": 5,
