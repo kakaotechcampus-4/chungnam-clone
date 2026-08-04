@@ -64,23 +64,6 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
 
 # 하지 말아야 할 것
 
-- 파일 상단의 `[5주차 수강생 구현 가이드]` 주석은 출제 의도 확인용으로 **컨닝하지 않는다**. 그
-  내용을 그대로 베끼거나 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
-- `search_previous_conversations`/`extract_schedules_from_history`/`list_shared_schedules`에서
-  멤버 이름·날짜 범위의 별칭/포맷 치환을 wrapper가 다시 계산하지 않는다. `normalize_external_member_names`/
-  `normalize_external_schedule_date_bounds`는 이미 MCP 서버 쪽 `ExternalPeopleSQLiteStore` 내부에서
-  호출되므로, `member_names`/`date_from`/`date_to` 값 자체는 wrapper가 다시 바꾸지 않고 그대로 넘긴다.
-  (단, `limit`처럼 `None`/누락 방어가 필요한 필드는 이 항목과 별개다 — 아래 "LLM tool 입력 방어" 참고.)
-  - `list_shared_schedules`가 감싸는 `ExternalPeopleSQLiteStore.list_shared_schedules`(약 373~374번째
-    줄)는 `normalize_external_schedule_date_bounds`라는 이름의 helper를 호출하지는 않지만, 같은
-    `str(date).split("T", 1)[0].strip()` 형식 정리를 인라인으로 동일하게 수행한다. 즉 `"T"` 이후
-    시간부를 잘라내는 형식 정리는 `extract_schedules_from_history`·`list_shared_schedules` 두 store
-    메서드 모두에서 이미 한 번 처리되므로, 이 항목(별칭/포맷 치환 재계산 금지)은 `list_shared_schedules`
-    에도 그대로 적용된다 — wrapper가 `date_from`/`date_to` 문자열을 별도로 자르거나 재포맷하지 않는다.
-  - 단, "형식 정리(문자열 자르기)"가 boundary에서 처리된다는 것과, `date_from`/`date_to`가 `None`일 때
-    "그 방향 전체 기간"으로 채우는 것 / `date_to < date_from`을 검증하는 것은 별개의 문제다. 두
-    store 메서드 어디도 이 두 가지를 대신 해주지 않으므로, 아래 "date_from/date_to 입력 방어 (공통)"
-    절의 내용은 이 항목과 상충하지 않고 여전히 wrapper 책임으로 남는다.
 - `load_conversation_messages`가 `call_external_tool_payload`로 받은 dict의 `sender`/`content`/
   `created_at` 순서나 필드를 가공(재정렬, 필드 추가/삭제 등)하지 않는다.
 - `extract_schedules_from_history`/`list_shared_schedules` 결과 문자열을 파싱해서 필드명을 바꾸거나
