@@ -7,11 +7,11 @@
   python -m unittest discover -s tests
   python -m unittest tests.test_week04_failure_cases
 
-테스트 assertion은 stub store만 사용하므로 LLM/임베딩을 타지 않습니다. week04는
-import 시점에 전역 store를 생성하므로, 모듈 import "전에" CONFIG의 저장소 경로를 임시
-디렉터리로 돌립니다(아래). 그래서 import 중 만들어지는 파일까지 임시 폴더에만 생기고
-실제 앱 데이터(data/)는 전혀 건드리지 않습니다. (PROXY_TOKEN이 있으면 import 시 임시
-참고자료 스토어 초기화로 임베딩 1회 호출이 있을 수 있으나 임시 폴더에만 영향을 줍니다.)
+이 파일은 결정적 테스트라 논리적 격리를 위해 모듈 import "전에" CONFIG의 저장소 경로를
+임시 디렉터리로 돌리고 토큰도 비웁니다(아래). 그래서 (1) import 중 만들어지는 파일까지
+임시 폴더에만 생겨 실제 data/를 건드리지 않고, (2) 토큰이 비어 참고자료 초기화 등
+외부 임베딩 호출도 일어나지 않습니다. 실제 LLM 검증은 test_week04_agent_smoke가 자기
+설정을 따로 만들어 수행합니다.
 """
 
 from __future__ import annotations
@@ -29,10 +29,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fixed.config as _cfg
 
 _TMP = Path(tempfile.mkdtemp(prefix="week4_failure_"))
-# 경로만 임시로 돌리고 토큰은 그대로 둔다. (토큰까지 바꾸면 같은 프로세스에서 함께 도는
-# 다른 테스트 파일의 CONFIG 바인딩이 오염돼 실제 키가 필요한 스모크 테스트가 깨진다.)
+# 논리적 격리: 결정적 테스트이므로 경로를 임시로 돌리는 것에 더해 토큰도 비워 import 시
+# 외부 호출(임베딩 등)이 아예 없게 한다. 실제 토큰이 필요한 스모크 테스트는 자기
+# setUpClass에서 실제 토큰 config를 스스로 구성하므로 여기서 비워도 안전하다.
 _cfg.CONFIG = dataclasses.replace(
     _cfg.CONFIG,
+    proxy_token=None,
     chroma_dir=_TMP / "chroma",
     app_db_path=_TMP / "app.sqlite3",
     external_db_path=_TMP / "external.sqlite3",
