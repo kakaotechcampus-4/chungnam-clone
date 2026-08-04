@@ -15,6 +15,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -307,10 +308,14 @@ class CollectMemberSchedulesInput(BaseModel):
 
 
 def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequest:
-    """앱 일정 row를 Week 2 StructuredRequest 기준으로 읽습니다."""
+    """앱 일정 row를 Week 2 StructuredRequest 기준으로 읽습니다.
+
+    앱 SQLite row는 request_kind로 개인/그룹을 구분한다. Week 1 임시 일정 row에는 이 값이 없으므로
+    그때만 개인 일정으로 본다. 그룹 회의도 내가 바쁜 시간이라 종류를 구분해 두어야 한다.
+    """
 
     return StructuredRequest(
-        kind="personal_schedule",
+        kind="group_schedule" if row.get("request_kind") == "group_schedule" else "personal_schedule",
         title=row.get("title"),
         date=row.get("date"),
         start_time=row.get("start_time"),
@@ -318,6 +323,50 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         members=row.get("attendees") or row.get("members") or [],
         original_text=str(row.get("title") or ""),
     )
+
+
+def _my_schedule_notes(request: StructuredRequest) -> str:
+    """내 일정 row가 개인 일정인지, 참석자가 있는 그룹 일정인지 설명합니다."""
+
+    if request.kind != "group_schedule":
+        return "Nana 개인 일정"
+    members = [str(member).strip() for member in request.members or [] if str(member).strip()]
+    return f"Nana 그룹 일정 · 참석자: {', '.join(members)}" if members else "Nana 그룹 일정"
+
+
+def _schedule_dedupe_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
+    """같은 일정을 알아보기 위한 비교 키입니다.
+
+    앱 DB 경로와 공유 저장소 경로가 같은 일정을 서로 다르게 다듬기 때문에 값을 그대로 비교할 수 없다.
+    공유 저장소는 제목에서 소괄호를 지우고 연속 공백을 하나로 줄이며, 빈 시각을 "미정"으로 저장한다.
+    그래서 제목은 같은 방식으로 다듬고 시각은 빈 값을 "미정"으로 맞춘 뒤 비교한다.
+
+    end_time은 키에서 뺀다. 같은 사람이 같은 날 같은 시각에 시작하는 같은 제목의 일정은 하나로 본다.
+    """
+
+    title = strip_parenthetical_text(str(row.get("title") or ""))
+    return (
+        str(row.get("member_name") or "").strip(),
+        str(row.get("date") or "").strip(),
+        str(row.get("start_time") or "").strip() or "미정",
+        " ".join(str(title).split()),
+    )
+
+
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """같은 일정이 두 경로로 들어와도 하나만 남깁니다.
+
+    앱에 저장한 내 일정은 공유 저장소에도 "나" 이름으로 자동 동기화되므로, member_names에 "나"가
+    들어온 호출에서는 같은 일정이 앱 DB 경로와 공유 저장소 경로로 두 번 들어온다.
+
+    먼저 들어온 row를 남기므로 호출부에서 앱 DB row를 앞에 두어야 한다. 앱 DB row의 notes가
+    개인/그룹과 참석자를 담고 있어 공유 저장소의 "자동 동기화" 문구보다 쓸모 있다.
+    """
+
+    deduped: dict[tuple[str, str, str, str], dict[str, Any]] = {}
+    for row in rows:
+        deduped.setdefault(_schedule_dedupe_key(row), row)
+    return list(deduped.values())
 
 
 def _collect_member_schedules(
@@ -333,36 +382,60 @@ def _collect_member_schedules(
     normalized_members = normalize_external_member_names(member_names)
     window_from, window_to = normalize_external_schedule_date_bounds(member_names, date_from, date_to)
 
-    external_payload = json.loads(
-        call_mcp_tool_sync(
-            "extract_schedules_from_history",
-            {"member_names": normalized_members, "date_from": window_from, "date_to": window_to},
+    # 대상 멤버가 없으면 외부 조회를 건너뛴다. 빈 목록은 서버에서도 0건이라 서브프로세스만 낭비된다.
+    external_rows: list[dict[str, Any]] = []
+    if normalized_members:
+        external_payload = json.loads(
+            call_mcp_tool_sync(
+                "extract_schedules_from_history",
+                {"member_names": normalized_members, "date_from": window_from, "date_to": window_to},
+            )
         )
-    )
-    external_rows = external_payload.get("rows") or []
+        external_rows = external_payload.get("rows") or []
 
-    # 구간 밖이거나 날짜가 없는 내 일정은 제외한다. 외부 쪽은 서버가 이미 구간으로 걸러 주므로,
-    # 내 일정만 전부 넣으면 7월을 물었는데 8월 일정이 바쁜 시간으로 섞인다.
-    has_window = bool(window_from and window_to)
-    personal_rows = [
-        {
-            "member_name": PERSONAL_SHARED_MEMBER_NAME,
-            "title": schedule.get("title"),
-            "date": schedule.get("date"),
-            "start_time": schedule.get("start_time"),
-            "end_time": schedule.get("end_time"),
-            "notes": schedule.get("notes"),
-        }
-        for schedule in personal_schedules
-        if not has_window or (schedule.get("date") and window_from <= str(schedule["date"]) <= window_to)
-    ]
+    # 날짜가 없는 일정은 시간대를 막는 근거가 될 수 없어 항상 제외한다. 구간 밖도 제외한다 —
+    # 외부 쪽은 서버가 이미 걸러 주므로, 내 일정만 전부 넣으면 7월을 물었는데 8월 일정이 섞인다.
+    personal_rows: list[dict[str, Any]] = []
+    for schedule in personal_schedules:
+        request = _structured_request_from_schedule_row(schedule)
+        if not request.date:
+            continue
+        if window_from and request.date < window_from:
+            continue
+        if window_to and request.date > window_to:
+            continue
+        personal_rows.append(
+            {
+                "member_name": PERSONAL_SHARED_MEMBER_NAME,
+                "title": request.title,
+                "date": request.date,
+                # 빈 시각은 "미정"으로 맞춘다. 공유 저장소가 쓰는 표기와 같아야 요약이 일관되고,
+                # 6주차 겹침 검증(fixed/schedule_decision.py)이 "미정"을 자정까지로 보수적으로 다룬다.
+                # 임의의 종료 시각으로 바꾸면 그 뒤가 빈 시간으로 추천되고, 외부 멤버의 "미정"과
+                # 취급이 달라진다.
+                "start_time": request.start_time or "미정",
+                "end_time": request.end_time or "미정",
+                "notes": _my_schedule_notes(request),
+            }
+        )
 
+    # 중복 제거를 정렬보다 먼저 한다. 먼저 온 row를 남기는 방식이라 앱 DB row가 앞에 있어야 한다.
+    rows = _dedupe_schedule_rows([*personal_rows, *external_rows])
     # 서버는 외부 멤버만 정렬해 주므로 두 출처를 섞은 순서는 여기서 정한다.
-    rows = [*personal_rows, *external_rows]
     rows.sort(key=lambda row: (str(row.get("date") or ""), str(row.get("start_time") or "")))
 
-    # 서버가 준 schedule_summary는 외부 멤버만 기준이라, 내 일정까지 합친 rows로 다시 만든다.
-    return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
+    return {
+        "ok": True,
+        "tool_name": "collect_member_schedules",
+        # 내가 빠지지 않게 앞에 두고, member_names에 "나"가 들어와도 두 번 들어가지 않게 걸러낸다.
+        "members": [
+            PERSONAL_SHARED_MEMBER_NAME,
+            *[name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME],
+        ],
+        "rows": rows,
+        # 서버가 준 schedule_summary는 외부 멤버만 기준이라, 내 일정까지 합친 rows로 다시 만든다.
+        "schedule_summary": external_schedule_summary(rows),
+    }
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
