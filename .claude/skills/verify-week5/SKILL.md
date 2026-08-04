@@ -335,12 +335,12 @@ synced = [r for r in out['rows'] if r.get('notes') == '앱 개인 일정 자동 
 print('내 일정 rows =', len(mine), '| 동기화 사본 rows =', len(synced))
 assert len(mine) == 1 and not synced, '같은 일정이 앱 원본 + 공유 사본으로 중복됨: ' + str(mine + synced)
 
-# (b) 반대 축 — '나'를 빼면서 외부 멤버까지 깎으면 안 된다
+# (b) 반대 축 — 사본을 거르면서 외부 멤버 rows까지 깎으면 안 된다
 only_ext = collect(['철수'])
 a = [r for r in out['rows'] if r['member_name'] == '철수']
 b = [r for r in only_ext['rows'] if r['member_name'] == '철수']
 print('철수 rows =', len(a), 'vs', len(b))
-assert a and a == b, '자기 제외가 외부 멤버 rows까지 깎음'
+assert a and a == b, '사본 제거가 외부 멤버 rows까지 깎음'
 
 # (c) member_names=['나']만 와도 내 일정은 남는다 (전부 비우는 구현 차단)
 solo = collect(['나'])
@@ -351,19 +351,32 @@ print('solo rows =', len(solo['rows']))
 f = collect(['나', '철수', '설하']).get('filters') or {}
 print('filters =', json.dumps(f, ensure_ascii=False))
 assert f.get('requested_member_names') == ['나', '철수', '설하'], f
-assert '나' not in (f.get('external_member_names') or []), f
+assert '나' in (f.get('external_member_names') or []), '사본 아닌 \"나\" 공유 row를 놓치지 않도록 조회 대상에 들어야 한다: ' + str(f)
 assert '설하' in (f.get('external_member_names') or []), 'fixture에 없는 멤버도 조회했다는 사실이 남아야 한다'
 assert f.get('date_from') == '2026-07-07' and f.get('date_to') == '2026-07-17', f
 assert f.get('includes_personal_schedules') is True, f
+
+# (e) 사본 아닌 '나' 공유 row는 살아 있어야 한다 — (a)를 '나 제외'로 해결하면 여기서 실패한다
+m.create_shared_schedule.invoke({'member_name':'나','title':'수동 등록 회의','date':'2026-07-10','start_time':'13:00','end_time':'14:00'})
+manual = [r for r in collect(['나','철수'])['rows'] if r['title'] == '수동 등록 회의']
+print('수동 등록 rows =', manual)
+assert len(manual) == 1, '앱 DB에 원본이 없는 \"나\" 공유 row가 busy-time에서 빠짐'
 print('SELF_DEDUP_AND_FILTERS_OK')
 " | grep -v "Processing request of type\|ListToolsRequest\|CallToolRequest\|server.py:"
 ```
 확인 포인트: `member_names`에 `"나"`가 들어와도 내 일정이 **1건**이고 공유 사본(`notes="앱 개인 일정 자동 동기화"`)이 섞이지 않는다.
-동시에 **(b)(c)로 과잉 제거가 아님**을 확인한다 — 자기 제외가 외부 멤버나 내 일정 자체를 깎으면 실패다.
+동시에 **(b)(c)(e)로 과잉 제거가 아님**을 확인한다 — 사본 제거가 외부 멤버·내 일정·사본 아닌 공유 row를 깎으면 실패다.
 `filters`는 week03 `personal_list_saved_schedules`의 기존 키 관례를 따른다.
 
 > ⚠️ 첫 줄의 `shared_sync` 단언이 **이 검사의 전제**다. 공유 사본이 애초에 안 생기면 (a)는
 > "빈 값으로 통과한 검사"가 된다(`verifier.md` 검증 설계 원칙).
+
+> **(d)(e)는 "나"를 외부 조회 대상에 넣는 설계를 전제로 한다.** 사본 중복은 입력 단계에서 `"나"`를
+> 빼는 것으로도 막을 수 있지만, 그러면 `create_shared_schedule`로 직접 등록해 앱 DB에 원본이 없는
+> `"나"` row가 어느 경로로도 안 잡혀 busy-time이 사라진다((e)가 그 축). 사본 중복은 응답 단계
+> dedupe가 담당한다 — 공유 저장소는 제목의 소괄호를 지우고 빈 시각을 `"미정"`으로 바꾸므로
+> 값을 그대로 비교하면 안 되고, `end_time`은 이 파일이 앱 DB 경로에서 바꾸지 않으므로 같은
+> `"미정"` 정규화를 거쳐 키에 넣는다(빼면 9(c)의 별개 일정이 병합된다).
 
 ## 8-c. collect_member_schedules — 그룹 일정도 내 busy-time
 ```bash
