@@ -189,7 +189,7 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     session_id = current_session_scope()
     
-    sqlite_store = AppSQLiteStore(CONFIG.app_db_path)
+    sqlite_store = AppSQLiteStore(CONFIG.app_db_path) # 날짜필터를 없이 전체일정을 가져와서 처리하는 것이 맞는 느낌
     sqlite_rows = sqlite_store.list_schedules(
         kind="personal_schedule",
         limit=200,
