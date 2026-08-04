@@ -186,36 +186,6 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-_EARLIEST_SCHEDULE_DATE = "0001-01-01"
-_LATEST_SCHEDULE_DATE = "9999-12-31"
-
-
-def _resolve_schedule_date_range(
-    date_from: str | None,
-    date_to: str | None,
-    *,
-    fill_open_range: bool,
-) -> tuple[str | None, str | None, str | None]:
-    """date_from/date_to의 None 처리와 역순 검증을 한 곳에서 처리합니다.
-
-    fill_open_range가 True면 None/빈 문자열을 그 방향 전체 기간(가장 이르거나 늦은 날짜)으로
-    채운다. False면 None은 그대로 두어 "필터 없음"이 store에 전달되게 한다(list_shared_schedules는
-    None이면 서버가 실습용 기본 공유 일정을 채워 반환하므로 이 방향으로 sentinel을 채우면 안 된다).
-    반환값의 세 번째 항목이 None이 아니면 호출자는 MCP tool을 부르지 않고 그 문자열을 에러로
-    바로 반환해야 한다.
-    """
-
-    resolved_from = date_from or None
-    resolved_to = date_to or None
-    if fill_open_range:
-        resolved_from = resolved_from or _EARLIEST_SCHEDULE_DATE
-        resolved_to = resolved_to or _LATEST_SCHEDULE_DATE
-    if resolved_from and resolved_to and resolved_to < resolved_from:
-        error = f"date_to는 date_from보다 앞설 수 없습니다: date_from={resolved_from} date_to={resolved_to}"
-        return resolved_from, resolved_to, error
-    return resolved_from, resolved_to, None
-
-
 def _personal_schedules_for_current_scope(date_from: str, date_to: str) -> list[dict[str, Any]]:
     """SQLite 저장 일정과 현재 대화의 임시 일정 중 date_from~date_to 범위에 속한 것만 group 조율 후보로 사용합니다."""
 
@@ -424,13 +394,9 @@ def extract_schedules_from_history(
     date_from/date_to는 zero-padded 'YYYY-MM-DD' 형식(예: '2026-07-01')으로 입력해야 합니다.
     저장소가 문자열 그대로 비교하므로 자리수가 다르면(예: '2026-7-1') 범위가 잘못 잡힙니다.
     """
-
-    resolved_from, resolved_to, error = _resolve_schedule_date_range(date_from, date_to, fill_open_range=True)
-    if error:
-        return json_payload({"ok": False, "tool_name": "extract_schedules_from_history", "error": error})
     return call_mcp_tool_sync(
         "extract_schedules_from_history",
-        {"member_names": member_names, "date_from": resolved_from, "date_to": resolved_to},
+        {"member_names": member_names, "date_from": date_from, "date_to": date_to},
     )
 
 
@@ -480,16 +446,13 @@ def list_shared_schedules(
     저장소가 문자열 그대로 비교하므로 자리수가 다르면(예: '2026-7-1') 범위가 잘못 잡힙니다.
     """
 
-    resolved_from, resolved_to, error = _resolve_schedule_date_range(date_from, date_to, fill_open_range=False)
-    if error:
-        return json_payload({"ok": False, "tool_name": "list_shared_schedules", "error": error})
     safe = safe_limit(limit, default=50, maximum=200)
     return call_mcp_tool_sync(
         "list_shared_schedules",
         {
             "member_names": member_names,
-            "date_from": resolved_from,
-            "date_to": resolved_to,
+            "date_from": date_from,
+            "date_to": date_to,
             "source_conversation_id": source_conversation_id,
             "limit": safe,
         },
@@ -504,15 +467,11 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     저장소가 문자열 그대로 비교하므로 자리수가 다르면(예: '2026-7-1') 범위가 잘못 잡힙니다.
     """
 
-    resolved_from, resolved_to, error = _resolve_schedule_date_range(date_from, date_to, fill_open_range=True)
-    if error:
-        return json_payload({"ok": False, "tool_name": "collect_member_schedules", "error": error})
-
-    personal_schedules = _personal_schedules_for_current_scope(resolved_from, resolved_to)
+    personal_schedules = _personal_schedules_for_current_scope(date_from, date_to)
     collected = _collect_member_schedules(
         member_names=member_names,
-        date_from=resolved_from,
-        date_to=resolved_to,
+        date_from=date_from,
+        date_to=date_to,
         personal_schedules=personal_schedules,
     )
     return json_payload(
@@ -549,6 +508,8 @@ def week05_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
+        """개인적인 참고자료 검색·등록이나 저장된 일정/할 일/알림 조회는 Week 4까지의 tool로 계속
+처리한다. 이번 주차에서 새로 바뀌지 않는다.""",
         """search_previous_conversation 툴은 인물, 키워드와 '메시지' 탐색 요청 시 사용된다 * 나 외의 인물과 공유한 메시지나 대화기록이 있는지 찾는 맥락  
 ex)철수가 남긴 메시지 , 영희가 남긴 일정  
 * member_names는 나를 제외한 언급된 사람이름을 채운다.
@@ -560,12 +521,14 @@ ex)철수가 남긴 메시지 , 영희가 남긴 일정
         """load_conversation_messages 툴은 search_previous_conversations로 찾은 특정 대화의 자세한 내용을 확인 할 필요가 있을때 이어서 사용한다.
 필요한 경우가 아니면 바로 직전 대화에서 완전히 파악된 대화와 같은 대화를
 다시 검색하지 않는다. """,
-        """extract_schedules_from_history 툴은 load_conversation_messages 툴의 사용 이후, 메시지에서도 잘 나와있지 않은 일정의 상세내용이나
-메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  
-메시지의 일정이 실제 공유저장소에 등록되었는지 파악해야 할 맥락에 사용된다.  
+"""extract_schedules_from_history는 나에 대한 일정은 조회하지 않는다.""",
+        """extract_schedules_from_history 툴은 member_names: list[str],date_from: str | None = None,date_to: str | None = None을 입력으로 받으며, 
+load_conversation_messages 툴의 사용으로 조회된 메시지들에 대해 잘 나와있지 않은 일정의 상세내용 및 공유저장소에 등록되여부를 파악할 때 사용된다.
+나를 제외한 외부 멤버들에 대한 조회만 허용한다.
+만약에 메시지에서 조회 날짜 시작/끝 정보를 도저히 찾을 수 없다면 None이 아닌 날짜 최소/날짜 최대로 입력한다.
 ex)(이전에 질문이 메시지에대한 정보를 묻는 맥락일때) 이 메시지일정이 공유저장소에 등록되어있어?  
 조회된 일정에서, 메시지에 언급되지 않은 일정은 자세히 설명하지 않고, 필요한 경우에만 설명한다.
-, 질문에서 제공된 의문점 위주로 답변한다.
+질문에서 제공된 의문점 위주로 답변한다.
 """,
         """메시지에 등장한 일정을 조회하는 맥락에서는 list_shared_schedules를 절대 사용하지 않는다.
 """,

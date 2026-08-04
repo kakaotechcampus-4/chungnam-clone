@@ -105,7 +105,7 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
 `list_shared_schedules`처럼 `date_from`/`date_to` 기간을 받는 tool은, `ExtractSchedulesFromHistoryInput`/
 `CollectMemberSchedulesInput`이 두 필드를 `str`(필수)로 선언해 두었어도 `student_parts/claude.md`의
 "LLM이 직접 호출하는 tool의 입력 방어" 규칙에 따라 LLM이 `None`을 보낼 수 있다고 가정하고 함수
-본문에서 아래 두 가지를 직접 처리한다.
+본문에서 아래 내용을 직접 처리한다.
 
 ## 1. `None`인 방향은 "그 방향 전체 기간"으로 채운다
 
@@ -124,26 +124,27 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
   동작이다(아래 "하지 말아야 할 것"의 "필터 기본값을 미리 채우지 않는다" 항목과 같은 이유). 그러므로
   `list_shared_schedules`는 `date_from`/`date_to`가 `None`이면 `None` 그대로 MCP tool에 넘긴다.
 
-## 2. `date_to`가 `date_from`보다 이전이면 tool 호출 전에 바로 에러로 응답한다
+## 2. `date_to < date_from`인 경우를 wrapper에서 별도로 검증하지 않는다
 
 - 대상: `extract_schedules_from_history`, `list_shared_schedules`, `collect_member_schedules` 세
-  tool 모두. 위 1번을 적용한 뒤(또는 `list_shared_schedules`처럼 둘 다 실제 값이 채워져 들어온
-  경우) 두 날짜가 모두 있고 `date_to < date_from`이면(둘 다 `YYYY-MM-DD` 형식이라 문자열 비교로
-  충분하다) `call_mcp_tool_sync`/`call_external_tool_payload`를 아예 호출하지 않고, 그 tool 함수
-  안에서 바로 에러 payload를 만들어 반환한다. LLM이 다른 tool을 추가로 부르지 않고 이 응답만으로
-  "종료일이 시작일보다 빠르다"고 사용자에게 바로 답할 수 있어야 하는 것이 핵심이다.
-- 에러 payload도 "tool 반환값의 envelope 구성" 규칙(`student_parts/claude.md`)을 따른다. 이 파일
-  안에서 직접 dict를 구성하는 경우이므로, `json_payload({"ok": False, "tool_name": "<그 tool 이름>",
-  "error": "date_to는 date_from보다 앞설 수 없습니다: date_from=... date_to=..."})` 형태로 감싸
-  반환한다. `ok: False`는 "입력 자체가 잘못됐다"는 뜻으로, 조회 결과가 비어서 `ok: True`인 다른
-  정상 응답들과 구분된다.
-- `collect_member_schedules`는 이 검증을 tool 함수 초입에서 하고, 검증에 걸리면
-  `_personal_schedules_for_current_scope()`/`_collect_member_schedules`를 아예 호출하지 않는다
-  (불필요한 SQLite/MCP 조회를 막는다).
-- 위 1번(`None` 채움)과 2번(역순 검증)의 로직을 세 tool에 각각 따로 베껴 쓰지 않는다. 이름은 자유롭게
-  정해도 되지만(예: `_resolve_schedule_date_range(date_from, date_to, *, fill_open_range: bool)`처럼
-  `list_shared_schedules`는 `fill_open_range=False`로 불러 1번을 건너뛰게 만드는 구조), 세 tool이 같은
-  helper를 재사용하는 형태로 만든다.
+  tool 모두. 위 1번을 적용한 뒤 `date_to < date_from`이더라도, 이 파일의 wrapper는 별도의 사전
+  검증 없이 `call_mcp_tool_sync`/`call_external_tool_payload`를 그대로 호출한다.
+- 이유: "날짜 형식 정리는 외부 SQLite store/MCP 경계에서 한 번만 처리한다"는 원칙(파일 상단
+  `extract_schedules_from_history` 함수별 동작 설명 참고)에 따라, 입력 범위가 뒤집힌 경우를 걸러내는
+  것도 store/MCP 경계의 책임으로 본다. `WHERE date >= ? AND date <= ?` 조건상 `date_to < date_from`이면
+  결과가 자연히 빈 `rows`로 나오므로, 이는 에러가 아니라 "그 조건에 맞는 일정이 없음"과 동일하게
+  처리되는 정상 동작이다.
+- "종료일이 시작일보다 빠르다"처럼 더 친절한 에러 메시지(`ok: False`)가 필요하다고 판단되면, 그
+  검증은 `fixed/external_people_store.py`/`mcp_server/sqlite_mcp_server.py`(학생 수정 대상 아님) 쪽에
+  추가돼야 한다. 즉 이번 주차 학생 wrapper가 구현할 항목이 아니라, 그 경계 코드를 담당하는 쪽에
+  별도로 요청할 개선 사항이다.
+- (이전 버전 문서는 이 wrapper에서 `date_to < date_from`을 직접 검증해 `json_payload({"ok": False,
+  ...})`로 에러를 반환하라고 요구했으나, "날짜 검증은 경계에서 한 번만 처리한다"는 원칙과 충돌하므로
+  삭제했다.)
+- 위 1번(`None` 채움)의 로직을 `extract_schedules_from_history`와 `collect_member_schedules`
+  (`_collect_member_schedules`)에 각각 따로 베껴 쓰지 않는다. 이름은 자유롭게 정해도 되지만, 두
+  tool이 같은 helper를 재사용하는 형태로 만든다(`list_shared_schedules`는 1번 규칙 자체를 적용하지
+  않으므로 이 helper를 쓰지 않는다).
 
 ## 3. `date_from`/`date_to`의 입력 형식을 LLM에 tool 레벨에서도 명시한다
 
@@ -270,12 +271,11 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
 
 ## extract_schedules_from_history(member_names, date_from, date_to) -> str (`@tool`)
 
-- 위 "date_from/date_to 입력 방어 (공통)" 1번·2번을 먼저 적용한다: `date_from`/`date_to`가
-  `None`/빈 문자열이면 그 방향 전체 기간으로 채우고, 채운 뒤에도 `date_to < date_from`이면 MCP tool을
-  호출하지 않고 바로 에러 payload를 반환한다.
-- 위 검증을 통과했을 때만 `call_mcp_tool_sync("extract_schedules_from_history", {"member_names":
-  member_names, "date_from": date_from, "date_to": date_to})`를 호출한 결과 문자열을 **그대로**
-  반환한다.
+- 위 "date_from/date_to 입력 방어 (공통)" 1번을 먼저 적용한다: `date_from`/`date_to`가 `None`/빈
+  문자열이면 그 방향 전체 기간으로 채운다.
+- 채운 뒤 `date_to < date_from`이어도 별도로 검증하지 않는다(위 2번 참고). `call_mcp_tool_sync(
+  "extract_schedules_from_history", {"member_names": member_names, "date_from": date_from, "date_to":
+  date_to})`를 그대로 호출한 결과 문자열을 **그대로** 반환한다.
 
 ## list_shared_schedules(member_names=None, date_from=None, date_to=None, source_conversation_id=None, limit=50) -> str (`@tool`)
 
@@ -283,9 +283,8 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
   `le=200`과 맞춘다).
 - 위 "date_from/date_to 입력 방어 (공통)" 1번은 적용하지 않는다(`None`은 "필터 없음"으로 그대로 MCP
   tool에 넘겨야 서버가 실습용 기본 공유 일정을 채워 반환한다 — 아래 "하지 말아야 할 것"의 "필터
-  기본값을 미리 채우지 않는다" 항목과 같은 이유). 다만 2번은 적용한다: `date_from`/`date_to`가 **둘
-  다** 값이 있고 `date_to < date_from`이면 MCP tool을 호출하지 않고 바로 에러 payload를 반환한다.
-  둘 중 하나라도 `None`이면 이 검증을 건너뛴다.
+  기본값을 미리 채우지 않는다" 항목과 같은 이유). `date_to < date_from`인 경우도 별도로 검증하지
+  않고 그대로 MCP tool에 넘긴다(위 2번 참고).
 - `call_mcp_tool_sync("list_shared_schedules", {"member_names": member_names, "date_from": date_from,
   "date_to": date_to, "source_conversation_id": source_conversation_id, "limit": <보정값>})`를 호출한
   결과 문자열을 **그대로** 반환한다. `member_names`/`date_from`/`date_to`/`source_conversation_id`
@@ -294,11 +293,11 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
 
 ## collect_member_schedules(member_names, date_from, date_to) -> str (`@tool`)
 
-- 위 "date_from/date_to 입력 방어 (공통)" 1번·2번을 tool 함수 초입에서 적용한다: `date_from`/
-  `date_to`가 `None`/빈 문자열이면 그 방향 전체 기간으로 채우고, 채운 뒤에도 `date_to < date_from`이면
-  `_personal_schedules_for_current_scope()`/`_collect_member_schedules`를 호출하지 않고 바로 에러
-  payload를 반환한다.
-- 검증을 통과했을 때만 `_personal_schedules_for_current_scope()`를 호출해 내 일정 목록을 얻는다.
+- 위 "date_from/date_to 입력 방어 (공통)" 1번을 tool 함수 초입에서 적용한다: `date_from`/`date_to`가
+  `None`/빈 문자열이면 그 방향 전체 기간으로 채운다. 채운 뒤 `date_to < date_from`이어도 별도로
+  검증하지 않는다(위 2번 참고) — `_personal_schedules_for_current_scope()`/`_collect_member_schedules`를
+  그대로 호출하고, 그 결과 `rows`가 자연히 빈 배열이 되는 것을 정상 동작으로 받아들인다.
+- `_personal_schedules_for_current_scope()`를 호출해 내 일정 목록을 얻는다.
 - `_collect_member_schedules(member_names=member_names, date_from=date_from, date_to=date_to,
   personal_schedules=<위 목록>)`를 호출해 `{"rows": ..., "schedule_summary": ...}`를 얻는다.
 - `{"ok": True, "tool_name": "collect_member_schedules", "rows": ..., "schedule_summary": ...}` 형태로
@@ -379,9 +378,8 @@ agent용 문자열로 감싸는 wrapper tool을 만드는 주차다. 핵심은 �
   기본값으로 보정되는지, `limit=None`을 넘겼을 때도 예외 없이 `safe_limit`의 `default`값으로
   보정되는지 확인한다.
 - `extract_schedules_from_history`/`collect_member_schedules`를 `date_from=None` 또는 `date_to=None`으로
-  직접 호출(`.invoke({...})`)해 예외 없이 그 방향 전체 기간이 조회되는지 확인한다. 같은 두 tool과
-  `list_shared_schedules`를 `date_to`가 `date_from`보다 이른 값으로 호출해 MCP tool을 부르지 않고도
-  `ok: False`와 에러 메시지가 바로 오는지 확인한다(trace에서 `search_previous_conversations`/
-  `extract_schedules_from_history`/`list_shared_schedules` 등 다른 tool이 추가로 호출되지 않아야 한다).
+  직접 호출(`.invoke({...})`)해 예외 없이 그 방향 전체 기간이 조회되는지 확인한다.
   `list_shared_schedules`는 `date_from`/`date_to`를 모두 비웠을 때 여전히 실습용 기본 공유 일정이
-  오는지도 함께 확인한다(회귀 확인).
+  오는지 확인한다(회귀 확인). 세 tool 모두 `date_to`가 `date_from`보다 이른 값으로 호출했을 때
+  별도 에러 없이 MCP tool이 그대로 호출되고 빈 `rows`가 오는 것을 정상 동작으로 확인한다(에러
+  조기 반환을 기대하지 않는다).
