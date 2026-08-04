@@ -88,7 +88,7 @@ REFERENCE_MIN_CANDIDATES = 4
 # 출처 구분
 #   search_personal_references는 ChromaDB + OpenAI embedding 기반 reference 검색입니다.
 #   search_saved_requests는 SQLite structured_requests/schedules 계열 기록 검색입니다.
-#   search_conversation_messages는 SQLite conversations/messages를 대화 단위 청크로 sync해 검색하는 agentic RAG입니다.
+#   search_conversation_messages는 SQLite conversations/messages를 메시지 window 청크로 sync해 검색하는 agentic RAG입니다.
 #   LLM이 질문 성격에 따라 둘 중 하나 또는 둘 다 선택하도록 prompt가 준비되어 있습니다.
 #
 # 참고 코드
@@ -385,7 +385,8 @@ def search_conversation_messages(
     top_k: int = 5,
     conversation_id: str | None = None,
 ) -> str:
-    """앱 SQLite 대화 목록을 대화 단위 ChromaDB RAG로 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
+    """앱 SQLite에 저장된 지난 대화를 ChromaDB RAG로 검색합니다. 한 대화는 메시지 window 여러 청크로 나뉘어 있어,
+    같은 대화에서 여러 대목이 잡힐 수 있습니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
     # 모듈 싱글턴 store를 worker에 넘겨 검색하고 결과를 JSON 문자열로 반환한다.
     result = search_conversation_messages_dict(
