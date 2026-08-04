@@ -187,17 +187,15 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
 
 
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
-
-    # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
     session_id = current_session_scope()
     
-    #저장일정
     sqlite_store = AppSQLiteStore(CONFIG.app_db_path)
-    sqlite_rows = sqlite_store.list_schedules(kind="personal_schedule", limit=200)
+    sqlite_rows = sqlite_store.list_schedules(
+        kind="personal_schedule",
+        limit=200,
+    )
     sqlite_ids = {row.get("schedule_id") or row.get("id") for row in sqlite_rows}
     
-    # sqllie에 없는 친구들만 현재 대화의 임시 일정에 넣어버리
     temp_rows = [
         s for s in PERSONAL_SCHEDULES
         if _schedule_scope(s) == session_id
