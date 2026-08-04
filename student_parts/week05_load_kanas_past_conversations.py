@@ -15,6 +15,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -292,10 +293,14 @@ class CollectMemberSchedulesInput(BaseModel):
 
 
 def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequest:
-    """앱 일정 row를 Week 2 StructuredRequest 기준으로 읽습니다."""
+    """앱 일정 row를 Week 2 StructuredRequest 기준으로 읽습니다.
+
+    SQLite row는 `request_kind`로 개인/그룹을 구분합니다. Week 1 임시 일정 row에는
+    이 값이 없으므로 개인 일정으로 봅니다.
+    """
 
     return StructuredRequest(
-        kind="personal_schedule",
+        kind="group_schedule" if row.get("request_kind") == "group_schedule" else "personal_schedule",
         title=row.get("title"),
         date=row.get("date"),
         start_time=row.get("start_time"),
@@ -303,6 +308,42 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         members=row.get("attendees") or row.get("members") or [],
         original_text=str(row.get("title") or ""),
     )
+
+
+def _my_schedule_notes(request: StructuredRequest) -> str:
+    """내 일정 row가 개인 일정인지, 참석자가 있는 그룹 일정인지 설명합니다."""
+
+    if request.kind != "group_schedule":
+        return "Nana 개인 일정"
+    members = [str(member).strip() for member in (request.members or []) if str(member).strip()]
+    return f"Nana 그룹 일정 · 참석자: {', '.join(members)}" if members else "Nana 그룹 일정"
+
+
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """같은 일정이 앱 DB와 공유 저장소 양쪽에서 들어와도 한 번만 남깁니다.
+
+    앱 DB에 저장된 내 일정은 공유 저장소에도 자동 동기화되므로, member_names에 "나"가
+    들어온 호출에서는 같은 일정이 두 경로로 들어옵니다. 앞에 오는 앱 DB row를 남깁니다.
+
+    두 경로가 같은 일정을 서로 다르게 다듬기 때문에 값을 그대로 비교하면 안 됩니다.
+      - 공유 저장소는 제목에서 소괄호를 지우고 공백을 하나로 줄입니다. 앱 DB는 원문을 둡니다.
+      - 시각이 비어 있으면 공유 저장소는 "미정"으로 저장하므로 같은 값으로 맞춥니다
+        (fixed/external_mcp.py:47-48). 이 정규화만 하면 end_time도 키에 넣을 수 있습니다 —
+        이 파일은 앱 DB 경로에서 end_time을 "18:00" 같은 값으로 바꾸지 않기 때문입니다.
+        키에서 빼면 종료시각만 다른 별개 일정이 하나로 합쳐져 busy-time이 사라집니다.
+    """
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            str(row.get("end_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+    return list(deduped.values())
 
 
 def _collect_member_schedules(
@@ -327,15 +368,15 @@ def _collect_member_schedules(
     normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
         member_names, date_from, date_to
     )
-    # 내 일정의 출처는 앱 SQLite로 이미 정해져 있습니다(가이드 :99). 공유 저장소에 있는 "나" row는
-    # 앱 저장 시 자동 동기화된 그 일정의 **사본**이라 외부 조회 대상이 아닙니다. 그대로 조회하면
-    # 같은 일정이 앱 원본 + 공유 사본 2행으로 나오므로, 응답을 나중에 걸러내는 대신 입력 단계에서 뺍니다.
-    external_members = [name for name in members if name != PERSONAL_SHARED_MEMBER_NAME]
+    # "나"도 조회 대상에서 빼지 않습니다. 공유 저장소의 "나" row 대부분은 앱 저장 시 자동
+    # 동기화된 사본이지만, create_shared_schedule로 직접 등록해 앱 DB에 원본이 없는 row도 있습니다.
+    # 입력 단계에서 "나"를 빼면 그 row가 어느 경로로도 안 잡혀 busy-time이 통째로 사라지므로,
+    # 사본 중복은 아래 _dedupe_schedule_rows가 응답 단계에서 걸러냅니다.
     payload = json.loads(
         call_mcp_tool_sync(
             "extract_schedules_from_history",
             {
-                "member_names": external_members,
+                "member_names": members,
                 "date_from": normalized_date_from,
                 "date_to": normalized_date_to,
             },
@@ -368,14 +409,18 @@ def _collect_member_schedules(
                 "date": request.date,
                 "start_time": request.start_time,
                 "end_time": request.end_time,
-                # 앱 일정에는 notes 개념이 없어 대개 None입니다. 없는 값을 지어내지 않고 그대로 둡니다.
-                "notes": schedule.get("notes"),
+                # 앱 일정 row에는 notes 컬럼이 없습니다. 대신 row가 이미 들고 있는 kind/참석자를
+                # 그대로 문장으로 옮겨, 그룹 일정이면 누구와의 약속인지 rows에서 바로 읽히게 합니다.
+                "notes": _my_schedule_notes(request),
             }
         )
 
-    # 3) 두 출처를 한 배열로 합치고 시간순으로 정렬합니다.
+    # 3) 두 출처를 한 배열로 합치고, 앱 원본과 공유 사본이 겹치면 하나만 남긴 뒤 시간순으로 정렬합니다.
+    #    my_rows를 external_rows보다 **먼저** 두어야 합니다. _dedupe_schedule_rows는 앞에 오는 row를
+    #    남기는데, 앱 DB row의 notes는 _my_schedule_notes가 만든 값이고 공유 사본의 notes는
+    #    "앱 개인 일정 자동 동기화"입니다. 순서를 바꾸면 중복은 사라져도 notes가 사본 쪽 값으로 남습니다.
     #    start_time이나 notes가 None일 수 있어 정렬 키에서 None을 ""로 바꿔 비교 오류를 막습니다.
-    rows = [*my_rows, *external_rows]
+    rows = _dedupe_schedule_rows([*my_rows, *external_rows])
     rows.sort(
         key=lambda row: (
             row.get("date") or "",
@@ -395,7 +440,7 @@ def _collect_member_schedules(
         "schedule_summary": external_schedule_summary(rows),
         "filters": {
             "requested_member_names": member_names,
-            "external_member_names": external_members,
+            "external_member_names": members,
             "date_from": normalized_date_from,
             "date_to": normalized_date_to,
             "includes_personal_schedules": True,
