@@ -17,8 +17,6 @@
 
 # 하지 말아야 할 것
 
-- 파일 최하단의 `[수강생 구현 가이드]` 주석은 프롬프트(과제 출제 의도) 확인용으로, **컨닝하지 않는다**.
-  즉 그 주석 내용을 읽고 그대로 베끼거나, 답을 그 주석에서 가져오는 방식으로 구현하지 않는다.
 - 이미 동일한 기능을 하는 함수가 파일 안에 존재하면, 그 로직을 직접 인라인으로 재구현하지 않고
   기존 함수를 그대로 호출해서 사용한다. (예: JSON 직렬화는 `_json`, ID 생성은 `_new_personal_id`,
   타임스탬프는 `_now_iso`, 현재 대화 범위 일정 조회는 `_current_session_schedules`/`current_session_scope`
@@ -35,8 +33,8 @@
 
 - 이 agent 파이프라인(LangChain `create_agent`, tool calling 구조 등)은 2025.10부터 확립된 구성이다.
   학습된 기존 지식과 상충되는 부분이 있다면 추측하지 말고 검색해서 확인한다.
-- JSON 문자열 반환은 반드시 이 파일의 `_json(payload)` helper를 사용한다. (LangChain tool은 문자열
-  반환이 가장 안정적이므로, dict를 직접 만든 뒤 `_json(...)`으로 감싸서 반환한다.)
+- JSON 문자열 반환은 반드시 이 파일의 `_json(payload)` helper를 사용한다(`student_parts/claude.md`의
+  "tool 반환값이 깨지지 않도록 하는 방어" 참고).
 - 임시 저장소는 파일 상단에 정의된 `PERSONAL_SCHEDULES` 리스트를 사용한다. (새 저장소를 추가하지 않는다.)
 - 새 일정 ID 생성은 미리 정의된 `_new_personal_id()`를 사용한다. (직접 ID를 만들지 않는다.)
 - 생성 시각 파악은 `_now_iso()`를 사용한다.
