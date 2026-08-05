@@ -21,6 +21,7 @@ from student_parts.week01_wake_up_nana import join_system_prompt
 from student_parts.week02_structure_natural_language_requests import extract_schedule_request
 from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
 from student_parts.week05_load_kanas_past_conversations import (
+    PERSONAL_SHARED_MEMBER_NAME,
     collect_member_schedules,
     extract_schedules_from_history,
     list_shared_schedules,
@@ -393,7 +394,10 @@ def find_common_available_slots_dict(
     date_from = normalize_date_bound(date_from)
     date_to = normalize_date_bound(date_to)
 
-    if busy_rows is None:
+    # busy_rows 가 None 뿐 아니라 빈 리스트로 와도 재수집한다. LLM 이 collect 결과를 복사하지 않고
+    # 빈 배열을 넘기면 겹침 검사가 빈 캘린더로 통과해 이미 잡힌 시간을 "가능" 으로 확정할 수 있다.
+    # 실제로 아무도 안 바쁜 경우엔 재수집해도 다시 빈 rows 라 결과가 같아 무해하다.
+    if not busy_rows:
         collected = json.loads(
             collect_member_schedules.invoke(
                 {"member_names": normalized_members, "date_from": date_from, "date_to": date_to}
@@ -403,7 +407,10 @@ def find_common_available_slots_dict(
 
     # 내 일정도 조율 근거이므로 member_names 에 "나" 를 함께 포함한다.
     return find_common_available_slots_payload(
-        member_names=["나", *[name for name in normalized_members if name != "나"]],
+        member_names=[
+            PERSONAL_SHARED_MEMBER_NAME,
+            *[name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME],
+        ],
         date_from=date_from,
         date_to=date_to,
         busy_rows=busy_rows,

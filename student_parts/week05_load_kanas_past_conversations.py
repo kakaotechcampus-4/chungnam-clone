@@ -199,7 +199,8 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     # 내 일정이고, 둘 다 그 시간에 내가 바쁘다는 근거다. kind 로 좁히면 내가 참석하는 그룹 회의가
     # 내 busy-time 에서 통째로 빠져 이미 잡힌 시간이 "빈 시간" 으로 추천된다.
     saved = store.list_schedules(limit=10000)
-    saved_ids = {row.get("schedule_id") for row in saved}
+    # schedule_id 가 int 로 오는 저장 경로가 생겨도 임시 id(str)와 안전하게 비교되도록 str 로 맞춘다.
+    saved_ids = {str(row.get("schedule_id")) for row in saved if row.get("schedule_id") is not None}
 
     scope = current_session_scope()
     # 임시 일정의 id 와 저장 row 의 schedule_id 를 바로 비교할 수 있는 이유:
@@ -209,7 +210,7 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
     temp = [
         schedule
         for schedule in PERSONAL_SCHEDULES
-        if _schedule_scope(schedule) == scope and schedule.get("id") not in saved_ids
+        if _schedule_scope(schedule) == scope and str(schedule.get("id")) not in saved_ids
     ]
     return [*saved, *temp]
 
@@ -347,7 +348,13 @@ def _collect_member_schedules(
     for schedule in personal_schedules:
         request = _structured_request_from_schedule_row(schedule)
         # 날짜가 없는 일정은 특정 범위에 바쁘다고 단정할 수 없으므로 조율 후보에서 제외한다.
-        if request.date is None or not (date_from <= request.date <= date_to):
+        if request.date is None:
+            continue
+        # 경계가 빈 문자열이면(normalize 가 None 입력을 "" 로 되돌린 경우) 그 방향은 무제한으로 본다.
+        # date_from <= date <= "" 로 묶으면 종료 경계가 비었을 때 내 일정이 통째로 배제된다.
+        if date_from and request.date < date_from:
+            continue
+        if date_to and request.date > date_to:
             continue
         # 종료 시각을 모르는 내 일정은 업무 시간 끝(18:00)까지 바쁜 것으로 본다.
         # 공유 저장소 복사본은 "미정" 을 그대로 두므로 dedup 은 end_time 을 키에서 뺀다.
