@@ -14,6 +14,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -283,6 +284,30 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """앱 DB와 공유 저장소에서 같은 내 일정이 두 번 들어와도 하나만 남깁니다.
+
+    내 일정은 저장 시 공유 저장소에도 "나" 이름으로 동기화되므로, member_names에 "나"가
+    들어온 호출에서는 같은 일정이 앱 DB 경로와 공유 저장소 경로 두 갈래로 들어옵니다.
+    두 경로가 제목/시간을 다르게 다듬으므로 값을 그대로 비교하면 안 됩니다.
+      - 공유 저장소는 제목의 소괄호를 지우고 공백을 하나로 줄입니다(앱 DB는 원문 유지).
+      - 앱 DB 경로만 end_time "미정"을 치환하므로 end_time은 키에서 뺍니다.
+      - start_time이 비면 공유 저장소는 "미정"으로 저장하므로 같은 값으로 맞춥니다.
+    dict은 넣은 순서를 유지하고 setdefault는 기존 키를 덮지 않으므로, 먼저 들어온 앱 DB row가 남습니다.
+    """
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+    return list(deduped.values())
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -296,7 +321,7 @@ def _collect_member_schedules(
 
     for s in personal_schedules:
         schedule = {
-            'member_name': 'ME',
+            'member_name': '나',
             'title': s.get('title'), 'date': s.get('date'), 
             'start_time': s.get('start_time'), 'end_time': s.get('end_time'),
             'notes': s.get('notes') or []
@@ -307,6 +332,7 @@ def _collect_member_schedules(
     external = call_external_tool_payload(tool_name='extract_schedules_from_history', args=external_args)
     rows.extend(external.get('rows') or [])
 
+    rows = _dedupe_schedule_rows(rows)
     return { 'rows': rows }
 
 
@@ -352,8 +378,6 @@ def create_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
-    # TODO: call_mcp_tool_sync("create_shared_schedule", args)로 공유 일정 row를 생성/갱신하세요.
-    ...
     args = { 
         'member_name': member_name, 'title': title, 'date': date, 
         'start_time': start_time, 'end_time': end_time, 'notes': notes,
@@ -399,7 +423,12 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
         member_names=member_names, date_from=date_from, date_to=date_to, 
         personal_schedules=my_schedules 
     )
-    payload = tool_result(tool_name='collect_member_schedules', ok=True, rows=member_schedules.get('rows'))
+    rows = member_schedules.get('rows') or []
+    payload = tool_result(
+        tool_name='collect_member_schedules', ok=True,
+        rows=rows,
+        schedule_summary=external_schedule_summary(rows),
+    )
     return json_payload(payload=payload)
 
 
