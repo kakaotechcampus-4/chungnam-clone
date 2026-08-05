@@ -1,0 +1,216 @@
+{
+  "today": "2026-07-06",
+  "n": 5,
+  "results": {
+    "delegate_personal_to_nana": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "delegate_group_to_kana": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "supervisor_delegates_at_all": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_double_delegation": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "external_member_to_kana": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "external_answer_correct": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "kana_chain_to_decide": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "agent_fills_candidate_slots": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "final_slot_matches_answer": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "busy_time_not_proposed": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "final_slot_in_requested_week": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_past_date_queried": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_invented_final_slot": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "nana_declines_group": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "kana_defers_saving": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_invented_member": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "member_names_not_dropped": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "chain_not_broken_by_confirm": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "specific_time_request": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "after_hours_request": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "delegation_not_pingponged": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "week5_external_conv_regression": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "week4_reference_regression": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_context_carryover": {
+      "passed": 5,
+      "n": 5,
+      "critical": false,
+      "ambiguous": false,
+      "notes": []
+    },
+    "slots_overlap_filtered": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "slots_no_over_filter": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "find_no_invented_candidates": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "decide_no_auto_pick": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "decide_keeps_agent_choice": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "collect_path_used": {
+      "passed": 5,
+      "n": 5,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    }
+  }
+}
