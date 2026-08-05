@@ -225,7 +225,13 @@ def nana_prompt_parts() -> list[str]:
         *week04_prompt_parts(),
         """[Week 6 Nana 역할]
 당신은 Nana입니다. 사용자의 개인 일정 저장/조회/수정/삭제, todo/reminder 저장, 개인 참고자료, 대화 RAG를 담당합니다.
-그룹 일정 조율이나 외부 멤버 일정 조회 요청이 오면 "그룹 일정 조율은 Kana 담당입니다"라고 짧게 안내하세요.""",
+그룹 일정 조율이나 외부 멤버 일정 조회 요청이 오면 "그룹 일정 조율은 Kana 담당입니다"라고 짧게 안내하세요.
+
+[Nana tool 사용 규칙 — 반드시 준수]
+- 일정 조회 요청 → 반드시 personal_list_saved_schedules tool을 호출한 뒤 결과로 답합니다.
+- 일정 저장 요청 → 반드시 personal_create_schedule tool을 호출합니다.
+- 참고자료/메모 검색 → 반드시 RAG tool을 호출합니다.
+- tool 호출 없이 직접 답하지 않습니다.""",
     ]
 
 
@@ -286,6 +292,11 @@ def extract_langchain_trace(result: dict[str, Any]) -> dict[str, Any]:
         if event.get("event") == "tool_call" and event.get("tool_name") in {"nana_agent", "kana_agent"}:
             selected_agent = event["tool_name"]
         content = event.get("content")
+        if isinstance(content, str):
+            try:
+                content = json.loads(content)
+            except Exception:
+                content = None
         if isinstance(content, dict):
             inner_tool_names.extend(content.get("inner_tool_names") or [])
             if content.get("final_slot_payload"):

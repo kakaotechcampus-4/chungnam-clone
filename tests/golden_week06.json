@@ -133,6 +133,24 @@
       "expect_inner_tool_called": "search_previous_conversations"
     },
     {
+      "id": "agent_list_all_schedules_short",
+      "tier": "main",
+      "desc": "'내 일정 뭐 있어?' → nana_agent 위임 → personal_list_saved_schedules 호출 (kind 생략 = all)",
+      "input": "내 일정 뭐 있어?",
+      "expect_supervisor_calls": "nana_agent",
+      "expect_inner_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. personal+group 모두 반환이 기본값"
+    },
+    {
+      "id": "agent_list_all_schedules_weekly",
+      "tier": "main",
+      "desc": "'이번 주 전체 일정 보여줘' → nana_agent 위임 → personal_list_saved_schedules 호출 (kind 생략 = all)",
+      "input": "이번 주 전체 일정 보여줘",
+      "expect_supervisor_calls": "nana_agent",
+      "expect_inner_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. personal+group 모두 반환이 기본값"
+    },
+    {
       "id": "agent_final_slot_flow",
       "tier": "extra",
       "desc": "'철수랑 최종 회의 시간 잡아줘' → kana_agent trace에 find_common_available_slots + decide_final_slot 호출",

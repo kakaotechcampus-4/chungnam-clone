@@ -200,6 +200,22 @@
       "desc": "외부 멤버 바쁜 시간 추출 요청 → extract_schedules_from_history 가 호출된다",
       "input": "영희의 7월 10일부터 17일까지 일정을 이전 대화 기록에서 추출해줘",
       "expect_tool_called": "extract_schedules_from_history"
+    },
+    {
+      "id": "agent_list_all_schedules_short",
+      "tier": "main",
+      "desc": "'내 일정 뭐 있어?' → personal_list_saved_schedules 호출, kind 생략 시 personal+group 모두 반환",
+      "input": "내 일정 뭐 있어?",
+      "expect_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. effective_kind 기본값으로 personal_schedule만 나오면 버그"
+    },
+    {
+      "id": "agent_list_all_schedules_weekly",
+      "tier": "main",
+      "desc": "'이번 주 전체 일정 보여줘' → personal_list_saved_schedules 호출, personal+group 모두 포함",
+      "input": "이번 주 전체 일정 보여줘",
+      "expect_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. personal_schedule과 group_schedule 두 종류 모두 schedules에 포함돼야 함"
     }
   ]
 }
