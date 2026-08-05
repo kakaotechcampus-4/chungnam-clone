@@ -7,7 +7,7 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from fixed.external_people_store import normalize_external_member_names
+from fixed.external_people_store import PERSONAL_SHARED_MEMBER_NAME, normalize_external_member_names
 from fixed.langchain_trace import extract_agent_events, extract_final_text
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
@@ -379,12 +379,37 @@ def find_common_available_slots_dict(
 ) -> dict[str, Any]:
     """멤버별 busy-time rows와 LLM이 고른 후보 payload를 검증 결과로 바꿉니다."""
 
-    # TODO: 멤버 이름/날짜 범위를 정규화하고, busy_rows를 수집한 뒤 후보 검증 payload를 만드세요.
-    #   - normalize_external_member_names(...)로 멤버 이름을, normalize_date_bound(...)로 날짜를 정규화합니다.
-    #   - busy_rows가 None이면 collect_member_schedules.invoke({...})를 호출해 rows를 채웁니다.
-    #   - 검증 payload 생성은 find_common_available_slots_payload(...)에 넘깁니다. 이때 내 일정도 근거이므로
-    #     member_names에는 "나"를 함께 포함합니다.
-    ...
+    # 정규화는 외부에 보낼 인자를 직접 조립하는 이 함수에서 한다. tool wrapper는 받은 값을 전달만 한다.
+    # collect_member_schedules는 "나"를 받지 않는다(내 일정을 스스로 넣는다). LLM이 넣어 보내도 걸러낸다.
+    external_members = [
+        name for name in normalize_external_member_names(member_names) if name != PERSONAL_SHARED_MEMBER_NAME
+    ]
+    window_from = normalize_date_bound(date_from)
+    window_to = normalize_date_bound(date_to)
+
+    # busy_rows는 Kana가 앞선 tool 결과에서 복사해 넘기는 것이 정상 경로다. 빠뜨렸을 때만 직접 수집한다.
+    rows = busy_rows
+    if rows is None:
+        collected = json.loads(
+            collect_member_schedules.invoke(
+                {"member_names": external_members, "date_from": window_from, "date_to": window_to}
+            )
+        )
+        rows = collected.get("rows") or []
+
+    return find_common_available_slots_payload(
+        # 겹침 판단 근거에 내 일정도 들어가므로 기록에는 "나"를 앞에 둔다. 중복은 위에서 이미 걸러냈다.
+        member_names=[PERSONAL_SHARED_MEMBER_NAME, *external_members],
+        date_from=window_from,
+        date_to=window_to,
+        busy_rows=rows,
+        duration_minutes=duration_minutes,
+        workday_start=workday_start,
+        workday_end=workday_end,
+        limit=limit,
+        candidate_slots=candidate_slots,
+        llm_reason=llm_reason,
+    )
 
 
 @tool(description=FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION, args_schema=FindCommonAvailableSlotsInput)
