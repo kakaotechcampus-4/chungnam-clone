@@ -36,13 +36,19 @@ SQLITE_MEMORY_PROMPT = """[Week 3 영속 메모리 규칙]
 
 # TODO: 자연어 구조화 → SQLite 저장과 조회/수정/삭제 tool 호출 순서를 안내하는 규칙을 작성하세요.
 WEEK03_TOOL_CALL_PROMPT = """[Week 3 tool 호출 순서 — 반드시 준수]
-1. 저장 요청: extract_schedule_request(query=사용자 입력) -> save_structured_request(구조화 필드 그대로 전달)
-2. 일정 조회: personal_list_saved_schedules(limit=50) 호출 — 날짜를 지정하지 않으면 date_from/date_to 없이 전체 조회합니다.
-   ※ "오늘 일정이 없다"고 말하기 전에 반드시 personal_list_saved_schedules를 먼저 호출하세요.
+1. 저장 요청 ("일정 잡아줘", "저장해줘", "추가해줘" 등):
+   ① extract_schedule_request(query=사용자 입력) 호출 → structured_request 결과 확인
+   ② 결과 JSON의 structured_request 필드를 그대로 save_structured_request에 전달 (이 두 번째 호출 필수)
+   ※ extract_schedule_request만 호출하고 저장 없이 답변하면 안 됩니다. 반드시 save_structured_request를 이어서 호출하세요.
+
+2. 일정 조회 ("일정 보여줘", "뭐가 있어", "일정 알려줘"):
+   → personal_list_saved_schedules(limit=50) 호출 — 날짜 미지정 시 date_from/date_to 없이 전체 조회
+   ※ 기억에 없어도 반드시 personal_list_saved_schedules를 먼저 호출한 뒤 답변하세요.
    ※ Week 1의 personal_list_schedules는 임시 메모리 전용이므로 일정 조회에 사용하지 마세요.
+
 3. 원본 조회: list_saved_requests 또는 get_saved_request(request_id)
-4. 수정: personal_list_saved_schedules로 schedule_id 확인 -> personal_update_saved_schedule
-5. 삭제: personal_list_saved_schedules로 schedule_id 확인 -> personal_delete_saved_schedules(schedule_ids=[...])
+4. 수정: personal_list_saved_schedules로 schedule_id 확인 → personal_update_saved_schedule
+5. 삭제: personal_list_saved_schedules로 schedule_id 확인 → personal_delete_saved_schedules(schedule_ids=[...])
 """
 
 
@@ -389,7 +395,7 @@ def personal_create_schedule(
         {"title": title, "date": date, "start_time": start_time, "end_time": end_time, "attendees": attendees or []}
     )
     created = json.loads(created_raw)
-    schedule = created.get("schedule", {})
+    schedule = created.get("created_schedule", {})
     save_input = structured_request_from_week01_schedule(schedule)
     sqlite_save = save_structured_request_payload(save_input)
     # TODO: created 결과에 structured_request와 sqlite_save를 합쳐 JSON 문자열로 반환하세요.
