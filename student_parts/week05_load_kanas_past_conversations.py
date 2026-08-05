@@ -11,6 +11,7 @@ from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
 from fixed.external_mcp import call_external_tool_payload
 from fixed.external_people_store import (
+    PERSONAL_SHARED_MEMBER_NAME,
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
@@ -24,12 +25,26 @@ from fixed.mcp_client import (
 )
 from fixed.runtime_clock import current_app_date_iso
 from fixed.session_scope import DEFAULT_SESSION_SCOPE, current_session_scope
-from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt
+from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES, join_system_prompt, personal_list_schedules
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
-from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
+from student_parts.week03_build_nanas_logbook import (
+    get_saved_request,
+    list_saved_requests,
+    personal_list_saved_schedules,
+)
+from student_parts.week04_retrieve_nanas_memory import (
+    search_conversation_messages,
+    search_personal_references,
+    search_saved_requests,
+    week04_prompt_parts,
+    week04_tools,
+)
 
 
 _WEEK05_AGENT: Any | None = None
+# date_from/date_to로 걸러진 뒤의 "기간 내 최대 건수"라서, 며칠~몇 주 단위의 조율 질문에는
+# 100건이면 넉넉하다고 보고 필터 적용 전 값(과거 전체 기간 대상 100건)을 그대로 유지합니다.
+_PERSONAL_SQLITE_SCHEDULE_LIMIT = 100
 
 
 # [5주차 수강생 구현 가이드]
@@ -186,11 +201,57 @@ def _schedule_scope(schedule: dict[str, Any]) -> str:
     return str(schedule.get("session_id") or DEFAULT_SESSION_SCOPE)
 
 
-def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
-    """SQLite 저장 일정과 현재 대화의 임시 일정만 group 조율 후보로 사용합니다."""
+def _personal_schedule_within_date_bounds(
+    date_value: str | None,
+    date_from: str | None,
+    date_to: str | None,
+) -> bool:
+    """date_value가 date_from~date_to 범위 밖이면 걸러냅니다. 범위가 없으면 항상 통과합니다."""
 
-    # TODO: SQLite 저장 일정과 현재 대화의 임시 일정을 합쳐 반환하세요.
-    ...
+    if not date_from and not date_to:
+        return True
+    if not date_value:
+        return False
+    if date_from and date_value < date_from:
+        return False
+    if date_to and date_value > date_to:
+        return False
+    return True
+
+
+def _personal_schedules_for_current_scope(
+    date_from: str | None = None,
+    date_to: str | None = None,
+) -> list[dict[str, Any]]:
+    """SQLite 저장 일정과 현재 대화의 임시 일정 중 date_from~date_to 범위에 속하는 것만 group 조율 후보로 사용합니다.
+
+    date_from/date_to를 넘기면 _PERSONAL_SQLITE_SCHEDULE_LIMIT은 "전체 기간 중 이른 N건"이 아니라
+    "해당 기간 안에서 최대 N건"을 의미하게 됩니다. 호출부는 normalize_external_schedule_date_bounds로
+    정규화한 값을 넘겨야 합니다.
+    """
+
+    sqlite_schedules = AppSQLiteStore(CONFIG.app_db_path).list_schedules(
+        limit=_PERSONAL_SQLITE_SCHEDULE_LIMIT,
+        kind="personal_schedule",
+        date_from=date_from,
+        date_to=date_to,
+    )
+    saved_schedule_ids = {
+        str(schedule["schedule_id"]) for schedule in sqlite_schedules if schedule.get("schedule_id")
+    }
+
+    session_id = current_session_scope()
+    pending_schedules = [
+        schedule
+        for schedule in PERSONAL_SCHEDULES
+        if _schedule_scope(schedule) == session_id
+        and str(schedule.get("id")) not in saved_schedule_ids
+        # Week1 임시 일정(PERSONAL_SCHEDULES)도 SQLite 일정과 같은 범위로 걸러야, 질문한 기간과
+        # 무관한 임시 일정이 rows에 섞여 LLM이 잘못된 기간을 요약하는 것을 막을 수 있습니다.
+        and _personal_schedule_within_date_bounds(schedule.get("date"), date_from, date_to)
+    ]
+
+    return [*sqlite_schedules, *pending_schedules]
 
 
 def json_payload(payload: dict[str, Any]) -> str:
@@ -273,6 +334,14 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _normalize_personal_schedule_time(value: Any) -> Any:
+    """Week 1 임시 일정에 남아 있을 수 있는 "미정" sentinel을 None으로 정리합니다."""
+
+    if value in (None, "", "미정"):
+        return None
+    return value
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -282,8 +351,27 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
 
-    # TODO: 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
-    ...
+    rows: list[dict[str, Any]] = [
+        {
+            "member_name": PERSONAL_SHARED_MEMBER_NAME,
+            "title": schedule.get("title"),
+            "date": schedule.get("date"),
+            "start_time": _normalize_personal_schedule_time(schedule.get("start_time")),
+            "end_time": _normalize_personal_schedule_time(schedule.get("end_time")),
+            "notes": None,
+        }
+        for schedule in personal_schedules
+    ]
+
+    external_result = json.loads(
+        call_mcp_tool_sync(
+            "extract_schedules_from_history",
+            {"member_names": member_names, "date_from": date_from, "date_to": date_to},
+        )
+    )
+    rows.extend(external_result.get("rows", []))
+
+    return {"rows": rows, "schedule_summary": external_schedule_summary(rows)}
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
@@ -294,24 +382,24 @@ def search_previous_conversations(
 ) -> str:
     """외부 SQLite 데이터베이스에 저장된 이전 대화를 검색합니다. query에는 LLM이 고른 짧은 핵심 명사나 구를 넣습니다."""
 
-    # TODO: call_mcp_tool_sync("search_previous_conversations", args)를 호출하고 결과 문자열을 반환하세요.
-    ...
+    args = {"query": query, "member_names": member_names, "limit": limit}
+    return call_mcp_tool_sync("search_previous_conversations", args)
 
 
 @tool(args_schema=LoadConversationMessagesInput)
 def load_conversation_messages(conversation_id: str) -> str:
     """외부 SQLite 데이터베이스에서 특정 이전 대화의 모든 메시지를 불러옵니다."""
 
-    # TODO: call_external_tool_payload("load_conversation_messages", {"conversation_id": ...}) 결과를 JSON으로 반환하세요.
-    ...
+    payload = call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id})
+    return json_payload(payload)
 
 
 @tool(args_schema=ExtractSchedulesFromHistoryInput)
 def extract_schedules_from_history(member_names: list[str], date_from: str, date_to: str) -> str:
     """외부 SQLite 이전 대화에서 멤버별 일정을 추출합니다."""
 
-    # TODO: call_mcp_tool_sync("extract_schedules_from_history", args)를 호출해 외부 멤버 busy-time rows를 반환하세요.
-    ...
+    args = {"member_names": member_names, "date_from": date_from, "date_to": date_to}
+    return call_mcp_tool_sync("extract_schedules_from_history", args)
 
 
 @tool(args_schema=CreateSharedScheduleInput)
@@ -327,8 +415,17 @@ def create_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 일정을 등록하거나 갱신합니다."""
 
-    # TODO: call_mcp_tool_sync("create_shared_schedule", args)로 공유 일정 row를 생성/갱신하세요.
-    ...
+    args = {
+        "member_name": member_name,
+        "title": title,
+        "date": date,
+        "start_time": start_time,
+        "end_time": end_time,
+        "notes": notes,
+        "source_conversation_id": source_conversation_id,
+        "schedule_id": schedule_id,
+    }
+    return call_mcp_tool_sync("create_shared_schedule", args)
 
 
 @tool(args_schema=DeleteSharedScheduleInput)
@@ -338,8 +435,8 @@ def delete_shared_schedule(
 ) -> str:
     """외부 MCP 공유 일정 저장소에서 일정을 삭제합니다."""
 
-    # TODO: call_mcp_tool_sync("delete_shared_schedule", args)로 공유 일정을 삭제하세요.
-    ...
+    args = {"schedule_id": schedule_id, "source_conversation_id": source_conversation_id}
+    return call_mcp_tool_sync("delete_shared_schedule", args)
 
 
 @tool(args_schema=ListSharedSchedulesInput)
@@ -352,16 +449,34 @@ def list_shared_schedules(
 ) -> str:
     """외부 MCP 공유 일정 저장소에 등록된 일정을 조회합니다. 필터가 없으면 기본 공유 일정을 반환합니다."""
 
-    # TODO: call_mcp_tool_sync("list_shared_schedules", args)로 공유 일정 저장소 rows를 조회하세요.
-    ...
+    args = {
+        "member_names": member_names,
+        "date_from": date_from,
+        "date_to": date_to,
+        "source_conversation_id": source_conversation_id,
+        "limit": limit,
+    }
+    return call_mcp_tool_sync("list_shared_schedules", args)
 
 
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
     """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
 
-    # TODO: 내 일정과 외부 멤버 busy-time rows를 모아 JSON 문자열로 반환하세요.
-    ...
+    normalized_date_from, normalized_date_to = normalize_external_schedule_date_bounds(
+        member_names, date_from, date_to
+    )
+    personal_schedules = _personal_schedules_for_current_scope(
+        date_from=normalized_date_from,
+        date_to=normalized_date_to,
+    )
+    result = _collect_member_schedules(
+        member_names=member_names,
+        date_from=normalized_date_from,
+        date_to=normalized_date_to,
+        personal_schedules=personal_schedules,
+    )
+    return json_payload(result)
 
 
 def week05_tools() -> list[Any]:
@@ -390,7 +505,41 @@ def week05_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
-        # TODO: Week 5 Kana history agent system prompt를 자유롭게 추가하세요.
+        (
+            "Week 5부터 Nana는 질문의 대상이 '나' 자신인지, '나'가 아닌 다른 사람(예: 철수, 영희처럼 "
+            "구체적인 이름이 언급된 사람)인지를 가장 먼저 구분합니다. 이 판단이 도구 선택을 결정합니다.\n"
+            "판단 기준: 질문에 사용자 본인이 아닌 다른 사람의 이름이 등장하고, 그 사람의 이전 대화/발언/일정/"
+            "바쁜 시간을 묻는다면, 그 답은 대부분 외부 SQLite/MCP 저장소에 있으므로 이 파일의 Week 5 도구를 "
+            "우선 고려합니다. 다만 예외가 있습니다: '철수랑 잡은 회의를 이미 저장해뒀는지'처럼 다른 사람과 "
+            "이미 논의해서 내 앱에 등록해 둔 그룹 일정/요청을 찾는 질문은, 다른 사람 이름이 있어도 답이 "
+            f"이미 내 앱 SQLite DB에 있을 수 있습니다. {personal_list_saved_schedules.name}을 "
+            f"kind='group_schedule'로 호출하면 다른 사람과 함께 잡은 그룹 일정을 찾을 수 있고, "
+            f"{search_saved_requests.name}이 검색하는 저장된 구조화 요청에는 members 필드가 들어 있어 참여자 "
+            f"이름으로도 매칭됩니다. 이런 질문에는 Week 5 도구와 {personal_list_saved_schedules.name}/"
+            f"{search_saved_requests.name}을 모두 시도해서, 내 앱 DB에 이미 저장된 결과가 있으면 그것부터 "
+            "답으로 사용합니다. "
+            f"반대로 {personal_list_schedules.name}(Week 1 임시 메모리), {list_saved_requests.name}, "
+            f"{get_saved_request.name}, {search_personal_references.name}, "
+            f"{search_conversation_messages.name}은 '나' 자신의 개인 참고자료/SQLite 기록/대화 발화만 담고 "
+            "있으므로, 다른 사람 이름이 없고 '내 일정', '내가 저장한' 처럼 본인 이야기일 때만 사용합니다.\n"
+            f"다른 사람에 대한 질문에는 반드시 이 파일의 외부 SQLite/MCP wrapper 도구를 사용하되, 질문 성격에 맞는 "
+            "도구를 고릅니다. 그 사람의 '일정', '바쁜 시간', '스케줄'처럼 날짜/시간 정보 자체를 물으면 "
+            f"{extract_schedules_from_history.name}로 바로 그 사람의 일정 row를 조회합니다(대화 내용을 먼저 검색할 "
+            "필요는 없습니다). 반대로 '무슨 얘기를 했는지', '어떤 이야기가 오갔는지'처럼 대화 내용 자체가 궁금하면 "
+            f"{search_previous_conversations.name}로 이전 대화를 검색한 뒤, 필요하면 {load_conversation_messages.name}"
+            "로 찾은 대화의 전체 메시지를 읽습니다. "
+            f"공유 일정 저장소에 등록된 row 자체를 확인하려면 {list_shared_schedules.name}을 사용하고, "
+            f"내 일정과 다른 사람들의 busy-time을 같은 rows 구조로 한 번에 모으려면 {collect_member_schedules.name}을 "
+            "사용합니다. 한 도구의 결과가 비어 있다고 바로 포기하지 말고, 질문 성격에 맞는 다른 Week 5 도구도 "
+            "시도해 본 뒤에 답합니다. "
+            f"공유 일정 row를 직접 등록/삭제해야 할 때는 {create_shared_schedule.name}/{delete_shared_schedule.name}을 사용합니다.\n"
+            "여러 사람이 다같이 만날 수 있는 시간, 공통 가능 시간, 겹치지 않는 시간을 찾아 달라는 요청은 "
+            "이번 주 범위가 아닙니다. 겹치는 일정이 없다고 해서 그 시간에 실제로 모두 만날 수 있다고 "
+            "단정하지 않습니다. 이런 요청을 받으면 "
+            f"{collect_member_schedules.name}으로 각자의 rows만 모아서 있는 그대로 보여주고, 공통 가능 시간을 "
+            "직접 계산·판단·확정하거나 특정 시간을 제안하지 않으며, 최종 시간 조율은 이번 주 기능 범위 밖이라고 "
+            "명확히 안내합니다."
+        ),
     ]
 
 
