@@ -15,6 +15,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -298,6 +299,37 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """같은 일정이 rows에 두 번 실리지 않게 한 번 걸러냅니다.
+
+    이 tool은 "나"를 외부 조회 대상에서 빼기 때문에 앱 DB row와 공유 저장소 복사본이
+    함께 들어오는 경로는 원래 생기지 않습니다. 다만 앱 DB 자체에 같은 일정이 두 번
+    저장돼 있거나, create_shared_schedule로 "나" row를 직접 등록한 뒤 조회하는 경우가
+    남아 있어 마지막 방어선으로 둡니다.
+
+    두 경로가 같은 일정을 다르게 다듬으므로 값을 그대로 비교하면 안 됩니다.
+      - 공유 저장소는 제목에서 소괄호를 지우고 공백을 줄이지만 앱 DB는 원문을 둡니다.
+      - end_time은 경로마다 보정 방식이 달라 키에서 뺐습니다. 같은 사람이 같은 날
+        같은 시각에 시작하는 같은 제목의 일정은 하나로 봅니다.
+      - start_time이 비어 있으면 공유 저장소는 "미정"으로 저장하므로 값을 맞춰 둡니다.
+
+    dict은 넣은 순서를 유지하고 setdefault는 기존 키를 덮어쓰지 않으므로, 앞에 오는
+    앱 DB row가 남습니다. notes에 담아 둔 출처 설명을 잃지 않으려면 호출할 때
+    내 일정을 외부 rows보다 앞에 두어야 합니다.
+    """
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+    return list(deduped.values())
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -395,7 +427,8 @@ def _collect_member_schedules(
             )
         )
         external_rows = payload.get("rows", [])
-    rows.extend(external_rows)
+    # 내 일정을 앞에 두어야 notes의 출처 설명이 살아남습니다.
+    rows = _dedupe_schedule_rows([*rows, *external_rows])
 
     rows.sort(
         key=lambda row: (

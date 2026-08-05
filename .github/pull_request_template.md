@@ -1,14 +1,14 @@
 ## 과제 목표
 
-- 외부 SQLite/MCP 서버에 있는 Kana의 이전 대화와 공유 일정을 LangChain agent가 사용할 수 있게 감쌉니다.
-- MCP tool을 호출하고 그 결과를 agent용 JSON으로 전달하는 wrapper tool을 만듭니다.
+- Week 6은 "모든 기능을 한 agent가 직접 처리"하지 않고 supervisor가 Nana/Kana 하위 agent로 위임하게 만듭니다.
+- Nana는 개인 일정/저장/RAG를 맡고, Kana는 외부 대화/멤버 일정/그룹 시간 결정을 맡습니다.
 
 ---
 
 ## 과제 위치
 
-- 작업 브랜치 : `parkjeonghyeon/week5` → 본인 통합 브랜치 `parkjeonghyeon/final` 로 PR
-- 주요 파일 : `student_parts/week05_load_kanas_past_conversations.py`
+- 작업 브랜치 : `parkjeonghyeon/week6` → 본인 통합 브랜치 `parkjeonghyeon/final` 로 PR
+- 주요 파일 : `student_parts\week06_kanamate_decides_schedule.py`
 
 ---
 
@@ -23,99 +23,83 @@
 
 ## 구현한 기능
 
-- [x] search_previous_conversations() 함수 구현하기
-- [x] load_conversation_messages() 함수 구현하기
-- [x] extract_schedules_from_history() 함수 구현하기
-- [x] list_shared_schedules() 함수 구현하기
-- [x] collect_member_schedules() 함수 구현하기
+- [x] week06_prompt_parts / nana_prompt_parts / kana_prompt_parts / supervisor_system_prompt 프롬프트 부분 작성하기
+- [x] nana_agent 구현하기
+- [x] kana_agent 구현하기
 
 ---
 
 ## 도전 기능
 
-- [x] create_shared_schedule() / delete_shared_schedule() 함수 구현하기
+- [x] FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION / DECIDE_FINAL_SLOT_DESCRIPTION 작성하기
+- [x] find_common_available_slots_dict / find_common_available_slots / decide_final_slot 구현하기
 
 ---
 
-### search_previous_conversations() 함수 구현하기
+### week06_prompt_parts / nana_prompt_parts / kana_prompt_parts / supervisor_system_prompt 프롬프트 부분 작성하기
 
 - AI 활용 내용 :
 
 ```
-일단 수강생구현가이드 주석의 메인과제 구현대상 1 search_previous_conversations 부분을
+일단 수강생구현가이드 주석의 메인과제 구현대상 1 프롬프트 부분을
 어떻게 구현할지 계획을 세워보자
 ```
 
-위의 프롬프트로 이 파일의 call_mcp_tool_sync 가 fixed/mcp_client.py 의 call_local_mcp_tool_sync 별칭이고, 그 안의 \_mcp_result_to_text 가 MCP 결과를 이미 문자열로 정규화해 준다는 것과, mcp_server/sqlite_mcp_server.py 가 {"ok", "tool_name", "rows"} 형태의 완성된 JSON 문자열을 돌려준다는 것을 확인하였다. 특히 store 의 search_previous_conversations 는 member_names 가 None 이면 멤버 필터 없이 전체를 검색하고 빈 list 면 즉시 빈 rows 를 반환해서 두 값의 의미가 서로 다르다는 것을 확인한 뒤, wrapper 는 인자를 그대로 넘기고 결과 문자열을 그대로 반환한다는 설계 방향을 설명 듣고나서 구현하였다.
+위의 프롬프트로 join_system_prompt 헤더에 "더 높은 주차 또는 더 뒤에 있는 지시를 우선한다"가 적혀 있어서 앞 주차 지시를 지우는 대신 뒤에서 덮어써야 한다는 것을 확인하였다. 누적된 Week 1~5 조각이 personal_create_schedule 이나 collect_member_schedules 같은 업무 tool 을 지시하는데 supervisor 에게 붙는 tool 은 nana_agent / kana_agent 두 개뿐이라는 것, week05_prompt_parts 가 최종 확정을 다음 주차로 미뤄 둔 상태라는 것, kana_prompt_parts 만 누적이 없다는 것을 확인한 뒤 네 함수의 역할을 나누는 설계 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : call_mcp_tool_sync("search_previous_conversations", {"query": query, "member_names": member_names, "limit": limit}) 한 번 호출로 끝내고 반환값을 그대로 return 했다. member_names 는 None 인 채로 넘겼고, Week 4에서 쓰던 safe_limit 같은 보정도 넣지 않았으며, json_payload 로 다시 감싸지도 않았다.
-- 수정 이유 : Week 4 습관대로 member_names or [] 를 쓰면 "전체 멤버 검색"이 "빈 결과"로 뒤집히기 때문에 None 을 그대로 통과시켜야 한다. limit 은 args_schema 의 Field(ge=1, le=50) 이 이미 범위를 보장하므로 tool 안에서 또 보정하면 중복이고, call_mcp_tool_sync 반환값이 이미 JSON 문자열이라 json_payload 로 감싸면 이중 인코딩되어 LLM이 escape된 문자열을 받게 되기 때문이다.
+- 직접 수정한 부분 : week06_prompt_parts 에는 호출 가능한 tool 이 nana_agent / kana_agent 두 개뿐이라는 것, "누구의 정보가 필요한가" 기준의 담당 분리, 두 담당에 걸치면 Kana 로 확정한 뒤 Nana 로 저장하는 순서와 query 에 멤버·날짜·회의 길이를 다 적을 것, 최종 확정이 이번 주차라는 갱신을 조각별로 넣었다. nana_prompt_parts 에는 하위 agent 전환과 그룹 조율은 Kana 담당이라는 경계를 넣고, kana_prompt_parts 는 누적이 없으므로 역할과 current_app_date_iso() 오늘 날짜와 tool 선택 기준과 저장은 Nana 담당이라는 경계를 처음부터 적었다. supervisor_system_prompt 에는 위임 없이 답하지 말 것과 위임 결과의 answer / final_slot_payload 만 근거로 쓸 것을 붙였다.
+- 수정 이유 : 누적 구조라서 덮어쓰기를 명시하지 않으면 supervisor 가 자기에게 없는 업무 tool 을 부르려 하고, Week 5의 "확정은 다음 주차" 문장을 남겨 두면 후보만 나열하고 끝나기 때문이다. Kana 는 누적이 없어 오늘 날짜조차 없는 상태로 시작해 상대 날짜를 그대로 tool 인자에 넣으므로 current_app_date_iso() 를 직접 넣었다. 실제로 개인 일정 요청에는 nana_agent 만, 외부 멤버 조회에는 kana_agent 만 호출되는 것을 확인했다. 다만 조회 0건일 때 답변이 "일정이 없습니다"로 단정해서, 조회 조건을 지우고 단정하지 말라는 문장을 한 줄 더 넣고 재실행해 조회 범위가 함께 나오는 것을 확인했다.
 
-### load_conversation_messages() 함수 구현하기
-
-- AI 활용 내용 :
-
-```
-다음으로 수강생구현가이드 주석의 메인과제 구현대상 2. load_conversation_messages 부분을
-어떻게 구현할지 계획을 세워보자
-```
-
-위의 프롬프트로 fixed/external_mcp.py 의 call_external_tool_payload 가 call_local_mcp_tool_sync 에 json.loads 를 붙인 얇은 래퍼라서 dict 를 돌려준다는 것과, store 의 load_conversation_messages 가 ORDER BY created_at ASC 로 이미 시간순 정렬된 role/sender/content/created_at row 를 준다는 것을 확인하였다. 1번 tool과 달리 굳이 dict 를 거치는 이유도, \_mcp_result_to_text 가 content 블록을 여러 개 이어붙이면 유효한 JSON 이 아닐 수 있어 json.loads 로 한 번 검증되기 때문이라는 것을 확인한 뒤, payload 를 통째로 json_payload 로 감싸는 설계 방향을 설명 듣고나서 구현하였다.
-
-- 직접 수정한 부분 : call_external_tool_payload("load_conversation_messages", {"conversation_id": conversation_id}) 로 payload dict 를 받아 json_payload(payload) 로 그대로 감쌌다. rows 를 다시 정렬하거나 role 을 빼고 필드를 추리는 재조립은 하지 않았다.
-- 수정 이유 : ok/tool_name/rows 의 top-level 구조가 그대로 살아야 하므로 {"rows": payload} 처럼 한 겹 더 씌우면 안 된다. 또 Week 4의 search_personal_reference_hits 처럼 metadata 로 묶고 싶어지지만 이번 tool은 "결과를 가공하지 않는다"가 계약이라 재조립 자체가 위반이고, sender/content/created_at 순서는 store 의 ORDER BY 가 보장하므로 tool 에서 손대면 오히려 깨지기 때문이다.
-
-### extract_schedules_from_history() 함수 구현하기
+### nana_agent 구현하기
 
 - AI 활용 내용 : 이전과 동일한 형식으로 활용하였다.
 
-위의 프롬프트로 store 의 extract_schedules_from_history 가 normalize_external_member_names 와 normalize_external_schedule_date_bounds 를 이미 내부에서 호출하고 있어 wrapper 가 다시 정규화하면 중복이라는 것과, MCP 서버가 rows 에 external_schedule_summary(rows) 를 붙여 schedule_summary 까지 함께 돌려준다는 것을 확인한 뒤, 1번과 같은 pass-through 로 두는 설계 방향을 설명 듣고나서 구현하였다.
+fixed/langchain_trace.py 의 extract_agent_events 가 ToolMessage content 를 json.loads 로 미리 파싱해 dict 로 돌려주고 extract_final_text 는 마지막 비어 있지 않은 메시지를 답변으로 쓴다는 것을 확인하였다. 또 create_agent 는 호출마다 tool 을 다시 바인딩하므로 supervisor 가 부를 때마다 하위 agent 를 새로 만들 필요가 없다는 것과, 하위 agent 는 supervisor 의 messages 를 이어받지 않고 query 하나만 새 대화로 받는다는 것을 확인한 뒤 설계 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : member_names/date_from/date_to 세 인자를 그대로 담아 call_mcp_tool_sync("extract_schedules_from_history", args) 를 호출하고 결과 문자열을 그대로 반환했다. 날짜 형식 정리와 schedule_summary 생성은 넣지 않았다.
-- 수정 이유 : 테스트에서 date_from 을 "2000-01-01" 로 준 결과와 "2000-01-01T00:00:00" 으로 준 결과의 rows 18건이 완전히 동일하게 나와서, wrapper 에서 날짜를 정리하지 않아도 store 경계에서 이미 처리된다는 것을 확인했기 때문이다. 또 schedule_summary 를 tool 에서 다시 만들면 서버가 이미 만든 것과 중복되므로, 여기서는 결과를 통과시키기만 해야 한다.
+- 직접 수정한 부분 : \_NANA_SUBAGENT 가 None 일 때만 create_agent(model=chat_model(), tools=week04_tools(), system_prompt=nana_system_prompt()) 로 만들고 이후에는 재사용하게 했다. query 를 user 메시지 하나로 invoke 한 뒤 extract_agent_events 로 events 를, extract_final_text 로 answer 를 뽑고, 이미 이 파일에 있던 \_tool_call_names(events) 로 tool_call 이벤트의 이름만 골라 inner_tool_names 에 담았다. selected_agent / answer / trace / inner_tool_names 를 json.dumps(..., ensure_ascii=False) 로 반환했다.
+- 수정 이유 : 전역 캐시를 안 두면 supervisor 호출마다 하위 agent 를 다시 만들어 tool 바인딩이 반복된다. inner_tool_names 를 따로 올린 것은 extract_langchain_trace 가 위임 결과 content 에서 이 키를 읽어 events 밖으로 모으는 구조라서 supervisor trace 가 하위 tool 호출 순서를 바로 볼 수 있게 하기 위해서다. ensure_ascii=False 는 한글이 escape 되어 supervisor 가 읽는 근거가 깨지지 않게 하기 위해서다. 실제로 개인 일정 요청에서 inner_tool_names 에 personal_list_saved_schedules 가 남는 것을 확인했다.
 
-### list_shared_schedules() 함수 구현하기
-
-- AI 활용 내용 : 이전과 동일한 형식으로 활용하였다.
-
-store 의 list_shared_schedules 가 has_explicit_filter 로 "필터가 하나도 없으면 7월 실습용 기본 멤버/날짜로 대체"하는 분기를 가지고 있고, 그 조건에 member_names is not None 이 들어 있어서 빈 list 는 명시 필터로 간주되어 곧바로 빈 배열을 돌려준다는 것을 확인하였다. 또 limit 은 store 가 max(1, min(int(limit or 50), 200)) 으로 이미 클램프한다는 것을 확인한 뒤, 5개 인자를 그대로 넘기는 설계 방향을 설명 듣고나서 구현하였다.
-
-- 직접 수정한 부분 : member_names/date_from/date_to/source_conversation_id/limit 5개를 변형 없이 담아 call_mcp_tool_sync 로 넘기고 결과 문자열을 그대로 반환했다. limit 보정은 넣지 않았다.
-- 수정 이유 : 1번과 같은 None / 빈 list 함정이 여기서는 더 크게 나타나서, member_names 를 빈 list 로 바꾸면 "기본 공유 일정 반환"이 "0건"으로 뒤집힌다. 실제로 테스트에서 필터 없이 부르면 18건, 빈 list 로 부르면 0건이 나와 두 분기가 갈리는 것을 확인했다. limit 은 args_schema 의 le=200 과 store 클램프로 이미 이중 보장돼 있어 tool 안에서 또 손대면 중복이기 때문이다.
-
-### collect_member_schedules() 함수 구현하기
+### kana_agent 구현하기
 
 - AI 활용 내용 : 이전과 동일한 형식으로 활용하였다.
 
-여기서는 중복이 생길 수 있는 지점 두 곳을 먼저 확인하였다. 첫째로 fixed/app_store.py 의 save_structured_request 가 schedule_id = source_schedule_id or new_id("sch") 로 Week 1 임시 일정의 id 를 그대로 schedule_id 에 재사용하기 때문에, 같은 일정이 PERSONAL_SCHEDULES 와 SQLite 에 같은 식별자로 동시에 존재한다는 것을 확인했다. 둘째로 개인 일정을 저장하면 sync_personal_schedule_to_shared 가 member_name="나" 로 external_schedules 테이블에 복사본을 만드는데, extract_schedules_from_history 가 조회하는 테이블이 바로 그 테이블이라서 "나"를 외부 조회에 넣으면 내 일정이 두 경로로 들어온다는 것을 확인한 뒤, 헬퍼가 정리하고 tool 이 json_payload 로 감싸는 설계 방향을 설명 듣고나서 구현하였다.
+fixed/schedule_decision.py 의 decide_final_slot_payload 가 final_slot 을 top-level 에 두고 미확정일 때도 None 으로 키를 남긴다는 것과, propose_group_schedule 은 결과를 final_decision 아래에 넣는다는 것을 확인하였다. 또 이 파일의 extract_langchain_trace 가 위임 결과 content 에서 final_slot_payload 키를 먼저 찾는다는 것을 확인해, 하위 trace 의 payload 를 한 단계 끌어올려야 supervisor 가 최종 시간을 읽을 수 있다는 설계 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : \_personal_schedules_for_current_scope 에서 AppSQLiteStore(CONFIG.app_db_path).list_schedules 로 저장 일정을 읽고 그 schedule_id 집합을 만든 뒤, PERSONAL_SCHEDULES 중 현재 대화 범위이면서 그 집합에 없는 임시 일정만 뒤에 붙였다. \_collect_member_schedules 에서는 멤버 이름과 날짜를 helper 로 정규화한 다음 외부 조회 목록에서 "나"를 빼고, 내 일정은 \_structured_request_from_schedule_row 를 거쳐 member_name/title/date/start_time/end_time/notes 6개 필드 row 로 바꾸면서 날짜 범위 밖은 걸렀다. 외부 멤버가 있을 때만 MCP 를 한 번 호출해 rows 를 합치고, (date, start_time, member_name) 순으로 정렬한 뒤 external_schedule_summary 를 붙여 반환했다. notes 에는 "앱 저장 일정" / "현재 대화 임시 일정" 출처를 적었다.
-- 수정 이유 : 중복 제거를 안 하면 Week 1에서 만든 일정을 Week 3에서 저장하는 순간 같은 일정이 rows 에 두 번 들어가서 Week 6의 busy_rows 근거가 어긋난다. 실제로 임시 일정을 같은 id 로 저장한 뒤에도 총 건수가 그대로 유지되는 것을 테스트로 확인했다. 또 MCP 호출은 매번 서버 subprocess 를 새로 띄워 한 번에 20초 이상 걸리므로 멤버마다 나눠 부르지 않고 한 번만 호출해야 하고, notes 에 출처를 적어야 LLM이 확정된 일정과 아직 저장 안 된 임시 일정을 구분해서 답할 수 있기 때문이다.
+- 직접 수정한 부분 : \_KANA_SUBAGENT 를 kana_tools() 와 kana_system_prompt() 로 한 번만 만들어 nana_agent 와 같은 방식으로 실행했다. events 를 순회하며 content 가 dict 이고 final_slot 키를 가진 것은 final_slot_payload 로, final_decision 값을 가진 것은 final_decision_payload 로 담았고, 같은 요청에서 여러 번 결정하면 마지막 호출이 최종이므로 덮어쓰게 했다. 여기에 answer / trace / inner_tool_names 를 더해 JSON 으로 반환했다.
+- 수정 이유 : final_slot 을 값이 아니라 키 유무로 판별한 것이 핵심이다. content.get("final_slot") 으로 보면 미확정 payload 의 None 이 걸러져 needs_agent_selection 이 True 인 상태가 supervisor 까지 올라가지 못하고 시간이 확정된 것처럼 답할 수 있다. payload 를 끌어올리지 않으면 supervisor 가 하위 trace 를 다시 뒤져야 하는데 extract_langchain_trace 는 그런 구조가 아니다. 실제로 그룹 일정 요청에서 final_slot_payload 의 final_slot 이 최종 답변과 일치하는 것을 확인했다.
 
-### create_shared_schedule() / delete_shared_schedule() 함수 구현하기
+### FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION / DECIDE_FINAL_SLOT_DESCRIPTION 작성하기
 
 - AI 활용 내용 : 이전과 동일한 형식으로 활용하였다.
 
-store 의 create_shared_schedule 이 ON CONFLICT(schedule_id) DO UPDATE 로 동작해서 같은 schedule_id 면 갱신이 되고 응답의 sync_status 가 created / updated 로 갈린다는 것과, delete_shared_schedules 가 schedule_id 와 source_conversation_id 를 AND 가 아니라 OR 로 묶어 삭제한다는 것을 확인한 뒤, 두 tool 모두 인자를 그대로 넘기는 설계 방향을 설명 듣고나서 구현하였다.
+fixed/schedule_decision.py 의 normalize_llm_candidate_slots 가 날짜 범위 밖, 업무 시간 밖, duration 미달, busy_rows 와 겹치는 후보를 예외 없이 조용히 버린다는 것과, FindCommonAvailableSlotsInput / DecideFinalSlotInput 에 인자 이름과 형식이 이미 정의되어 있다는 것을 확인하였다. 두 tool 이 후보나 최종 시간을 계산해 주지 않으므로 description 이 agent 가 직접 고르게 만드는 유일한 근거라는 설계 방향을 설명 듣고나서 구현하였다.
 
-- 직접 수정한 부분 : create 는 8개 인자, delete 는 2개 인자를 변형 없이 담아 각각 call_mcp_tool_sync 로 넘기고 결과 문자열을 그대로 반환했다. schedule_id 와 source_conversation_id 는 값이 None 이어도 키를 빼지 않고 그대로 실었다.
-- 수정 이유 : 이 두 값이 나중에 같은 row 를 다시 찾아 갱신하거나 삭제할 유일한 근거라서 wrapper 에서 떨어뜨리면 동기화가 끊긴다. member_name/title/date/시간/notes 의 기본값 채우기와 괄호 제거는 store 가 전부 처리하므로 tool 에서 미리 손대면 중복이고, 실제로 같은 schedule_id 로 두 번 호출했을 때 created 다음 updated 가 나오고 조회 결과가 2건이 아니라 1건으로 유지되는 것을 테스트로 확인했기 때문이다.
+- 직접 수정한 부분 : 두 상수 모두 첫 문장에 이 tool 이 대신 계산해 주지 않는다는 것을 적었다. FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION 에는 collect_member_schedules 로 rows 를 먼저 모아 직접 읽고 후보를 고를 것, candidate_slots 항목이 date / start_time / end_time / duration_minutes / reason 을 포함할 것, busy_rows 를 앞 결과에서 복사할 것, 조건을 벗어난 후보는 조용히 빠지므로 결과가 비면 다시 고를 것, 여기서 끝내지 말고 decide_final_slot 을 이어 호출할 것을 적었다. DECIDE_FINAL_SLOT_DESCRIPTION 에는 selected_index 또는 selected_slot 으로 후보를 지정하고 final_slot 을 'YYYY-MM-DD HH:MM-HH:MM' 형식으로 적을 것, 못 고르면 final_slot 을 null 로 두고 needs_agent_selection 을 true 로 둘 것을 적었다.
+- 수정 이유 : description 과 Python 구현이 다른 계약을 말하면 agent 가 빈 candidate_slots 로 호출해 놓고 결과를 기다린다. 조건 위반 후보가 예외 없이 버려지는 것도 적지 않으면 agent 가 빈 결과를 "가능한 시간이 없다"로 오해한다. 미확정 규칙을 명시한 것은 근거가 없을 때 아무 시간이나 채워 넣는 것을 막기 위해서다. 실제로 후보 5개 중 겹침 / 업무 시간 밖 / 범위 밖 / 길이 미달 4개가 걸러지고 1개만 남는 것을 확인했다.
+
+### find_common_available_slots_dict / find_common_available_slots / decide_final_slot 구현하기
+
+- AI 활용 내용 : 이전과 동일한 형식으로 활용하였다.
+
+collect_member_schedules 가 rows 에 "나"의 일정까지 합쳐 준다는 것과 PERSONAL_SHARED_MEMBER_NAME 이 "나"라는 것, decide_final_slot_payload 가 final_slot 이 없으면 needs_agent_selection 을 알아서 True 로 둔다는 것을 확인하였다. 또 busy_rows 가 None 인 것과 빈 list 인 것의 의미가 다르다는 것을 확인한 뒤, dict 헬퍼가 정규화와 수집만 맡고 검증은 fixed/schedule_decision.py 에 넘기는 설계 방향을 설명 듣고나서 구현하였다.
+
+- 직접 수정한 부분 : find_common_available_slots_dict 에서 normalize_external_member_names 로 이름을, normalize_date_bound 로 날짜를 정규화하고, busy_rows 가 None 일 때만 collect_member_schedules.invoke 로 rows 를 채웠다. 검증 대상 명단에는 PERSONAL_SHARED_MEMBER_NAME 을 앞에 붙여 find_common_available_slots_payload 로 넘겼다. 두 tool 함수는 각각 dict 헬퍼 결과와 decide_final_slot_payload 결과를 json.dumps(..., ensure_ascii=False) 로 반환하기만 했고, 후보나 최종 시간을 고르는 로직은 넣지 않았다.
+- 수정 이유 : busy_rows 를 is None 으로 검사한 것은 None 이 "아직 안 모았다"이고 빈 list 는 "모았는데 없다"라서, or [] 로 처리하면 확정된 0건을 20초 넘는 MCP 호출로 다시 조회하기 때문이다. members 에 "나"를 넣은 것은 rows 에 내 일정이 들어 있으니 명단에도 남아야 근거가 맞기 때문이다. tool 안에서 최종 시간을 고르지 않은 것은 description 과 계약을 맞추기 위해서고, 실제로 selected_index 없이 호출하면 final_slot 이 None 이고 needs_agent_selection 이 True 로 유지되는 것을 확인했다.
 
 ---
 
 ## 구현하면서 고민한 점
 
-- 고민한 점 : Week 5는 직접 SQL을 쓰는 주차가 아니라 MCP tool을 감싸고 결과를 그대로 넘기는 주차라서, 코드를 다 짜고 나서도 이게 제대로 된 건지 눈으로는 판단이 되지 않았다. tool 하나하나가 세 줄짜리 pass-through라 "실행은 되는데 맞게 되는 건가"를 판별할 기준 자체가 없었고, 특히 반환 JSON을 한 겹 더 감쌌는지 아닌지, 내 일정이 중복으로 들어가는지 같은 것은 결과만 봐서는 티가 나지 않았다. 그래서 클로드 코드에게 "무엇을 확인해야 이 구현이 검증됐다고 할 수 있는지"부터 물어보고, 확인할 항목을 먼저 정리한 다음에 테스트를 짰다.
+- 고민한 점 : Week 6은 코드가 아니라 프롬프트가 동작을 좌우하는 주차라서, 잘못 만들어도 에러가 아니라 그럴듯한 답변으로 나타나는 것이 가장 어려웠다. 위임이 엉뚱한 하위 agent로 가도, 미확정인 시간을 확정된 것처럼 말해도, 조회 0건을 "일정이 없다"고 단정해도 실행 자체는 정상으로 끝난다. 그래서 클로드 코드에게 "무엇을 확인해야 이 구현이 검증됐다고 할 수 있는지"부터 물어보고, 확인할 항목을 먼저 정리한 다음에 테스트를 짰다.
 - 해결방법 : 검증을 두 단계로 나눠서 진행했다.
-  1단계는 agent를 거치지 않고 tool을 직접 호출하는 스크립트로 계약을 확인하는 것이었다. 반환 문자열의 앞부분이 {"ok": true 로 시작하는지 봐서 이중 인코딩이 없다는 것을 확인했고, member*names를 None으로 주면 18건 빈 리스트로 주면 0건이 나오는 것을 확인해 두 값의 분기가 실제로 갈린다는 것을 검증했다. date_from을 "2000-01-01"과 "2000-01-01T00:00:00"으로 각각 넘겨 rows 18건이 완전히 동일하게 나오는 것을 확인해, wrapper에서 날짜를 정리하지 않아도 store 경계에서 처리된다는 것도 확인했다. 중복 제거는 Week 1 임시 일정을 만든 뒤 같은 id로 SQLite에 저장하고 \_personal_schedules_for_current_scope의 결과 건수가 그대로 유지되는지로 검증했다. 공유 일정은 같은 schedule_id로 create를 두 번 불러 sync_status가 created 다음 updated로 바뀌고 조회 결과가 2건이 아닌 1건으로 유지되는지, delete 후 0건이 되는지까지 라이프사이클로 확인했다. 테스트로 만든 row는 전부 지워서 원상복구했다.
-  2단계는 ./run.sh --week5 로 실제 agent에 질문하고 trace를 확인하는 것이었다. "7월 7일부터 17일까지 민준이랑 지훈이 일정 알려줘"에는 collect_member_schedules가 한 번만 호출되고 rows 9건이 나/민준/지훈 모두 같은 6개 필드 구조로 날짜순 정렬되어 나왔다. "민준이 일정만 알려줘"처럼 멤버를 한 명으로 좁히면 extract_schedules_from_history가 선택되어 3건이 나왔다. "민준이가 예전에 일정 얘기한 대화 찾아줘"로 search_previous_conversations가 ext_mj를 찾은 뒤 "그 대화 전체 내용을 보여줘"라고 이어서 물으면 load_conversation_messages가 그 ext_mj를 그대로 받아 호출되는 체인이 한 trace 안에 순서대로 찍혔다. 공유 일정은 필터 없이 물으면 기본 실습 18건이, "나"로 등록된 일정을 날짜와 함께 물으면 앱에서 동기화된 3건이 나왔고, 등록한 일정이 목록에 나타났다가 삭제로 사라지는 것도 확인했다. 마지막으로 "내가 저장해둔 일정 뭐 있지?"에는 외부 조회 tool이 아니라 Week 3 도구가 호출되어 출처 경계가 지켜지는 것도 확인했다.
-  이 과정에서 trace만 보고 pass-through 여부를 판별하는 방법도 알게 됐다. MCP 결과를 그대로 넘긴 tool은 응답 top-level에 ok와 tool_name이 그대로 남아 있고, 내가 직접 두 출처를 합친 collect_member_schedules만 rows/schedule_summary/member_names 구조라서 모양이 다르다. json_payload로 한 번 더 감쌌다면 content가 escape된 문자열로 찍혔을 것이므로, 이 차이만 봐도 이중 인코딩이 없다는 것을 알 수 있었다. 같은 맥락으로 collect_member_schedules 결과의 "나" row에 source_conversation_id가 없다는 것이, 내 일정이 MCP 경로로 중복 유입되지 않았다는 직접적인 증거가 됐다.
-  검증 도중 두 번 헷갈렸는데 둘 다 구현 문제가 아니었다. 첫째로 앱 기준 오늘이 2026-07-29인데 실습 데이터는 2026-07-07~17이라, 상대 날짜로 물으면 전부 0건이 나왔다. 구현이 틀린 게 아니라 그 범위에 데이터가 없는 것이어서 테스트 질문에는 항상 날짜를 명시했다. 둘째로 공유 저장소에서 "나" 일정을 조회했을 때 0건이 나와 자동 동기화가 실패한 줄 알았는데, DB를 직접 열어보니 shared_sch*... 형태로 3건이 정상 등록되어 있었고 LLM이 넘긴 날짜 필터가 과거 일정을 걸러낸 것이었다. 날짜를 명시해서 다시 물으니 3건이 그대로 나왔다.
+  1단계는 LLM을 거치지 않고 계약만 확인하는 것이었다. 하위 agent 자리에 미리 만든 trace를 돌려주는 stub을 넣어, kana_agent가 decide_final_slot 결과를 final_slot_payload로 끌어올리고 그것이 supervisor 쪽 extract_langchain_trace까지 그대로 읽히는지 확인했다. 도전 기능은 busy_rows를 직접 주입해 후보 5건 중 겹침·업무 시간 밖·범위 밖·길이 미달 4건이 걸러지고 1건만 남는 것과, selected_index 없이 부르면 final_slot이 None이고 needs_agent_selection이 True로 유지되는 것을 확인했다.
+  2단계는 실제 supervisor를 실행해 trace를 보는 것이었다. 개인 일정 요청에는 nana_agent만 호출되고 하위 trace에 personal_list_saved_schedules가, 외부 멤버 조회에는 kana_agent만 호출되고 collect_member_schedules가 남았다. 날짜를 명시한 그룹 일정 요청에서는 collect_member_schedules 다음 find_common_available_slots 다음 decide_final_slot이 이어지고, final_slot_payload의 시간이 최종 답변과 일치했다.
+  이 과정에서 프롬프트 문제를 하나 잡았다. 조회 0건일 때 Kana는 조회 조건을 밝혔는데 supervisor가 요약하면서 "일정이 없습니다"로 단정했다. tool 구현이 아니라 supervisor 프롬프트에 조회 조건을 지우고 단정하지 말라는 문장을 한 줄 넣고 재실행하니 날짜 범위가 함께 나왔다. 실습 데이터가 2026-07-07~17인데 앱 기준 오늘은 2026-08-05라 상대 날짜로 물으면 전부 0건이 나오는 것도 확인해, 테스트 질문에는 항상 날짜를 명시했다.
 
 ---
 
 ## 과제 회고 (KPT)
 
 - **Keep** (좋았고 계속 유지할 점) : 이번에도 거의 AI-first로 문제해결을 맡기고, 직접 판단하는 시간을 가졌는데 좀 더 빠르게 과제를 할 수 있었던 것 같다.
-- **Problem** (아쉬웠거나 막혔던 점) : 아직 MCP에 대해서 이해하고 응용하는게 조금 어려운 것 같다.
-- **Try** (다음에 시도해볼 점) : MCP 추가로 공부해보기
+- **Problem** (아쉬웠거나 막혔던 점) : 멀티 에이전트를 활용하는 부분에 대해서 좀 더 깊은 이해가 필요활 것 같다.
+- **Try** (다음에 시도해볼 점) : 멀티 에이전트 추가로 공부해보기
