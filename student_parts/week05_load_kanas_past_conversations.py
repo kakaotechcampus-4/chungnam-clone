@@ -14,6 +14,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 ) 
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -289,6 +290,25 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         original_text=str(row.get("title") or ""),
     )
 
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """같은 일정이 앱 DB와 공유 저장소 양쪽에서 들어와도 한 번만 남깁니다.
+
+    "나"를 조회 대상에 포함하면, 개인 일정이 앱 DB(내부 rows)와 외부 공유 저장소
+    (extract_schedules_from_history 결과) 양쪽에 동기화되어 있어 두 경로로 들어옵니다.
+    두 경로가 제목을 다르게 다듬으므로(외부 경로는 소괄호 제거) 값을 그대로 비교하면
+    중복이 안 걸러집니다. end_time은 경로별로 값이 달라질 수 있어 키에서 뺍니다.
+    """
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+    return list(deduped.values())
 
 def _collect_member_schedules(
     *,
@@ -320,9 +340,10 @@ def _collect_member_schedules(
         "date_from": normalized_date_from,
         "date_to": normalized_date_to,
     }
+    
     external_result_text = call_mcp_tool_sync("extract_schedules_from_history", external_args)
     external_rows = json.loads(external_result_text).get("rows", [])
-    rows.extend(external_rows)
+    rows = _dedupe_schedule_rows([*rows, *external_rows])
 
     summary = external_schedule_summary(rows)
 
