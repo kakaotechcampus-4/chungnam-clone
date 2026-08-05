@@ -5,11 +5,6 @@ from typing import Any
 from langchain_core.tools import tool
 from fixed.app_store import AppSQLiteStore
 from fixed.config import CONFIG
-from fixed.external_people_store import (
-    external_schedule_summary,
-    normalize_external_member_names,
-    normalize_external_schedule_date_bounds,
-)
 from fixed.session_scope import current_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES
 from student_parts.week02_structure_natural_language_requests import StructuredRequest
@@ -19,6 +14,12 @@ from student_parts.week05.common import (
     _schedule_scope,
 )
 from student_parts.week05.schemas import CollectMemberSchedulesInput
+from fixed.external_people_store import (
+    external_schedule_summary,
+    normalize_external_member_names,
+    normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
+)
 
 
 def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
@@ -47,11 +48,8 @@ def _personal_schedules_for_current_scope() -> list[dict[str, Any]]:
 def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequest:
     """앱 일정 row를 Week 2 StructuredRequest 기준으로 읽습니다."""
 
-    return StructuredRequest(
+    request = StructuredRequest(
         kind="schedule",
-        # 전 week02 에서 schedule을 입력받아, member 유무에 따라 personal,group으로 재가공을 하였기때문에,
-        # Literal에 Personal_schedule이 빠지고, schedule이 들어가있습니다,
-        # 따라서 기존의 personal_schedule을 kind로 지정하면, Literal 제약에 위반되서 이를 schedule로 바꿨습니다
         title=row.get("title"),
         date=row.get("date"),
         start_time=row.get("start_time"),
@@ -59,6 +57,13 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         members=row.get("attendees") or row.get("members") or [],
         original_text=str(row.get("title") or ""),
     )
+    stored_kind = (
+        "group_schedule"
+        if row.get("request_kind") == "group_schedule"
+        else "personal_schedule"
+    )
+
+    return request.model_copy(update={"kind": stored_kind})
 
 
 def _collect_member_schedules(
@@ -107,16 +112,57 @@ def _collect_member_schedules(
                 "date": request.date,
                 "start_time": request.start_time,
                 "end_time": request.end_time,
-                "notes": None,
+                "notes": _my_schedule_notes(request),
             }
         )
 
-    rows = [*personal_rows, *external_rows]
+    rows = _dedupe_schedule_rows([*personal_rows, *external_rows])
 
     return {
-        "rows": rows,
-        "schedule_summary": external_schedule_summary(rows),
-    }
+            "ok": True,
+            "tool_name": "collect_member_schedules",
+            "members": [
+                "나",
+                *[name for name in normalized_members if name != "나"],
+            ],
+            "rows": rows,
+            "schedule_summary": external_schedule_summary(rows),
+        }
+            
+def _my_schedule_notes(request: StructuredRequest) -> str:
+    """내 일정이 개인 일정인지 그룹 일정인지 설명합니다."""
+
+    if request.kind != "group_schedule":
+        return "Nana 개인 일정"
+
+    members = [
+        str(member).strip()
+        for member in (request.members or [])
+        if str(member).strip()
+    ]
+
+    return (
+        f"Nana 그룹 일정 · 참석자: {', '.join(members)}"
+        if members
+        else "Nana 그룹 일정"
+    )
+
+
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """앱 DB와 공유 저장소에서 중복으로 들어온 일정을 제거합니다."""
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+
+    return list(deduped.values())
 
 
 @tool(args_schema=CollectMemberSchedulesInput)
