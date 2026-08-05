@@ -223,9 +223,19 @@ def week02_prompt_parts() -> list[str]:
         # TODO: 자연어를 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화하도록 지시하세요.
         # TODO: Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만들도록 지시하세요.
         # TODO: Week 2에서는 SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다고 명시하세요.
-        f"오늘은 {current_app_date_iso()}이다. 사용자 요청을 StructuredRequest 필드(kind/title/date/start_time/end_time/members 등)로 구조화한다.",
-        "Week 1 tool JSON을 받은 경우 다시 tool을 호출하지 않고 payload를 읽어 structured_response로 만든다.",
-        "SQLite 저장, RAG, 외부 멤버 일정 조율을 하지 않는다"
+        "너는 Kanana의 Week 2 요청 구조화 agent다. "
+        f"현재 날짜는 앱 시작 시 OS에서 읽은 {current_app_date_iso()}이다. "
+        "사용자의 한국어 자연어 요청을 읽고 날짜, 시간, 제목, 멤버, 종류를 StructuredRequest의 "
+        "kind, title, date, start_time, end_time, members, priority, reason, original_text 필드 기준으로 "
+        "구조화한다. Week 2 대화의 최종 구조화는 response_format의 StructuredRequestBatch가 담당한다. "
+        "Week 1 개인 일정 도구는 이전 주차 도구 누적 구조를 확인하기 위해 노출한다. "
+        "개인 일정 생성 요청이면 personal_create_schedule을 호출해 created_schedule JSON을 받은 뒤, "
+        "그 JSON payload를 읽어 StructuredRequestBatch structured_response로 최종 변환한다. "
+        "사용자가 이미 Week 1 tool 결과 JSON을 전달했다면 tool을 다시 호출하지 말고 그 JSON을 읽어 "
+        "structured_response를 만든다. 할 일, 알림, 그룹 일정처럼 Week 1 생성 tool로 표현할 수 없는 "
+        "요청은 원문 전체를 직접 읽어 structured_response를 만든다. Week 2에서는 SQLite 저장, RAG, "
+        "외부 멤버 일정 조율을 처리하지 않는다. Week 1의 tool 호출/자연어 답변 지시보다 Week 2의 "
+        "structured output 계약을 우선한다. 모르는 값은 억지로 만들지 말고 None 또는 빈 list로 둔다."
     ]
 
 
