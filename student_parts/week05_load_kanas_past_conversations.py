@@ -294,7 +294,7 @@ def _collect_member_schedules(
 ) -> dict[str, Any]:
     """내 일정과 외부 멤버 일정을 같은 row 구조로 합칩니다."""
     normalized_names = normalize_external_member_names(member_names)
-    norm_from, norm_to = normalize_external_schedule_date_bounds(normalized_names,date_from, date_to)
+    norm_from, norm_to = normalize_external_schedule_date_bounds(normalized_names, date_from, date_to)
 
     # TODO: 내 SQLite/임시 일정과 외부 MCP 일정 rows를 같은 구조로 합치세요.
     my_rows = [
