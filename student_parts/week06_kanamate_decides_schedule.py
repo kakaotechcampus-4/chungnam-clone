@@ -197,9 +197,11 @@ def week06_prompt_parts() -> list[str]:
 
     return [
         *week05_prompt_parts(),
-        # TODO: Week 6 supervisor agent system prompt를 자유롭게 추가하세요.
-        #   - supervisor는 직접 업무를 처리하지 않고 nana_agent 또는 kana_agent로만 위임합니다.
-        #   - 어떤 요청이 Nana 담당이고 어떤 요청이 Kana 담당인지 판단 기준을 적습니다.
+        """
+        당신은 supervisor로써, 직접 업무를 처리하지 않고 nana_agent 또는 kana_agent에게 위임한다.
+        나만의 개인 일정 생성/조회/수정/삭제, 개인 참고자료·메모, 대화 RAG 요청은 nana_agent에게 위임한다.
+        다른 팀원과 함께 조율해야 하는 일정, 외부 대화 기록/공유 일정 조회, 공통 가능 시간 검토는 kana_agent에게 위임한다.
+        """,
     ]
 
 
@@ -208,9 +210,11 @@ def nana_prompt_parts() -> list[str]:
 
     return [
         *week04_prompt_parts(),
-        # TODO: Week 6 Nana 하위 에이전트 전용 system prompt를 자유롭게 추가하세요.
-        #   - supervisor prompt를 공유하지 않는 Nana 전용 prompt입니다.
-        #   - 개인 일정/저장/RAG를 담당하고, 그룹 조율 요청은 담당이 아니라고 짧게 알리게 합니다.
+        """
+        당신은 개인적인 업무만을 담당한다. 다른 팀원들의 일정을 조율하는 것은 당신의 담당이 아니다.
+        개인 일정 생성/조회/수정/삭제, 개인 참고자료 및 메모, 대화 RAG만 담당한다.
+        그룹, 팀 단위 일정 조율은 하지 않고 모두 kana에게 위임한다.
+        """,
     ]
 
 
@@ -218,10 +222,12 @@ def kana_prompt_parts() -> list[str]:
     """Week 6 Kana 하위 에이전트 전용 system prompt 조각입니다."""
 
     return [
-        # TODO: Week 6 Kana 하위 에이전트 전용 system prompt를 자유롭게 추가하세요.
-        #   - 다른 주차 prompt를 누적하지 않으므로 Kana 역할을 처음부터 작성해야 합니다.
-        #   - 외부 멤버 일정/공통 가능 시간/그룹 조율을 담당하고, 확정된 일정 저장은 Nana 담당이라고 답하게 합니다.
-        #   - 추가 과제를 구현했다면 find_common_available_slots와 decide_final_slot까지 이어서 호출하도록 지시합니다.
+        """
+        당신의 이름은 kana입니다. 외부 멤버 일정과 공유 일정을 포함하여 여러 명의 일정을 조율하는 에이전트로써, 
+        외부 멤버 일정 조회, 공통 가능 시간 후보 검증, 최종 시간 결정을 담당한다.
+        개인 일정과 관련한 사항은 당신의 역할이 아니며, 모두 nana에게 위임한다.
+        개인 일정에 관하여 추측하거나 판단하여 작업을 진행하지 않는다.
+        """,
     ]
 
 
@@ -237,8 +243,12 @@ def supervisor_system_prompt() -> str:
     return join_system_prompt(
         [
             *week06_prompt_parts(),
-            # TODO: supervisor 실행 역할에 필요한 최종 system prompt를 자유롭게 추가하세요.
-            #   - 반드시 nana_agent 또는 kana_agent 중 하나를 호출한 뒤 그 결과만 근거로 답하게 합니다.
+            """
+            요청 내용에 따라 nana_agent 또는 kana_agent 중 필요한 쪽을 호출한다.
+            둘 다 필요하면 nana_agent를 먼저 호출해 개인 일정을 확인한 뒤 kana_agent를 호출한다.
+            kana_agent를 호출할 때는 nana_agent가 확인한 개인 일정의 세부 내용을 전달하지 않는다.
+            각 하위 에이전트가 반환한 결과만 근거로 최종 답변을 작성하며, 스스로 추측해 내용을 채우지 않는다.
+            """,
         ]
     )
 
@@ -434,8 +444,8 @@ def kana_tools() -> list[Any]:
         extract_schedules_from_history,
         list_shared_schedules,
         collect_member_schedules,
-        find_common_available_slots,
-        decide_final_slot,
+        # find_common_available_slots,
+        # decide_final_slot, 심화과제 미구현으로 인해 tool 목록에서 제외.
     ]
 
 
