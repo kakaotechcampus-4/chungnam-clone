@@ -295,13 +295,15 @@ FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION = (
 
 
 DECIDE_FINAL_SLOT_DESCRIPTION = (
-    # TODO: decide_final_slot tool description을 자유롭게 작성하세요.
-    #   - 이 Python tool이 최종 시간을 자동 선택하지 않는다는 점을 분명히 알려야 합니다.
-    #     agent가 selected_index 또는 selected_slot과 final_slot을 직접 골라 넘기게 만듭니다.
-    #   - final_slot 형식('YYYY-MM-DD HH:MM-HH:MM')과 needs_agent_selection, reason을 채우는 기준을 적습니다.
-    #   - 아직 고르지 않았다면 final_slot은 null, needs_agent_selection은 true로 두게 합니다.
-    #   - 근거 trace를 위해 candidate_slots, busy_rows, member_names, date_from/date_to도 함께 넘기게 합니다.
-    ""
+    "find_common_available_slots가 검증한 후보 중에서 네가 직접 고른 최종 회의 시간을 기록한다. "
+    "이 tool은 후보를 비교하지 않고 최종 시간을 대신 고르지도 않는다. 네가 고른 결과를 받아 적기만 한다. "
+    "고른 후보는 selected_index(candidate_slots의 0부터 시작하는 번호) 또는 selected_slot(후보 객체)으로 지목한다. "
+    "확정했으면 final_slot에 'YYYY-MM-DD HH:MM-HH:MM' 형식으로 쓰고 needs_agent_selection은 false로 둔다. "
+    "아직 고르지 못했으면 final_slot은 null, needs_agent_selection은 true로 두고 왜 확정하지 못했는지 reason에 쓴다. "
+    "reason에는 그 시간을 고른 근거를 사용자가 그대로 읽을 수 있는 문장으로 쓴다. "
+    "판단 근거를 남기려면 candidate_slots, busy_rows, member_names, date_from, date_to도 "
+    "앞선 tool 결과에서 복사해 함께 넘긴다. "
+    "후보를 만들고 겹침을 검증하는 일은 find_common_available_slots가 맡는다. 이 tool은 그 다음 단계다."
 )
 
 
@@ -404,6 +406,16 @@ def find_common_available_slots(
     ...
 
 
+def _plain_slot(slot: Any) -> Any:
+    """후보 slot이 Pydantic 객체면 dict로 바꾼다.
+
+    decide_final_slot_payload는 후보를 정규화하지 않고 candidates 텍스트와 payload에 그대로 담는다.
+    객체가 그대로 들어가면 candidates에 repr이 박히고 json.dumps가 직렬화하지 못한다.
+    """
+
+    return slot.model_dump() if hasattr(slot, "model_dump") else slot
+
+
 @tool(description=DECIDE_FINAL_SLOT_DESCRIPTION, args_schema=DecideFinalSlotInput)
 def decide_final_slot(
     candidate_slots: list[Any] | None = None,
@@ -420,10 +432,22 @@ def decide_final_slot(
 ) -> str:
     """LLM이 직접 고른 후보/최종 시간을 course repo payload로 기록합니다."""
 
-    # TODO: Kana agent가 고른 최종 시간 정보를 course repo JSON 계약에 맞춰 기록하세요.
-    #   - 직접 최종 시간을 고르지 말고 받은 인자를 그대로 decide_final_slot_payload(...)에 넘깁니다.
-    #   - 결과를 JSON 문자열로 반환합니다.
-    ...
+    # 최종 시간은 agent가 고른 값만 쓴다. 여기서 후보를 비교하거나 고르지 않는다.
+    payload = decide_final_slot_payload(
+        candidate_slots=[_plain_slot(slot) for slot in candidate_slots or []],
+        selected_slot=_plain_slot(selected_slot),
+        selected_index=selected_index,
+        member_names=member_names,
+        date_from=date_from,
+        date_to=date_to,
+        duration_minutes=duration_minutes,
+        final_slot=final_slot,
+        needs_agent_selection=needs_agent_selection,
+        reason=reason,
+        busy_rows=busy_rows,
+    )
+    # payload를 감싸지 않는다. extract_langchain_trace가 top-level final_slot으로 이 payload를 알아본다.
+    return json.dumps(payload, ensure_ascii=False)
 
 
 def kana_tools() -> list[Any]:
