@@ -258,6 +258,20 @@ def test_find_keeps_busy_rows_as_evidence():
     assert payload["busy_rows"] == [BUSY_ROW]
 
 
+def test_find_flags_missing_candidates():
+    # 후보를 아예 받지 못한 경우. 빈 결과만 주면 agent가 "가능한 시간이 없다"고 반대로 답한다
+    payload = find([])
+    assert payload["needs_agent_candidates"] is True
+    assert payload["message"]
+
+
+def test_find_does_not_flag_when_candidates_were_rejected():
+    # (대조) 후보를 받아 검증했더니 전부 탈락한 경우는 다른 상태다. 둘을 같게 표시하면 구분이 사라진다
+    payload = find([candidate("10:30", "11:30")])
+    assert payload["candidate_slots"] == []
+    assert "needs_agent_candidates" not in payload
+
+
 # 3. 수집 갈래 — busy_rows를 넘기지 않은 경우
 
 
