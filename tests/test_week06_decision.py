@@ -53,7 +53,7 @@ BUSY_ROW = {
 def candidate(start_time: str, end_time: str, date: str = "2026-07-07", **extra) -> dict:
     """후보 하나를 만든다. 탈락 경로마다 바꾸는 값만 인자로 받는다."""
 
-    return {"date": date, "start_time": start_time, "end_time": end_time, "reason": "테스트 후보", **extra}
+    return {"date": date, "start_time": start_time, "end_time": end_time, "reason": "셋 다 비어 있는 시간", **extra}
 
 
 def find(candidate_slots: list, **overrides) -> dict:
@@ -226,6 +226,26 @@ def test_find_does_not_repeat_me_in_members():
     # (대조) agent가 member_names에 "나"를 넣어 보내도 두 번 들어가지 않는다
     payload = find([], member_names=["나", "철수", "나"])
     assert payload["members"] == [PERSONAL_SHARED_MEMBER_NAME, "철수"]
+
+
+def test_find_blocks_busy_row_whose_date_carries_time():
+    # busy_rows는 agent가 텍스트로 복사해 넘긴다. 날짜에 시간이 붙어 오면 겹침 비교가 문자열
+    # 완전 일치라 그 일정을 통째로 놓치고, 이미 회의가 있는 시간을 빈 시간으로 추천하게 된다
+    iso_row = {**BUSY_ROW, "date": "2026-07-07T00:00:00"}
+    payload = find([candidate("10:30", "11:30")], busy_rows=[iso_row])
+    assert payload["candidate_slots"] == []
+
+
+def test_find_drops_candidate_with_unparsable_time():
+    # agent가 "14시"처럼 형식을 어겨 보낼 수 있다. 해석할 수 없는 시각은 통과시키지 않는다
+    payload = find([candidate("14시", "15시")])
+    assert payload["candidate_slots"] == []
+
+
+def test_find_drops_candidate_with_reversed_times():
+    # 종료가 시작보다 앞선 후보. 길이 계산이 음수가 되므로 통과시키면 안 된다
+    payload = find([candidate("15:00", "14:00")])
+    assert payload["candidate_slots"] == []
 
 
 def test_find_keeps_busy_rows_as_evidence():
