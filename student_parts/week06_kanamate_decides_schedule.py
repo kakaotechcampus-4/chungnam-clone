@@ -319,26 +319,29 @@ def tool_name(tool_object: Any) -> str:
 DELEGATE_TRACE_CONTENT_LIMIT = 1200
 
 
-def _delegate_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """supervisor에게 올릴 하위 trace를 만든다. 큰 tool 결과는 잘라내고 잘렸다는 사실을 남긴다."""
+def _trim_trace_field(event: dict[str, Any], field: str) -> dict[str, Any]:
+    """event의 한 필드가 한도를 넘으면 잘라내고 얼마나 잘렸는지 남긴다."""
 
-    trimmed: list[dict[str, Any]] = []
-    for event in events:
-        if event.get("event") != "tool_result":
-            trimmed.append(event)
-            continue
-        content_text = json.dumps(event.get("content"), ensure_ascii=False)
-        if len(content_text) <= DELEGATE_TRACE_CONTENT_LIMIT:
-            trimmed.append(event)
-            continue
-        trimmed.append(
-            {
-                **event,
-                "content": content_text[:DELEGATE_TRACE_CONTENT_LIMIT],
-                "content_truncated_chars": len(content_text) - DELEGATE_TRACE_CONTENT_LIMIT,
-            }
-        )
-    return trimmed
+    if event.get(field) is None:
+        return event
+    text = json.dumps(event[field], ensure_ascii=False)
+    if len(text) <= DELEGATE_TRACE_CONTENT_LIMIT:
+        return event
+    return {
+        **event,
+        field: text[:DELEGATE_TRACE_CONTENT_LIMIT],
+        f"{field}_truncated_chars": len(text) - DELEGATE_TRACE_CONTENT_LIMIT,
+    }
+
+
+def _delegate_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """supervisor에게 올릴 하위 trace를 만든다. 큰 tool 결과와 인자는 잘라내고 잘렸다는 사실을 남긴다.
+
+    tool 결과뿐 아니라 인자도 자른다. agent가 busy_rows와 candidate_slots를 인자에 그대로 복사해
+    넘기기 때문에, 멤버나 일정이 늘어나면 인자 쪽이 결과만큼 커진다.
+    """
+
+    return [_trim_trace_field(_trim_trace_field(event, "content"), "arguments") for event in events]
 
 
 FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION = (
@@ -646,11 +649,43 @@ def nana_agent(query: str) -> str:
 def kana_agent(query: str) -> str:
     """그룹 일정 종합 작업을 프롬프트 기반 Kana 하위 에이전트에게 위임합니다."""
 
-    # TODO: Kana 하위 agent를 실행하고 trace에서 final_slot_payload/final_decision_payload를 끌어올려 반환하세요.
-    #   - _KANA_SUBAGENT를 kana_tools()와 kana_system_prompt()로 한 번만 만들고 재사용합니다.
-    #   - trace event의 content를 훑어 final_slot이 들어 있는 dict와 final_decision 값을 찾습니다.
-    #   - answer, trace, inner_tool_names, final_slot_payload, final_decision_payload를 JSON으로 반환합니다.
-    ...
+    global _KANA_SUBAGENT
+    if _KANA_SUBAGENT is None:
+        _KANA_SUBAGENT = create_agent(
+            model=chat_model(),
+            tools=kana_tools(),
+            system_prompt=kana_system_prompt(),
+        )
+
+    result = _KANA_SUBAGENT.invoke({"messages": [{"role": "user", "content": query}]})
+    events = extract_agent_events(result)
+
+    # 최종 시간은 하위 tool 결과 안에 있는데 supervisor는 그 messages를 볼 수 없다. 꺼내서 올려 준다.
+    # 자르기 전 원본에서 찾는다. trace는 부피 때문에 잘리지만 이 값은 온전해야 한다.
+    # 후보를 다시 골라 두 번 결정하면 마지막 것이 실제 결론이므로 덮어쓴다.
+    final_slot_payload: dict[str, Any] | None = None
+    final_decision_payload: dict[str, Any] | None = None
+    for event in events:
+        content = event.get("content")
+        if not isinstance(content, dict):
+            continue
+        # 미확정이면 final_slot이 None이라 .get()으로는 못 찾는다. 그 상태도 supervisor가 알아야 한다.
+        if "final_slot" in content:
+            final_slot_payload = content
+        if content.get("final_decision"):
+            final_decision_payload = content["final_decision"]
+
+    return json.dumps(
+        {
+            "selected_agent": "kana_agent",
+            "answer": extract_final_text(result),
+            "trace": _delegate_trace(events),
+            "inner_tool_names": _tool_call_names(events),
+            "final_slot_payload": final_slot_payload,
+            "final_decision_payload": final_decision_payload,
+        },
+        ensure_ascii=False,
+    )
 
 
 def build_langchain_supervisor_agent() -> object:
