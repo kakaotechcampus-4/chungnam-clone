@@ -282,6 +282,34 @@ def tool_name(tool_object: Any) -> str:
     return getattr(tool_object, "name", getattr(tool_object, "__name__", str(tool_object)))
 
 
+# 하위 agent의 tool 결과 하나가 이 길이를 넘으면 잘라서 올린다. 대화 RAG는 원문 passage를 담아
+# 한 번에 18KB를 넘겼는데, 그 전체가 supervisor의 tool 결과로 들어가 매 턴 다시 전송된다.
+# supervisor가 답변에 쓰는 것은 하위 agent의 answer이므로 원문까지 올릴 이유가 없다.
+DELEGATE_TRACE_CONTENT_LIMIT = 1200
+
+
+def _delegate_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """supervisor에게 올릴 하위 trace를 만든다. 큰 tool 결과는 잘라내고 잘렸다는 사실을 남긴다."""
+
+    trimmed: list[dict[str, Any]] = []
+    for event in events:
+        if event.get("event") != "tool_result":
+            trimmed.append(event)
+            continue
+        content_text = json.dumps(event.get("content"), ensure_ascii=False)
+        if len(content_text) <= DELEGATE_TRACE_CONTENT_LIMIT:
+            trimmed.append(event)
+            continue
+        trimmed.append(
+            {
+                **event,
+                "content": content_text[:DELEGATE_TRACE_CONTENT_LIMIT],
+                "content_truncated_chars": len(content_text) - DELEGATE_TRACE_CONTENT_LIMIT,
+            }
+        )
+    return trimmed
+
+
 FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION = (
     "네가 직접 고른 공통 가능 시간 후보가 정말로 아무도 바쁘지 않은 시간인지 검증한다. "
     "이 tool은 후보를 대신 계산해 주지 않는다. 앞선 일정 조회 결과의 busy_rows를 네가 읽고 "
@@ -547,13 +575,27 @@ def propose_group_schedule(
 def nana_agent(query: str) -> str:
     """개인 일정과 개인 RAG 작업을 프롬프트 기반 Nana 하위 에이전트에게 위임합니다."""
 
-    # TODO: Week 4 도구를 가진 Nana 하위 agent를 실행하고 answer/trace/inner_tool_names를 반환하세요.
-    #   - _NANA_SUBAGENT가 None일 때만 create_agent(model=chat_model(), tools=week04_tools(),
-    #     system_prompt=nana_system_prompt())로 만들고 이후에는 재사용합니다.
-    #   - query를 user 메시지로 invoke하고, extract_agent_events(...)와 extract_final_text(...)로
-    #     trace와 answer를 뽑습니다.
-    #   - selected_agent, answer, trace, inner_tool_names를 담은 JSON 문자열을 반환합니다.
-    ...
+    global _NANA_SUBAGENT
+    if _NANA_SUBAGENT is None:
+        _NANA_SUBAGENT = create_agent(
+            model=chat_model(),
+            tools=week04_tools(),
+            system_prompt=nana_system_prompt(),
+        )
+
+    # 하위 agent는 새 messages로 시작한다. supervisor 대화 내용은 넘어가지 않고 query만 전달된다.
+    result = _NANA_SUBAGENT.invoke({"messages": [{"role": "user", "content": query}]})
+    events = extract_agent_events(result)
+    # supervisor는 하위 agent의 messages를 볼 수 없다. 필요한 근거를 이 payload에 직접 담아 올린다.
+    return json.dumps(
+        {
+            "selected_agent": "nana_agent",
+            "answer": extract_final_text(result),
+            "trace": _delegate_trace(events),
+            "inner_tool_names": _tool_call_names(events),
+        },
+        ensure_ascii=False,
+    )
 
 
 @tool(args_schema=AgentQueryInput)
