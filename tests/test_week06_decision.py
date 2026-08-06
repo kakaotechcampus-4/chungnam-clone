@@ -8,12 +8,13 @@ tool description을 읽고 직접 골라 argument로 넘기고, 여기서는 그
 돌아오기 때문이다. 그래서 탈락 경로를 하나씩 따로 확인한다 — 겹침, 근무 시간 밖, 길이 부족,
 날짜 범위 밖. 반대로 "맞닿는 시간은 통과해야 한다"도 함께 둔다.
 
-파일 구성은 네 묶음이다.
+파일 구성은 다섯 묶음이다.
 1. 최종 기록 계약 — decide_final_slot. 완전 순수.
 2. 후보 검증 — find_common_available_slots_dict에 busy_rows를 직접 넘기는 갈래. 완전 순수.
 3. 수집 갈래 — busy_rows를 넘기지 않아 collect_member_schedules로 직접 모으는 경로.
    앱 SQLite와 MCP 서브프로세스를 쓰지만, conftest가 두 저장소를 임시 경로로 돌린다.
 4. tool 배선 — LLM이 실제로 보게 될 형태(JSON 문자열, description)를 확인한다.
+5. 위임 payload 정리 — 하위 agent trace를 supervisor에게 올리기 전에 줄이는 부분. 완전 순수.
 
 실행: uv run --with pytest pytest tests/test_week06_decision.py -v
 """
@@ -31,7 +32,9 @@ from fixed.external_people_store import PERSONAL_SHARED_MEMBER_NAME  # noqa: E40
 from fixed.schedule_decision import CommonSlotCandidate  # noqa: E402
 from student_parts.week06_kanamate_decides_schedule import (  # noqa: E402
     DECIDE_FINAL_SLOT_DESCRIPTION,
+    DELEGATE_TRACE_CONTENT_LIMIT,
     FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION,
+    _delegate_trace,
     decide_final_slot,
     find_common_available_slots,
     find_common_available_slots_dict,
@@ -314,3 +317,26 @@ def test_kana_tools_expose_both_decision_tools():
     # Kana가 두 tool을 실제로 볼 수 있어야 3단 흐름이 성립한다
     names = [tool_object.name for tool_object in kana_tools()]
     assert {"collect_member_schedules", "find_common_available_slots", "decide_final_slot"} <= set(names)
+
+
+# 5. 위임 payload 정리 — 하위 trace를 supervisor에게 올리기 전
+
+
+def test_delegate_trace_keeps_small_results_as_is():
+    # 대부분의 tool 결과는 작다. 손대면 trace만 읽기 어려워진다
+    events = [{"event": "tool_result", "tool_name": "list_saved_requests", "content": {"rows": []}}]
+    assert _delegate_trace(events) == events
+
+
+def test_delegate_trace_truncates_large_result():
+    # 대화 RAG는 원문을 담아 한 번에 18KB를 넘겼다. 그대로 올리면 supervisor가 매 턴 다시 읽는다
+    events = [{"event": "tool_result", "tool_name": "search_conversation_messages", "content": "가" * 5000}]
+    trimmed = _delegate_trace(events)[0]
+    assert len(trimmed["content"]) == DELEGATE_TRACE_CONTENT_LIMIT
+    assert trimmed["content_truncated_chars"] > 0
+
+
+def test_delegate_trace_keeps_tool_call_events():
+    # 무엇을 어떤 인자로 불렀는지는 크기와 무관하게 남아야 위임 흐름을 따라갈 수 있다
+    events = [{"event": "tool_call", "tool_name": "search_conversation_messages", "arguments": {"query": "일정"}}]
+    assert _delegate_trace(events) == events
