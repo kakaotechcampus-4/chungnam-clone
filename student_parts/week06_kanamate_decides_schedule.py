@@ -465,7 +465,7 @@ def find_common_available_slots_dict(
     # 못 걸린 일정은 오류가 아니라 "빈 시간"으로 보이므로, 이미 회의가 있는 시간을 추천하게 된다.
     rows = [{**row, "date": normalize_date_bound(str(row.get("date") or ""))} for row in rows]
 
-    return find_common_available_slots_payload(
+    payload = find_common_available_slots_payload(
         # 겹침 판단 근거에 내 일정도 들어가므로 기록에는 "나"를 앞에 둔다. 중복은 위에서 이미 걸러냈다.
         member_names=[PERSONAL_SHARED_MEMBER_NAME, *external_members],
         date_from=window_from,
@@ -478,6 +478,17 @@ def find_common_available_slots_dict(
         candidate_slots=candidate_slots,
         llm_reason=llm_reason,
     )
+
+    # 빈 candidate_slots는 "후보가 전부 탈락했다"와 "후보를 아예 받지 못했다" 두 가지 뜻이 된다.
+    # 구분해 주지 않으면 agent가 후보를 안 넘기고도 "가능한 시간이 없다"고 반대로 답한다.
+    if not (candidate_slots or []):
+        payload["needs_agent_candidates"] = True
+        payload["message"] = (
+            "검증할 후보를 받지 못했습니다. busy_rows와 겹치지 않는 시간대를 직접 골라 "
+            "candidate_slots에 담아 다시 호출하세요. busy_rows가 비어 있으면 그 구간에 바쁜 사람이 "
+            "없다는 뜻이므로 업무 시간 안에서 후보를 만들면 됩니다."
+        )
+    return payload
 
 
 @tool(description=FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION, args_schema=FindCommonAvailableSlotsInput)
