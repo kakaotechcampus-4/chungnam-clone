@@ -15,10 +15,11 @@ class AgentTask(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     id: str = Field(min_length=1)
-    requires_external_data: bool
-    external_members: list[str] = Field(default_factory=list)
+    requires_external_data:bool = Field(description="현재 작업이 나를 제외한 외부 멤버의 데이터를 필요로 하는지 여부")
+    external_members: list[str] = Field(default_factory=list,description="나, 사용자 본인을 제외한 외부 멤버를 의미함")
     query: str = Field(min_length=1)
-    depends_on: list[str] = Field(default_factory=list)
+    depends_on: list[str] = Field(default_factory=list, description="현재 작업이 실행 결과를 직접 입력으로 필요로 하는 선행 작업 id 목록")
+
 
 
 class DecomposedPlan(BaseModel):
