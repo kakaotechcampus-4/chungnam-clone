@@ -351,6 +351,14 @@ def test_delegate_trace_truncates_large_result():
 
 
 def test_delegate_trace_keeps_tool_call_events():
-    # 무엇을 어떤 인자로 불렀는지는 크기와 무관하게 남아야 위임 흐름을 따라갈 수 있다
+    # 무엇을 어떤 인자로 불렀는지는 남아야 위임 흐름을 따라갈 수 있다
     events = [{"event": "tool_call", "tool_name": "search_conversation_messages", "arguments": {"query": "일정"}}]
     assert _delegate_trace(events) == events
+
+
+def test_delegate_trace_truncates_large_arguments():
+    # agent가 busy_rows와 candidate_slots를 인자에 복사해 넘기므로 멤버가 늘면 인자도 결과만큼 커진다
+    events = [{"event": "tool_call", "tool_name": "find_common_available_slots", "arguments": {"busy_rows": ["가" * 5000]}}]
+    trimmed = _delegate_trace(events)[0]
+    assert len(trimmed["arguments"]) == DELEGATE_TRACE_CONTENT_LIMIT
+    assert trimmed["arguments_truncated_chars"] > 0
