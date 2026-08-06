@@ -399,6 +399,11 @@ def find_common_available_slots_dict(
         )
         rows = collected.get("rows") or []
 
+    # 겹침 검증은 날짜를 문자열 완전 일치로 비교하고 후보 쪽만 정규화한다. busy_rows는 LLM이
+    # 복사해 넘기는 값이라 ISO datetime으로 옮겨 적히면 그 일정이 통째로 안 걸린다.
+    # 못 걸린 일정은 오류가 아니라 "빈 시간"으로 보이므로, 이미 회의가 있는 시간을 추천하게 된다.
+    rows = [{**row, "date": normalize_date_bound(str(row.get("date") or ""))} for row in rows]
+
     return find_common_available_slots_payload(
         # 겹침 판단 근거에 내 일정도 들어가므로 기록에는 "나"를 앞에 둔다. 중복은 위에서 이미 걸러냈다.
         member_names=[PERSONAL_SHARED_MEMBER_NAME, *external_members],
