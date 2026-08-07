@@ -324,6 +324,26 @@ class Week06PromptHygiene(unittest.TestCase):
     def test_nana_prompt_declines_group_coordination(self) -> None:
         self.assertIn("Kana", w6.nana_system_prompt())
 
+    def test_supervisor_reconciles_inherited_nana_identity(self) -> None:
+        """supervisor는 Nana 하위 에이전트와 같은 정체성 문장을 상속한다.
+
+        그 문장은 "개인 일정 요청을 처리한다"고 말하는데 supervisor는 직접 처리하면 안 되므로,
+        재정의가 없으면 프롬프트 안에 모순이 남는다(위임 지시와 정면 충돌).
+        정체성이 같은 동안에는 그것을 supervisor 맥락에서 재정의하는 문장이 반드시 있어야 한다.
+        """
+
+        supervisor = w6.week06_system_prompt()
+        nana = w6.nana_system_prompt()
+        sup_identity = next((ln.strip() for ln in supervisor.splitlines() if self.IDENTITY.search(ln)), "")
+        nana_identity = next((ln.strip() for ln in nana.splitlines() if self.IDENTITY.search(ln)), "")
+        if sup_identity and sup_identity == nana_identity:
+            self.assertIn(
+                "직접 처리하는 것이 아니라",
+                supervisor,
+                "supervisor가 Nana와 같은 정체성을 상속하는데 재정의 문장이 없습니다",
+            )
+            self.assertIn("nana_agent", supervisor)
+
 
 if __name__ == "__main__":
     unittest.main()
