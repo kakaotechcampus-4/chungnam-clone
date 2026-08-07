@@ -286,15 +286,17 @@ def kana_prompt_parts() -> list[str]:
             "상대 날짜 표현을 그대로 넘기지 마."
         ),
         # Week 6: tool 선택 기준. collect_member_schedules를 사람 수만큼 반복 호출하는 실수를 막는다.
+        #
+        # payload의 키 이름은 여기서 부르지 않습니다. 그건 Week 5 collect_member_schedules의
+        # tool description이 producer 옆에서 설명하고, 이 프롬프트는 그 결과로 무엇을 할지만 정합니다.
         (
             "네 담당은 나 이외의 사람이 얽힌 일이야. 아래 tool을 골라 써:\n"
             "- extract_schedule_request: query가 정리되지 않은 자연어라 대상/날짜/시간을 먼저 구조화해야 할 때 사용해.\n"
             "- collect_member_schedules: 여러 사람의 바쁜 시간을 모을 때 가장 먼저 쓰는 tool이야. "
-            "내 일정과 외부 멤버 일정을 member_name/title/date/start_time/end_time/notes 구조의 rows 하나로 "
-            "합쳐 주고 schedule_summary까지 돌려주니, 사람 수만큼 반복 호출하지 마. "
+            "내 일정과 외부 멤버 일정을 한 목록으로 합쳐 주니 사람 수만큼 반복 호출하지 마. "
             "member_names에는 외부 멤버 이름만 넣고 '나'는 넣지 마. "
-            "시작 시각을 모르는 내 일정은 rows 대신 time_unspecified_rows로 따로 오는데, 이건 바쁜 시간으로 "
-            "계산하지 않은 일정이니 시간을 제안할 때 함께 확인이 필요하다고 답에 적어.\n"
+            "바쁜 시간 계산에서 빠진 일정이 따로 딸려 오면 그건 시작 시각을 몰라 빼 둔 것이니, "
+            "시간을 제안할 때 그 일정도 함께 확인이 필요하다고 답에 적어.\n"
             "- extract_schedules_from_history: 특정 외부 멤버의 일정만 필요할 때 사용해.\n"
             "- search_previous_conversations: 그 사람이 과거에 무슨 말을 했는지 찾을 때 사용해. "
             "query에는 짧은 핵심 명사나 구를 넣어.\n"
@@ -309,7 +311,7 @@ def kana_prompt_parts() -> list[str]:
             "- collect_member_schedules로 모은 busy rows를 네가 직접 읽고, 어느 row와도 겹치지 않는 후보를 "
             "골라 find_common_available_slots의 candidate_slots에 넣어 검증받아. "
             "이 tool은 후보를 대신 계산해 주지 않고 네가 고른 후보가 겹치는지만 확인해 줘. "
-            "busy_rows에는 앞 tool 결과의 rows를 그대로 복사해 넘겨.\n"
+            "busy_rows에는 앞 tool이 돌려준 바쁜 시간 목록을 그대로 복사해 넘겨.\n"
             "- 검증을 통과한 후보 중 하나를 골라 decide_final_slot에 selected_index와 "
             "final_slot('YYYY-MM-DD HH:MM-HH:MM')을 넘겨 확정해. 이 tool도 최종 시간을 대신 골라 주지 않아.\n"
             "- 근거가 모자라 고를 수 없으면 아무 시간이나 채우지 말고 final_slot은 비운 채 "
@@ -322,9 +324,9 @@ def kana_prompt_parts() -> list[str]:
         ),
         # Week 6: 근거 규칙과, 답변의 독자가 supervisor라는 점.
         (
-            "답변은 tool 결과 JSON의 rows와 schedule_summary만 근거로 삼고, 기억에 의존해 사람 이름이나 "
-            "일정을 지어내지 마. rows가 비어 있을 때 '일정이 없다'고 단정하지 말고, 결과에 함께 오는 "
-            "date_from/date_to, external_member_names, external_lookup 같은 조회 조건을 밝혀 "
+            "답변은 tool 결과 JSON에 실제로 담긴 일정 목록과 요약만 근거로 삼고, 기억에 의존해 사람 이름이나 "
+            "일정을 지어내지 마. 결과가 비어 있을 때 '일정이 없다'고 단정하지 말고, 결과에 함께 오는 "
+            "조회 조건(어떤 이름과 어떤 날짜 범위로 물었는지, 외부 조회를 실제로 했는지)을 밝혀 "
             "'그 조건으로는 찾지 못했다'로 답해.\n"
             "네 답변은 사용자에게 바로 보이지 않고 supervisor가 최종 답변을 쓸 때 읽는 근거이니, "
             "확정한 시간과 그 이유, 확인한 멤버와 날짜 범위를 빠뜨리지 말고 적어."
@@ -345,10 +347,19 @@ def supervisor_system_prompt() -> str:
         [
             *week06_prompt_parts(),
             # Week 6: 실행 규칙. 위임 없이 기억으로 답하는 것을 막고, 위임 결과 JSON을 읽는 법을 정한다.
+            #
+            # 예외를 "기록이 필요 없는 말"로 두면 판정이 곧 "이 질문에 기록이 필요한가"가 되는데,
+            # 그건 위임해서 확인하기 전에는 알 수 없는 것이라 순서가 뒤집힙니다. 그래서 예외를
+            # 내용이 아니라 형태로 한정하고, 애매한 경우의 기본값을 위임 쪽으로 고정합니다.
             (
-                "지금부터 너는 supervisor로 실행돼. 일정·기록·사람에 관한 요청에는 네 기억이나 추측으로 답하지 말고 "
-                "반드시 nana_agent 또는 kana_agent를 호출한 뒤 그 결과 JSON만 근거로 최종 답변을 작성해. "
-                "(인사나 잡담처럼 아무 기록도 필요 없는 말에는 위임하지 않고 바로 답해도 돼.)"
+                "지금부터 너는 supervisor로 실행돼. 네 기억이나 추측으로 답하지 말고 "
+                "반드시 nana_agent 또는 kana_agent를 호출한 뒤 그 결과 JSON만 근거로 최종 답변을 작성해.\n"
+                "위임하지 않아도 되는 것은 '안녕', '고마워', '잘 있어'처럼 아무것도 묻지 않는 "
+                "인사·감사·작별 인사뿐이야. 그 밖에는 질문이 짧든 캐주얼하든 지시대명사뿐이든 전부 위임해. "
+                "'오늘 뭐 해야 하지?'나 '지난번에 얘기한 거 어떻게 됐어?'처럼 잡담처럼 들려도 "
+                "저장된 기록이 있어야 답할 수 있는 질문이 있어.\n"
+                "위임이 필요한지 애매하면 위임하는 쪽을 골라. 괜한 위임은 한 번 더 부르고 마는 일이지만, "
+                "위임을 건너뛰면 기록에 없는 내용을 지어내게 되고 그건 사용자가 알아채기 어려워."
             ),
             (
                 "위임 결과 JSON에서 answer를 사실 근거로 읽어. final_slot_payload가 함께 오면 그 안의 "
@@ -419,8 +430,9 @@ FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION = (
     "candidate_slots의 각 항목은 date('YYYY-MM-DD'), start_time('HH:MM'), end_time('HH:MM'), "
     "duration_minutes(정수 분), reason(그 시간을 고른 짧은 근거)을 모두 포함해야 합니다.\n"
     "busy_rows에는 앞선 tool 결과의 rows를 그대로 복사해 넘기세요. "
-    "비워 두면 이 tool이 member_names와 date_from/date_to로 다시 수집하지만, "
-    "이미 rows를 갖고 있다면 복사해 넘기는 쪽이 후보를 고른 근거와 검증 근거가 어긋나지 않습니다.\n"
+    "이미 rows를 갖고 있다면 복사해 넘기는 쪽이 후보를 고른 근거와 검증 근거가 어긋나지 않습니다. "
+    "아직 모으지 않았다면 busy_rows를 빈 목록으로 넘기지 말고 아예 생략하세요. "
+    "빈 목록은 '바쁜 시간이 하나도 없다'는 뜻이라 검증이 헛돌 수 있어, 이 tool이 직접 다시 확인합니다.\n"
     "date_from/date_to는 상대 날짜 대신 YYYY-MM-DD로 넣고, 후보는 workday_start~workday_end 안에서 "
     "duration_minutes 이상 길이여야 합니다. 이 조건을 벗어나거나 busy_rows와 겹치는 후보는 결과에서 조용히 빠지므로, "
     "돌아온 candidate_slots가 비었거나 줄었다면 다른 시간대로 후보를 다시 골라야 한다는 뜻입니다.\n"
@@ -500,6 +512,25 @@ class AgentQueryInput(BaseModel):
     query: str
 
 
+def _collect_busy_rows(member_names: list[str], date_from: str, date_to: str) -> list[dict[str, Any]]:
+    """내 일정과 외부 멤버 busy-time을 Week 5 tool로 한 번에 모읍니다."""
+
+    payload = json.loads(
+        collect_member_schedules.invoke(
+            {
+                "member_names": member_names,
+                "date_from": date_from,
+                "date_to": date_to,
+            }
+        )
+    )
+    # .get("rows", [])로 두면 Week 5가 키 이름을 바꿨을 때 빈 목록이 조용히 돌아옵니다.
+    # 그러면 겹침 검증이 빈 캘린더에서 통과해 이미 잡힌 시간이 후보로 남는데, 이건 busy_rows를
+    # 다시 모으는 안전망으로도 못 막습니다. 재수집도 같은 자리를 타기 때문입니다.
+    # collect_member_schedules는 이 키를 항상 채우므로, 없으면 계약이 깨진 것이라 바로 터뜨립니다.
+    return payload["rows"]
+
+
 def find_common_available_slots_dict(
     member_names: list[str],
     date_from: str,
@@ -519,18 +550,22 @@ def find_common_available_slots_dict(
     normalized_date_to = normalize_date_bound(date_to)
 
     # busy_rows가 None인 것과 빈 list인 것은 뜻이 다릅니다. None은 "아직 안 모았다"이고,
-    # 빈 list는 "모았는데 바쁜 시간이 없다"이므로 후자를 다시 조회하면 안 됩니다.
+    # 빈 list는 "모았는데 바쁜 시간이 없다"이므로 후자를 다시 조회할 이유가 없습니다.
+    #
+    # 다만 이 인자를 채우는 것은 사람이 아니라 agent입니다. description이 "앞 결과의 rows를
+    # 복사해 넘겨라"라고 지시하니, 그 지시를 어설프게 따라 빈 목록을 넘기는 경로가 남습니다.
+    # 그때 빈 캘린더로 검증하면 이미 잡혀 있는 시간도 겹침 없이 통과해 "검증된 후보"로 기록되는데,
+    # 이건 사용자가 되물어 고칠 수 있는 과다 차단과 달리 약속 당일에야 드러나는 과소 차단입니다.
+    # 그래서 검증할 후보가 실제로 있을 때만 한 번 더 확인합니다. agent가 정직하게 빈 목록을
+    # 넘겼다면 다시 모아도 그대로 비어 있어 판단이 바뀌지 않고, 복사를 빠뜨린 경우에만 rows가 채워집니다.
     if busy_rows is None:
-        payload = json.loads(
-            collect_member_schedules.invoke(
-                {
-                    "member_names": normalized_members,
-                    "date_from": normalized_date_from,
-                    "date_to": normalized_date_to,
-                }
-            )
-        )
-        busy_rows = payload.get("rows", [])
+        busy_rows = _collect_busy_rows(normalized_members, normalized_date_from, normalized_date_to)
+        busy_rows_source = "collected"
+    elif not busy_rows and candidate_slots:
+        busy_rows = _collect_busy_rows(normalized_members, normalized_date_from, normalized_date_to)
+        busy_rows_source = "recollected_empty"
+    else:
+        busy_rows_source = "agent"
 
     # 후보가 겹치면 안 되는 대상에는 내 일정도 들어갑니다. collect_member_schedules가 rows에
     # "나"의 일정을 함께 실어 주므로, 검증 대상 명단에도 "나"를 남겨야 근거가 맞습니다.
@@ -540,7 +575,7 @@ def find_common_available_slots_dict(
         else [PERSONAL_SHARED_MEMBER_NAME, *normalized_members]
     )
 
-    return find_common_available_slots_payload(
+    payload = find_common_available_slots_payload(
         member_names=members_with_me,
         date_from=normalized_date_from,
         date_to=normalized_date_to,
@@ -552,6 +587,10 @@ def find_common_available_slots_dict(
         candidate_slots=candidate_slots,
         llm_reason=llm_reason,
     )
+    # 어느 rows로 검증했는지는 결과만 봐서는 알 수 없습니다. Week 5의 external_lookup이
+    # "건너뛴 0건"과 "조회한 0건"을 구분해 남기는 것과 같은 이유로 출처를 함께 기록합니다.
+    payload["busy_rows_source"] = busy_rows_source
+    return payload
 
 
 @tool(description=FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION, args_schema=FindCommonAvailableSlotsInput)
