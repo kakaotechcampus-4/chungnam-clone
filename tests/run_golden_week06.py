@@ -65,6 +65,49 @@ def check_expect(case_id: str, result: dict, expect: dict) -> None:
 
 # ── unit 테스트 실행 ───────────────────────────────────────
 
+def run_logic(tier_filter: str) -> None:
+    """_pick_last_ok 재시도 기준을 직접 검증합니다 (tool 호출 불필요)."""
+    try:
+        from student_parts.week06_kanamate_decides_schedule import _pick_last_ok
+    except Exception as e:
+        print(f"  ⚠️  _pick_last_ok import 실패 ({e})")
+        return
+
+    success = {"final_slot": "2026-08-12 10:00-11:00", "ok": True}
+    failure = {"final_slot": None, "ok": False}
+    no_ok_field = {"final_slot": "2026-08-13 14:00-15:00"}
+
+    # 성공 → 실패 재시도: 성공 결과 유지
+    result = _pick_last_ok(None, success)
+    result = _pick_last_ok(result, failure)
+    if result == success:
+        ok("retry_failure_keeps_success")
+    else:
+        fail("retry_failure_keeps_success", f"실패 결과가 성공을 덮어씀: {result}")
+
+    # 실패 → 성공 재시도: 나중 성공으로 교체
+    result = _pick_last_ok(None, failure)
+    result = _pick_last_ok(result, success)
+    if result == success:
+        ok("retry_success_replaces_failure")
+    else:
+        fail("retry_success_replaces_failure", f"성공 결과로 교체되지 않음: {result}")
+
+    # ok 필드 없는 결과는 성공으로 간주
+    result = _pick_last_ok(success, no_ok_field)
+    if result == no_ok_field:
+        ok("no_ok_field_treated_as_success")
+    else:
+        fail("no_ok_field_treated_as_success", f"ok 없는 결과를 실패로 취급함: {result}")
+
+    # None 시작 → 첫 성공 결과 저장
+    result = _pick_last_ok(None, success)
+    if result == success:
+        ok("first_success_stored_from_none")
+    else:
+        fail("first_success_stored_from_none", f"첫 성공 결과가 저장되지 않음: {result}")
+
+
 def run_unit(cases: list[dict], tier_filter: str) -> None:
     try:
         from student_parts.week06_kanamate_decides_schedule import (
@@ -116,7 +159,7 @@ def run_unit(cases: list[dict], tier_filter: str) -> None:
 def run_agent(cases: list[dict], tier_filter: str) -> None:
     try:
         from student_parts.week06_kanamate_decides_schedule import build_langchain_supervisor_agent
-        from fixed.langchain_trace import extract_agent_events, extract_final_text
+        from fixed.langchain_trace import extract_agent_events
     except Exception as e:
         print(f"  ⚠️  week06 import 실패 ({e}) — agent 테스트 건너뜀")
         return
@@ -195,6 +238,9 @@ def main() -> None:
     print(f"\n{'─'*55}")
     print(f"  📋 Week 6 골든 테스트  (tier={tier_filter}, agent={'on' if args.agent else 'off'})")
     print(f"{'─'*55}")
+
+    print("\n[logic — _pick_last_ok 재시도 기준]")
+    run_logic(tier_filter)
 
     print("\n[unit — LLM 불필요]")
     run_unit(data["unit"], tier_filter)

@@ -294,6 +294,17 @@ def _tool_call_names(events: list[dict[str, Any]]) -> list[str]:
     return [event["tool_name"] for event in events if event.get("event") == "tool_call" and event.get("tool_name")]
 
 
+def _pick_last_ok(
+    current: dict[str, Any] | None,
+    candidate: dict[str, Any],
+) -> dict[str, Any] | None:
+    """재시도 실패가 성공 결과를 덮어쓰지 않도록, ok=False인 결과는 건너뜁니다.
+    같은 tool이 여러 번 호출된 경우 성공한 결과 중 가장 마지막 것을 반환합니다."""
+    if candidate.get("ok") is False:
+        return current
+    return candidate
+
+
 def extract_langchain_trace(result: dict[str, Any]) -> dict[str, Any]:
     """Week 6 supervisor 실행 결과를 UI trace payload로 변환합니다."""
 
@@ -315,11 +326,11 @@ def extract_langchain_trace(result: dict[str, Any]) -> dict[str, Any]:
         if isinstance(content, dict):
             inner_tool_names.extend(content.get("inner_tool_names") or [])
             if content.get("final_slot_payload"):
-                final_slot_payload = content["final_slot_payload"]
+                final_slot_payload = _pick_last_ok(final_slot_payload, content["final_slot_payload"])
             elif "final_slot" in content:
-                final_slot_payload = content
+                final_slot_payload = _pick_last_ok(final_slot_payload, content)
             if content.get("final_decision_payload"):
-                final_decision_payload = content["final_decision_payload"]
+                final_decision_payload = _pick_last_ok(final_decision_payload, content["final_decision_payload"])
 
     return {
         "events": events,
@@ -640,9 +651,10 @@ def kana_agent(query: str) -> str:
                 content = None
         if isinstance(content, dict):
             if content.get("tool_name") == "decide_final_slot" or "final_slot" in content:
-                final_slot_payload = content
+                final_slot_payload = _pick_last_ok(final_slot_payload, content)
             if "final_decision" in content:
-                final_decision_payload = content.get("final_decision") or content
+                candidate = content.get("final_decision") or content
+                final_decision_payload = _pick_last_ok(final_decision_payload, candidate)
 
     return json.dumps(
         {
