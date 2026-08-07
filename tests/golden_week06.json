@@ -89,6 +89,26 @@
       }
     },
     {
+      "id": "find_slots_unknown_member_returns_ok",
+      "tier": "main",
+      "desc": "알 수 없는 멤버로 조회하면 ok=True, rows=[] (일정 없음) — collect 실패와 구별된다",
+      "tool": "find_common_available_slots",
+      "input": {
+        "member_names": ["존재하지않는멤버xyz"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "candidate_slots": [
+          {"date": "2026-08-12", "start_time": "10:00", "end_time": "11:00", "duration_minutes": 60, "reason": "빈 슬롯"}
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "has_keys": ["candidate_slots", "members"],
+        "_note": "collect ok=True+empty → 후보 검증 계속. collect ok=False → error 전파 (인프라 실패, 단위 테스트 재현 불가)"
+      }
+    },
+    {
       "id": "supervisor_prompt_delegates",
       "tier": "main",
       "desc": "supervisor system prompt에 nana_agent와 kana_agent 위임 지시가 포함된다",

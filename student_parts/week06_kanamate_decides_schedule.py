@@ -245,6 +245,21 @@ def kana_prompt_parts() -> list[str]:
 
 오늘 날짜: {current_app_date_iso()}
 
+[기본 동작 규칙 — 이름·기간 없어도 즉시 tool 호출]
+이름이나 기간이 빠졌다는 이유로 되묻거나 멈추지 않습니다. 아래 기본값으로 바로 호출합니다.
+
+- "공유 일정 보여줘" 류
+  → list_shared_schedules() 즉시 호출. 파라미터 없이도 됩니다.
+
+- "외부 팀원 일정 조회해줘" (이름 미지정)
+  → search_previous_conversations(query="일정") 으로 전체 대화 검색.
+
+- "외부 팀원 일정 조회해줘" (이름 지정, 기간 미지정)
+  → date_from=오늘, date_to=오늘로부터 14일 뒤를 기본값으로 사용.
+
+- 회의 시간 조율 (기간 미지정)
+  → date_from=오늘, date_to=오늘로부터 7일 뒤를 기본값으로 사용.
+
 [그룹 일정 조율 절차 — 반드시 이 순서대로]
 1. collect_member_schedules(member_names=[외부 멤버들], date_from=..., date_to=...)
    → 나와 외부 멤버의 바쁜 시간(busy_rows)을 수집합니다.
@@ -423,8 +438,15 @@ def find_common_available_slots_dict(
         raw = collect_member_schedules.invoke(
             {"member_names": normalized_names, "date_from": norm_from, "date_to": norm_to}
         )
-        result = json.loads(raw)
-        busy_rows = result.get("rows", [])
+        collected = json.loads(raw)
+        if not collected.get("ok"):
+            return {
+                "ok": False,
+                "tool_name": "find_common_available_slots",
+                "error": "외부 멤버 일정 조회에 실패해 후보 검증을 진행할 수 없습니다.",
+                "collect_error": collected,
+            }
+        busy_rows = collected.get("rows", [])
 
     all_member_names = ["나", *[n for n in normalized_names if n != "나"]]
 
