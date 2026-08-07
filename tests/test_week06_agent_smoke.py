@@ -92,19 +92,14 @@ class Week06SupervisorSmoke(unittest.TestCase):
         trace["answer"] = w6.extract_final_text(result) if hasattr(w6, "extract_final_text") else ""
         return trace
 
-    def test_personal_request_is_delegated_to_nana(self) -> None:
-        trace = self._ask("저장된 기록에서 치과 관련 일정을 검색해줘")
-        # WHY(위임): 나 혼자에 대한 개인 기록 조회는 Nana 담당이어야 한다.
-        self.assertEqual(trace["supervisor_selected_agent"], "nana_agent", trace["inner_tool_names"])
-        # WHY(하위 실행): Nana 하위 trace에 개인 저장 기록 조회 도구가 남아야 한다.
-        self.assertTrue(
-            {"search_saved_requests", "personal_list_saved_schedules"} & set(trace["inner_tool_names"]),
-            trace["inner_tool_names"],
-        )
-
     @staticmethod
     def _delegated_agents(trace: dict) -> list[str]:
-        """supervisor가 위임한 하위 agent 순서 목록(trace는 마지막 하나만 기록하므로 직접 뽑는다)."""
+        """supervisor가 위임한 하위 agent를 호출 순서대로 뽑는다.
+
+        trace의 supervisor_selected_agent는 "마지막에 부른" 하나만 남기므로, 그 필드로
+        위임을 검증하면 Kana를 먼저 부르고 Nana를 나중에 불러도 통과해 버린다.
+        위임 라우팅은 이 목록으로 검증한다.
+        """
 
         return [
             event["tool_name"]
@@ -112,8 +107,26 @@ class Week06SupervisorSmoke(unittest.TestCase):
             if event.get("event") == "tool_call" and event.get("tool_name") in {"nana_agent", "kana_agent"}
         ]
 
+    def test_personal_request_is_delegated_to_nana(self) -> None:
+        trace = self._ask("저장된 기록에서 치과 관련 일정을 검색해줘")
+        delegated = self._delegated_agents(trace)
+        # WHY(위임): 나 혼자에 대한 개인 기록 조회는 Nana 담당이어야 한다.
+        self.assertIn("nana_agent", delegated, delegated)
+        # WHY(오라우팅 방지): 개인 기록은 Kana가 볼 수 없으므로 Kana에게 위임하면 라우팅 오류다.
+        #   (마지막 위임만 보는 필드로는 "Kana 먼저, Nana 나중"을 걸러내지 못한다)
+        self.assertNotIn("kana_agent", delegated, delegated)
+        # WHY(하위 실행): Nana 하위 trace에 개인 저장 기록 조회 도구가 남아야 한다.
+        self.assertTrue(
+            {"search_saved_requests", "personal_list_saved_schedules"} & set(trace["inner_tool_names"]),
+            trace["inner_tool_names"],
+        )
+
     def test_group_coordination_is_delegated_to_kana_with_decision_chain(self) -> None:
-        trace = self._ask("철수랑 2026년 7월 14일에 1시간 회의 잡을 수 있는 시간 찾아서 최종 시간까지 정해줘")
+        # 요청을 "조율만"으로 명확히 한다. "정해줘"처럼 예약으로도 읽히는 표현을 쓰면 supervisor가
+        # 저장까지 진행하는 경우가 있어(실측 1/3~1/4), 시나리오 자체를 모호하지 않게 고정한다.
+        trace = self._ask(
+            "철수랑 2026년 7월 14일에 1시간 회의 가능한 시간을 찾아서 최종 시간을 알려줘. 저장은 하지 말고 시간만 알려줘."
+        )
         delegated = self._delegated_agents(trace)
         # WHY(위임): 다른 사람이 포함된 조율은 Kana 담당이어야 한다.
         self.assertIn("kana_agent", delegated, delegated)
