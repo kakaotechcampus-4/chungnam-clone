@@ -210,10 +210,6 @@ def week06_prompt_parts() -> list[str]:
             "여러 사람의 공통 가능 시간 찾기, 그룹 일정 조율, 최종 회의 시간 결정을 담당한다."
         ),
         (
-            "사용자 요청이 '내 일정', '내가 저장한 것', '내 기억', '개인 참고자료' 중심이면 nana_agent를 호출한다. "
-            "요청에 다른 사람 이름이 포함되거나, 여러 사람의 시간을 맞추거나, 회의 가능한 시간을 정해야 하면 kana_agent를 호출한다."
-        ),
-        (
             "개인 업무와 그룹 업무가 섞여 있으면 최종 목적을 기준으로 판단한다. "
             "최종 목적이 그룹 일정 조율이면 kana_agent를 우선 호출한다."
         ),
@@ -253,6 +249,7 @@ def nana_prompt_parts() -> list[str]:
             "다른 사람의 일정, 외부 멤버의 이전 대화, 공유 일정 저장소, 여러 사람의 공통 가능 시간, "
             "그룹 회의 시간 결정은 Nana의 담당이 아니다. 그런 요청을 받으면 직접 처리하지 말고 "
             "그룹 일정 조율은 Kana 담당이라고 간단히 알린다."
+            "\"오늘 7시에 철수와 회의 일정 잡아줘.\"와 같은 그룹 일정으로 분류된 일정 추가 요청은 Nana가 담당한다."
         ),
         (
             "답변은 도구 결과를 근거로 작성한다. 도구 결과에 없는 일정, 저장 내용, 기억을 임의로 만들어내지 않는다."
@@ -285,6 +282,12 @@ def kana_prompt_parts() -> list[str]:
         (
             "공유 일정 저장소에 이미 등록된 외부 멤버 일정이나 그룹 일정이 필요한 경우 list_shared_schedules를 사용한다. "
             "나와 외부 멤버들의 busy-time을 한 번에 모아야 하면 collect_member_schedules를 사용한다."
+        ),
+        (
+            "외부 팀원 전체 일정 조회처럼 단순 조회 요청이면 collect_member_schedules가 아니라 list_shared_schedules를 먼저 사용한다."
+            "이름이 없으면 member_names=None으로 둔다."
+            "기간이 없으면 date_from은 오늘 날짜 YYYY-MM-DD, date_to는 오늘부터 30일 뒤 YYYY-MM-DD로 반드시 채워 호출한다."
+            "사용자에게 이름이나 기간을 되묻지 않고 바로 반드시 list_shared_schedules를 먼저 호출한다."
         ),
         (
             "그룹 일정 가능 시간을 확인할 때는 사용자 요청의 날짜 범위를 YYYY-MM-DD 형식으로 정리하고,"
@@ -517,14 +520,44 @@ def find_common_available_slots_dict(
     normalized_date_to = normalize_date_bound(date_to)
 
     if busy_rows is None:
-        collected_text = collect_member_schedules.invoke(
-            {
-                "member_names": normalized_members,
+        try:
+            collected_text = collect_member_schedules.invoke(
+                {
+                    "member_names": normalized_members,
+                    "date_from": normalized_date_from,
+                    "date_to": normalized_date_to,
+                }
+            )
+            collected = json.loads(collected_text)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "tool_name": "find_common_available_slots",
+                "members": payload_members,
                 "date_from": normalized_date_from,
                 "date_to": normalized_date_to,
+                "busy_rows": [],
+                "candidate_slots": [],
+                "slot_source": "unavailable",
+                "payload_source": "collect_member_schedules",
+                "error": f"멤버 일정 수집 실패로 공통 가능 시간을 검증할 수 없습니다: {exc}",
+                "needs_user_notice": True,
             }
-        )
-        collected = json.loads(collected_text)
+        if collected.get("ok") is False:
+            return {
+                "ok": False,
+                "tool_name": "find_common_available_slots",
+                "members": payload_members,
+                "date_from": normalized_date_from,
+                "date_to": normalized_date_to,
+                "busy_rows": collected.get("busy_rows") or collected.get("rows") or [],
+                "candidate_slots": [],
+                "slot_source": "unavailable",
+                "payload_source": "collect_member_schedules",
+                "error": collected.get("error") or "외부 멤버 일정 조회 실패로 공통 가능 시간을 검증할 수 없습니다.",
+                "collection_payload": collected,
+                "needs_user_notice": True,
+            }
         busy_rows = collected.get("busy_rows") or collected.get("rows") or []
 
     return find_common_available_slots_payload(
@@ -751,8 +784,10 @@ def kana_agent(query: str) -> str:
     answer = extract_final_text(result)
     inner_tool_names = _tool_call_names(events)
 
-    final_slot_payload: dict[str, Any] | None = None
-    final_decision_payload: dict[str, Any] | None = None
+    latest_slot_payload: dict[str, Any] | None = None
+    latest_success_slot_payload: dict[str, Any] | None = None
+    latest_decision_payload: dict[str, Any] | None = None
+    latest_success_decision_payload: dict[str, Any] | None = None
 
     for event in events:
         content = event.get("content")
@@ -760,13 +795,23 @@ def kana_agent(query: str) -> str:
             continue
 
         if content.get("tool_name") == "find_common_available_slots":
-            final_slot_payload = content
+            latest_slot_payload = content
+            if content.get("ok") is not False:
+                latest_success_slot_payload = content
 
         if content.get("tool_name") == "decide_final_slot" or "final_slot" in content:
-            final_decision_payload = content
+            latest_decision_payload = content
+            if content.get("ok") is not False:
+                latest_success_decision_payload = content
 
         if content.get("final_decision"):
-            final_decision_payload = content["final_decision"]
+            final_decision = content["final_decision"]
+            latest_decision_payload = final_decision
+            if content.get("ok") is not False:
+                latest_success_decision_payload = final_decision
+
+    final_slot_payload = latest_success_slot_payload or latest_slot_payload
+    final_decision_payload = latest_success_decision_payload or latest_decision_payload
 
     payload = {
         "selected_agent": "kana_agent",

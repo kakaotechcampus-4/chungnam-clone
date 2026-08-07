@@ -366,24 +366,52 @@ def _collect_member_schedules(
             }
         )
 
-    external_payload = {"rows": []}
+    external_payload: dict[str, Any] = {"ok": True, "rows": []}
     if normalized_members:
-        external_payload = json.loads(
-            call_mcp_tool_sync(
-                "extract_schedules_from_history",
-                {
-                    "member_names": normalized_members,
-                    "date_from": normalized_date_from,
-                    "date_to": normalized_date_to,
-                },
+        try:
+            external_payload = json.loads(
+                call_mcp_tool_sync(
+                    "extract_schedules_from_history",
+                    {
+                        "member_names": normalized_members,
+                        "date_from": normalized_date_from,
+                        "date_to": normalized_date_to,
+                    },
+                )
             )
-        )
+        except Exception as exc:
+            return {
+                "ok": False,
+                "tool_name": "collect_member_schedules",
+                "members": ["나", *[name for name in normalized_members if name != "나"]],
+                "rows": my_rows,
+                "busy_rows": my_rows,
+                "external_rows": [],
+                "partial": True,
+                "error": f"외부 멤버 일정 조회에 실패했습니다: {exc}",
+                "schedule_summary": external_schedule_summary(my_rows),
+            }
+        if external_payload.get("ok") is False:
+            return {
+                "ok": False,
+                "tool_name": "collect_member_schedules",
+                "members": ["나", *[name for name in normalized_members if name != "나"]],
+                "rows": my_rows,
+                "busy_rows": my_rows,
+                "external_rows": external_payload.get("rows", []),
+                "partial": True,
+                "error": external_payload.get("error") or "외부 멤버 일정 조회에 실패했습니다.",
+                "external_payload": external_payload,
+                "schedule_summary": external_schedule_summary(my_rows),
+            }
     rows = _dedupe_schedule_rows([*my_rows, *external_payload.get("rows", [])])
     return {
         "ok": True,
         "tool_name": "collect_member_schedules",
         "members": ["나", *[name for name in normalized_members if name != "나"]],
         "rows": rows,
+        "busy_rows": rows,
+        "external_rows": external_payload.get("rows", []),
         "schedule_summary": external_schedule_summary(rows),
     }
 
