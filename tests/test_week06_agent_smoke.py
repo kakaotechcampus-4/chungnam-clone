@@ -121,9 +121,20 @@ class Week06SupervisorSmoke(unittest.TestCase):
             trace["inner_tool_names"],
         )
 
+    @staticmethod
+    def _saved_counts() -> tuple[int, int]:
+        """앱 DB에 실제로 저장된 일정/구조화 요청 row 수(저장이 진짜 일어났는지 확인용)."""
+
+        store = w4.SQLITE_STORE
+        with store.connect() as conn:
+            schedules = conn.execute("SELECT COUNT(*) FROM schedules").fetchone()[0]
+            requests = conn.execute("SELECT COUNT(*) FROM structured_requests").fetchone()[0]
+        return schedules, requests
+
     def test_group_coordination_is_delegated_to_kana_with_decision_chain(self) -> None:
         # 요청을 "조율만"으로 명확히 한다. "정해줘"처럼 예약으로도 읽히는 표현을 쓰면 supervisor가
         # 저장까지 진행하는 경우가 있어(실측 1/3~1/4), 시나리오 자체를 모호하지 않게 고정한다.
+        before = self._saved_counts()
         trace = self._ask(
             "철수랑 2026년 7월 14일에 1시간 회의 가능한 시간을 찾아서 최종 시간을 알려줘. 저장은 하지 말고 시간만 알려줘."
         )
@@ -131,9 +142,10 @@ class Week06SupervisorSmoke(unittest.TestCase):
         # WHY(위임): 다른 사람이 포함된 조율은 Kana 담당이어야 한다.
         self.assertIn("kana_agent", delegated, delegated)
         inner = set(trace["inner_tool_names"])
-        # WHY(범위 준수): 저장을 요청하지 않았으므로 쓰기 도구가 호출되면 안 된다(원치 않은 일정 생성 방지).
+        # WHY(범위 준수): 저장을 요청하지 않았으므로 쓰기가 일어나면 안 된다(원치 않은 일정 생성 방지).
         #   supervisor가 Kana 답변을 보고 Nana에게 한 번 더 위임하는지는 LLM 판단이라 단정하지 않고,
         #   "요청하지 않은 쓰기가 실제로 일어났는가"라는 계약만 검증한다.
+        #   (1) 쓰기 도구 호출 흔적 — 빠르게 원인을 알려주는 신호
         write_tools = {
             "save_structured_request",
             "personal_create_schedule",
@@ -142,6 +154,8 @@ class Week06SupervisorSmoke(unittest.TestCase):
             "personal_delete_saved_schedules",
         }
         self.assertFalse(write_tools & inner, f"요청하지 않은 쓰기 도구 호출: {sorted(write_tools & inner)}")
+        #   (2) 앱 DB row 수 — 저장이 "진짜로" 일어났는지 상태로 확인(도구를 안 거친 경로까지 포함)
+        self.assertEqual(self._saved_counts(), before, "요청하지 않은 저장으로 앱 DB row가 늘었습니다")
         # WHY(근거 수집): 후보를 고르기 전에 busy-time을 모으는 도구가 호출돼야 한다.
         self.assertTrue(
             {"collect_member_schedules", "extract_schedules_from_history"} & inner,
