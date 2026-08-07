@@ -298,9 +298,12 @@ def _pick_last_ok(
     current: dict[str, Any] | None,
     candidate: dict[str, Any],
 ) -> dict[str, Any] | None:
-    """재시도 실패가 성공 결과를 덮어쓰지 않도록, ok=False인 결과는 건너뜁니다.
-    같은 tool이 여러 번 호출된 경우 성공한 결과 중 가장 마지막 것을 반환합니다."""
+    """재시도 실패가 성공 결과를 덮어쓰지 않도록, 두 가지 기준을 순서대로 적용합니다.
+    1. ok=False인 결과는 건너뜁니다.
+    2. final_slot이 있는 결과를 final_slot이 없는 결과가 덮어쓰지 않습니다."""
     if candidate.get("ok") is False:
+        return current
+    if current and current.get("final_slot") and not candidate.get("final_slot"):
         return current
     return candidate
 

@@ -65,7 +65,7 @@ def check_expect(case_id: str, result: dict, expect: dict) -> None:
 
 # ── unit 테스트 실행 ───────────────────────────────────────
 
-def run_logic(tier_filter: str) -> None:
+def run_logic() -> None:
     """_pick_last_ok 재시도 기준을 직접 검증합니다 (tool 호출 불필요)."""
     try:
         from student_parts.week06_kanamate_decides_schedule import _pick_last_ok
@@ -99,6 +99,15 @@ def run_logic(tier_filter: str) -> None:
         ok("no_ok_field_treated_as_success")
     else:
         fail("no_ok_field_treated_as_success", f"ok 없는 결과를 실패로 취급함: {result}")
+
+    # final_slot 있는 결과를 final_slot 없는 성공이 덮어쓰지 않아야 함
+    good = {"final_slot": "2026-08-12 10:00-11:00", "ok": True}
+    empty_slot = {"final_slot": None, "needs_agent_selection": True}  # ok 필드 없음
+    result = _pick_last_ok(good, empty_slot)
+    if result == good:
+        ok("final_slot_not_overwritten_by_empty")
+    else:
+        fail("final_slot_not_overwritten_by_empty", f"final_slot 없는 결과가 good을 덮어씀: {result}")
 
     # None 시작 → 첫 성공 결과 저장
     result = _pick_last_ok(None, success)
@@ -240,7 +249,7 @@ def main() -> None:
     print(f"{'─'*55}")
 
     print("\n[logic — _pick_last_ok 재시도 기준]")
-    run_logic(tier_filter)
+    run_logic()
 
     print("\n[unit — LLM 불필요]")
     run_unit(data["unit"], tier_filter)
