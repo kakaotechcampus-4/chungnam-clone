@@ -298,9 +298,15 @@ def kana_prompt_parts() -> list[str]:
             "아무 이름도 언급되지 않았으면 누구와 조율할지 되묻는다. 빈 목록 []은 '아무도 조회하지 않음'이라 결과가 비어 버린다.\n"
             "- search_previous_conversations의 query에는 주제 명사만 넣고, 사람 이름은 query가 아니라 member_names로 넘긴다. "
             "이름이 query에 섞이면 저장소가 문자열을 통째로 대조해 0건이 나온다.\n"
-            "- 되묻는 기준은 주제와 이름이 서로 다르다. **주제**가 없으면 되묻지 않고 query를 비운 채 "
-            "member_names만으로 검색해 결과를 먼저 보여준다. 반대로 **사람 이름**이 하나도 없으면 조회하지 않고 "
-            "누구인지 되묻는다 — 이름은 어떤 경우에도 지어내지 않는다."
+            "- 되묻는 기준은 **요청의 종류**로 가른다. 이름이 없다고 무조건 되묻지 않는다.\n"
+            "  · **조율 요청**(공통 가능 시간·최종 회의 시각 결정): 누구와 맞출지가 결과를 좌우하므로 "
+            "이름이 하나도 없으면 조회하지 않고 누구와 조율할지 되묻는다.\n"
+            "  · **조회 요청**(공유 일정 저장소·지난 일정·지난 대화): 이름이 없어도 되묻지 않는다. "
+            "먼저 기본 조회로 보여주고, 좁힐지는 그 다음에 묻는다.\n"
+            "- 이름 없는 조회는 list_shared_schedules로 처리한다. extract_schedules_from_history는 "
+            "member_names가 비면 결과도 비므로 이름 없는 조회의 기본값으로 쓰지 않는다.\n"
+            "- 주제가 없는 대화 검색도 되묻지 않는다. query를 비운 채 member_names만으로 검색해 결과를 먼저 보여준다.\n"
+            "- 이름은 어떤 경우에도 지어내지 않는다. 되묻기로 정했으면 조회하지 않고 되묻는다."
         ),
         (
             "## 도구 선택\n"
@@ -310,7 +316,9 @@ def kana_prompt_parts() -> list[str]:
             "busy_rows 근거로는 쓰지 않는다 — 내 일정이 빠져 있어 내가 바쁜 시간을 '가능'으로 제안하게 된다.\n"
             "- extract_schedule_request: 사용자 문장에서 날짜·시간·제목을 구조화해 읽어야 할 때만 쓴다. "
             "조율 요청은 이 도구를 거치지 않고 바로 일정 조회부터 시작한다.\n"
-            "- list_shared_schedules: 공유 일정 저장소에 등록된 row 자체를 확인할 때 쓴다.\n"
+            "- list_shared_schedules: 공유 일정 저장소에 등록된 row 자체를 확인할 때 쓴다. 필터는 모두 선택 인자라 "
+            "이름·기간 없이 호출해도 전체가 나온다. '공유 일정 보여줘', '팀원들 일정 조회해줘'처럼 대상이 지정되지 "
+            "않은 조회는 되묻지 말고 이 도구로 먼저 보여준다.\n"
             "- search_previous_conversations / load_conversation_messages: 외부 멤버와 지난 대화를 찾을 때 쓴다. "
             "검색 rows는 걸린 메시지 몇 개일 뿐 대화 전체가 아니므로, 내용을 물었으면 load_conversation_messages로 한 번 더 확인한다.\n"
             "- 어떤 도구를 왜 쓰는지 설명하지 말고 바로 호출한다. 조회 계획만 말하고 답변을 끝내지 않는다."
@@ -554,29 +562,59 @@ def find_common_available_slots_dict(
     normalized_date_from = normalize_date_bound(date_from)
     normalized_date_to = normalize_date_bound(date_to)
 
-    # 2) busy_rows 수집은 "아직 못 받았을 때"만 합니다. `is None`이 아니라 falsy로 판정하면
-    #    busy_rows=[]("이미 빈 목록을 받았다")에서 외부 조회를 다시 타 버립니다.
-    #    수집은 이 파일에서 직접 SQL을 열지 않고 Week 5 tool에 맡깁니다. 이때 member_names는
-    #    agent가 넘긴 그대로 둡니다 — collect_member_schedules는 내 일정을 항상 포함하므로
-    #    여기에 "나"를 더하면 공유 저장소의 "나" row까지 중복으로 끌어옵니다.
-    if busy_rows is None:
-        payload = json.loads(
-            collect_member_schedules.invoke(
-                {
-                    "member_names": member_names,
-                    "date_from": normalized_date_from,
-                    "date_to": normalized_date_to,
-                }
-            )
-        )
-        busy_rows = payload.get("rows") or []
-
     # 3) 기록에 남길 멤버 목록에는 내 일정도 근거이므로 "나"를 함께 넣습니다.
     #    normalize_external_member_names는 중복을 지우지 않으므로, agent가 이미 "나"를 넣어 보낸
     #    경우를 대비해 dict.fromkeys로 순서를 보존하면서 중복만 제거합니다.
     members = list(
         dict.fromkeys(normalize_external_member_names([*(member_names or []), PERSONAL_SHARED_MEMBER_NAME]))
     )
+
+    # 3-b) busy_rows 수집은 "아직 못 받았을 때"만 합니다. `is None`이 아니라 falsy로 판정하면
+    #      busy_rows=[]("이미 빈 목록을 받았다")에서 외부 조회를 다시 타 버립니다.
+    #      수집은 이 파일에서 직접 SQL을 열지 않고 Week 5 tool에 맡깁니다. 이때 member_names는
+    #      agent가 넘긴 그대로 둡니다 — collect_member_schedules는 내 일정을 항상 포함하므로
+    #      여기에 "나"를 더하면 공유 저장소의 "나" row까지 중복으로 끌어옵니다.
+    #
+    #      실패는 "바쁜 시간이 없음"과 반드시 구분합니다. 실패를 빈 busy_rows로 넘기면 겹칠 근거가
+    #      사라져 **어떤 후보든 전원 통과**하고, 실제로 겹치는 시간이 확정될 수 있습니다.
+    #      예외를 삼키지 않고 사유를 payload에 실어 올려 Kana가 조회 실패로 답하게 합니다.
+    if busy_rows is None:
+        collect_failure: dict[str, Any] | None = None
+        try:
+            collected = json.loads(
+                collect_member_schedules.invoke(
+                    {
+                        "member_names": member_names,
+                        "date_from": normalized_date_from,
+                        "date_to": normalized_date_to,
+                    }
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - 실패를 payload로 표면화하려면 여기서 받아야 합니다.
+            collect_failure = {"error_type": type(exc).__name__, "error": str(exc)}
+        else:
+            if collected.get("ok") is False:
+                collect_failure = {
+                    "error_type": "collect_failed",
+                    "error": str(collected.get("error") or "외부 일정 조회에 실패했습니다."),
+                }
+            else:
+                busy_rows = collected.get("rows") or []
+
+        if collect_failure is not None:
+            return {
+                "ok": False,
+                "tool_name": "find_common_available_slots",
+                "members": members,
+                "busy_rows": [],
+                "candidate_slots": [],
+                "collect_failed": True,
+                "reason": (
+                    "외부 일정 조회에 실패해 후보를 검증하지 못했습니다. "
+                    "빈 시간이 없다는 뜻이 아니므로 조회 실패로 답하세요."
+                ),
+                **collect_failure,
+            }
 
     # 4) 실제 겹침 판정과 후보 정리는 fixed/schedule_decision.py가 정본입니다.
     #    candidate_slots는 CommonSlotCandidate/dict/model 어느 형태로 와도 그쪽이 흡수하므로 그대로 넘깁니다.
@@ -756,16 +794,26 @@ def kana_agent(query: str) -> str:
 
     # 하위 tool 결과에서 최종 결정 payload만 supervisor 층으로 끌어올립니다.
     # extract_agent_events가 tool 반환 JSON 문자열을 이미 dict로 파싱해 두므로 content를 그대로 읽습니다.
+    # 선택 기준: **성공한 결과 중 가장 마지막 것**을 올린다.
+    # Kana prompt의 ③-b가 "0건이면 후보를 채워 다시 호출하라"고 재시도를 지시하므로 같은 도구가
+    # 여러 번 불릴 수 있다. 이때 키의 존재(`"final_slot" in content`)만 보면 값이 None인 재시도가
+    # 앞선 성공을 덮어, 확정한 시각이 trace에서 사라진다.
+    # 성공이 하나도 없으면 마지막 시도를 그대로 올려 실패가 드러나게 둔다(지어내지 않는다).
     payload["final_slot_payload"] = None
     payload["final_decision_payload"] = None
+    last_slot_attempt: dict[str, Any] | None = None
     for event in payload["trace"]["events"]:
         content = event.get("content")
         if not isinstance(content, dict):
             continue
         if "final_slot" in content:
-            payload["final_slot_payload"] = content
+            last_slot_attempt = content
+            if content.get("final_slot"):
+                payload["final_slot_payload"] = content
         if content.get("final_decision"):
             payload["final_decision_payload"] = content["final_decision"]
+    if payload["final_slot_payload"] is None:
+        payload["final_slot_payload"] = last_slot_attempt
 
     return json.dumps(payload, ensure_ascii=False)
 
