@@ -34,12 +34,15 @@ def topological_sort(plan: DecomposedPlan) -> list[AgentTask]:
 
     for task in plan.tasks:
         seen_dependencies: set[str] = set()
-        for dependency_id in task.depends_on:
+
+        for dependency in task.dependencies:
+            dependency_id = dependency.task_id
             if dependency_id in seen_dependencies:
                 raise PlanValidationError(
                     "duplicate_dependency",
                     f"{task.id}에 중복 의존성이 있습니다: {dependency_id}",
                 )
+
             seen_dependencies.add(dependency_id)
 
             if dependency_id not in tasks_by_id:
@@ -47,6 +50,7 @@ def topological_sort(plan: DecomposedPlan) -> list[AgentTask]:
                     "unknown_dependency",
                     f"{task.id}가 존재하지 않는 task를 참조합니다: {dependency_id}",
                 )
+
             if dependency_id == task.id:
                 raise PlanValidationError(
                     "self_dependency",

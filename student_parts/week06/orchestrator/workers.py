@@ -48,6 +48,10 @@ def invoke_worker(
         answer = payload.get("answer")
         if not isinstance(answer, str) or not answer.strip():
             raise ValueError("worker answer가 비어 있거나 문자열이 아닙니다.")
+        
+        condition_value = payload.get("condition_value")
+        if condition_value is not None and not isinstance(condition_value, bool):
+            raise TypeError("worker condition_value는 bool 또는 null이어야 합니다.")
 
         trace = payload.get("trace") or []
         inner_tool_names = payload.get("inner_tool_names") or []
@@ -61,6 +65,7 @@ def invoke_worker(
             agent=agent,
             status="ok",
             answer=answer.strip(),
+            condition_value=condition_value,
             inner_tool_names=[str(name) for name in inner_tool_names],
             trace=trace,
             final_slot_payload=payload.get("final_slot_payload"),

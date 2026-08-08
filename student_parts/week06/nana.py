@@ -5,12 +5,12 @@ from typing import Any
 
 from langchain.agents import create_agent
 from langchain_core.tools import tool
-
-from fixed.langchain_trace import extract_agent_events, extract_final_text
+from langchain.agents.structured_output import ToolStrategy
+from fixed.langchain_trace import extract_agent_events
 from fixed.llm import chat_model
 from student_parts.week01_wake_up_nana import join_system_prompt
 from student_parts.week04_retrieve_nanas_memory import week04_prompt_parts, week04_tools
-from student_parts.week06.schemas import AgentQueryInput
+from student_parts.week06.schemas import AgentQueryInput, SubagentResponse
 from student_parts.week06.trace import _tool_call_names
 
 
@@ -63,6 +63,7 @@ def nana_agent(query: str) -> str:
         _NANA_SUBAGENT = create_agent(
             model=chat_model(),
             tools=week04_tools(),
+            response_format=ToolStrategy(SubagentResponse),
             system_prompt=nana_system_prompt(),
         )
 
@@ -78,11 +79,15 @@ def nana_agent(query: str) -> str:
     )
 
     events = extract_agent_events(result)
+    structured_response = SubagentResponse.model_validate(
+    result.get("structured_response")
+)
 
     return json.dumps(
         {
             "selected_agent": "nana_agent",
-            "answer": extract_final_text(result),
+            "answer": structured_response.answer,
+            "condition_value": structured_response.condition_value,
             "trace": events,
             "inner_tool_names": _tool_call_names(events),
         },

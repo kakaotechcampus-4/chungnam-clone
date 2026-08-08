@@ -11,7 +11,14 @@ from student_parts.week06.orchestrator.entry import (
 from student_parts.week06.orchestrator.executor import build_delegated_query, execute_tasks
 from student_parts.week06.orchestrator.graph import PlanValidationError, topological_sort
 from student_parts.week06.orchestrator.planner import LLMPlanner
-from student_parts.week06.orchestrator.schemas import AgentTask, DecomposedPlan, TaskResult
+from student_parts.week06.orchestrator.schemas import (
+    AgentTask,
+    DecomposedPlan,
+    RunOnlyIfDependency,
+    TaskDependency,
+    TaskResult,
+    UseResultDependency,
+)
 from student_parts.week06.orchestrator.workers import invoke_worker, route
 
 
@@ -19,15 +26,23 @@ def task(
     task_id: str,
     *,
     external: bool = False,
-    depends_on: list[str] | None = None,
+    dependencies: list[TaskDependency] | None = None,
 ) -> AgentTask:
     return AgentTask(
         id=task_id,
         requires_external_data=external,
         external_members=["민준"] if external else [],
         query=f"{task_id} 실행",
-        depends_on=depends_on or [],
+        dependencies=dependencies or [],
     )
+
+
+def use_result(task_id: str) -> UseResultDependency:
+    return UseResultDependency(task_id=task_id)
+
+
+def run_only_if(task_id: str, *, equals: bool = True) -> RunOnlyIfDependency:
+    return RunOnlyIfDependency(task_id=task_id, equals=equals)
 
 
 class FakePlanner:
@@ -69,7 +84,9 @@ class InvalidJsonTool:
 
 class GraphTests(unittest.TestCase):
     def test_topological_sort_orders_dependency_before_consumer(self) -> None:
-        plan = DecomposedPlan(tasks=[task("t2", depends_on=["t1"]), task("t1")])
+        plan = DecomposedPlan(
+            tasks=[task("t2", dependencies=[use_result("t1")]), task("t1")]
+        )
 
         ordered = topological_sort(plan)
 
@@ -77,14 +94,19 @@ class GraphTests(unittest.TestCase):
 
     def test_cycle_is_rejected_before_execution(self) -> None:
         plan = DecomposedPlan(
-            tasks=[task("t1", depends_on=["t2"]), task("t2", depends_on=["t1"])]
+            tasks=[
+                task("t1", dependencies=[use_result("t2")]),
+                task("t2", dependencies=[use_result("t1")]),
+            ]
         )
 
         with self.assertRaisesRegex(PlanValidationError, "순환 의존성"):
             topological_sort(plan)
 
     def test_unknown_dependency_is_rejected(self) -> None:
-        plan = DecomposedPlan(tasks=[task("t1", depends_on=["missing"])])
+        plan = DecomposedPlan(
+            tasks=[task("t1", dependencies=[use_result("missing")])]
+        )
 
         with self.assertRaisesRegex(PlanValidationError, "존재하지 않는"):
             topological_sort(plan)
@@ -128,7 +150,7 @@ class WorkerTests(unittest.TestCase):
 
 class ExecutorTests(unittest.TestCase):
     def test_direct_dependency_answer_and_payload_are_injected_without_trace(self) -> None:
-        consumer = task("t2", depends_on=["t1"])
+        consumer = task("t2", dependencies=[use_result("t1")])
         predecessor = TaskResult(
             task_id="t1",
             agent="kana",
@@ -153,7 +175,11 @@ class ExecutorTests(unittest.TestCase):
         self.assertIn("민준", delegated)
 
     def test_failed_predecessor_skips_descendant_but_not_independent_task(self) -> None:
-        ordered = [task("t1", external=True), task("t2", depends_on=["t1"]), task("t3")]
+        ordered = [
+            task("t1", external=True),
+            task("t2", dependencies=[use_result("t1")]),
+            task("t3"),
+        ]
         called: list[str] = []
 
         def worker(current: AgentTask, delegated_query: str) -> TaskResult:
@@ -178,6 +204,51 @@ class ExecutorTests(unittest.TestCase):
         self.assertEqual([result.status for result in results], ["fail", "skipped", "ok"])
         self.assertEqual(called, ["t1", "t3"])
 
+    def test_run_only_if_executes_only_when_condition_matches(self) -> None:
+        ordered = [task("t1"), task("t2", dependencies=[run_only_if("t1")])]
+
+        for condition_value, expected_status, expected_calls in [
+            (True, "ok", ["t1", "t2"]),
+            (False, "skipped", ["t1"]),
+        ]:
+            with self.subTest(condition_value=condition_value):
+                called: list[str] = []
+
+                def worker(current: AgentTask, delegated_query: str) -> TaskResult:
+                    called.append(current.id)
+                    return TaskResult(
+                        task_id=current.id,
+                        agent=route(current),
+                        status="ok",
+                        answer="ok",
+                        condition_value=(
+                            condition_value
+                            if "[조건 판정 작업]" in delegated_query
+                            else None
+                        ),
+                    )
+
+                results = execute_tasks(ordered, worker)
+
+                self.assertEqual(results[-1].status, expected_status)
+                self.assertEqual(called, expected_calls)
+
+    def test_missing_condition_value_fails_producer_and_skips_consumer(self) -> None:
+        ordered = [task("t1"), task("t2", dependencies=[run_only_if("t1")])]
+
+        def worker(current: AgentTask, delegated_query: str) -> TaskResult:
+            del delegated_query
+            return TaskResult(
+                task_id=current.id,
+                agent=route(current),
+                status="ok",
+                answer="ok",
+            )
+
+        results = execute_tasks(ordered, worker)
+
+        self.assertEqual([result.status for result in results], ["fail", "skipped"])
+
 
 class PlannerTests(unittest.TestCase):
     def test_structured_output_is_retried_once(self) -> None:
@@ -197,7 +268,7 @@ class PlannerTests(unittest.TestCase):
                             "requires_external_data": False,
                             "external_members": [],
                             "query": "내 일정 조회",
-                            "depends_on": [],
+                            "dependencies": [],
                         }
                     ]
                 }
@@ -232,7 +303,10 @@ class EntryTests(unittest.TestCase):
 
     def test_compound_tasks_use_composer_and_adapter_contract(self) -> None:
         plan = DecomposedPlan(
-            tasks=[task("t1", external=True), task("t2", depends_on=["t1"])]
+            tasks=[
+                task("t1", external=True),
+                task("t2", dependencies=[use_result("t1")]),
+            ]
         )
         composer = FakeComposer("최종 종합")
 

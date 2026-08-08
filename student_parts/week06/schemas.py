@@ -63,3 +63,18 @@ class AgentQueryInput(BaseModel):
     """하위 에이전트 위임 입력입니다."""
 
     query: str
+    
+class SubagentResponse(BaseModel):
+    """Kana와 Nana가 작업 수행 후 반환하는 공통 응답 """
+
+    answer: str = Field(
+        min_length=1,
+        description="도구 실행 결과를 근거로 작성한 자연어 답변",
+    )
+    condition_value: bool | None = Field(
+        default=None,
+        description=(
+            "입력이 [조건 판정 작업]이면 질문의 조건이 충족됐는지 반환한다. "
+            "충족됐으면 true, 충족되지 않았으면 false이며 일반 작업이면 null이다."
+        ),
+    )
