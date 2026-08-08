@@ -434,8 +434,12 @@ DECIDE_FINAL_SLOT_DESCRIPTION = (
     #   - final_slot 형식('YYYY-MM-DD HH:MM-HH:MM')과 needs_agent_selection, reason을 채우는 기준을 적습니다.
     #   - 아직 고르지 않았다면 final_slot은 null, needs_agent_selection은 true로 두게 합니다.
     #   - 근거 trace를 위해 candidate_slots, busy_rows, member_names, date_from/date_to도 함께 넘기게 합니다.
-    "공통 가능 시간 후보 중에서 최종 회의 시간을 확정해 기록하는 도구다. "
-    "find_common_available_slots를 호출한 다음에 이어서 부른다.\n"
+    "공통 가능 시간에 대한 최종 판단을 기록하는 도구다. "
+    "find_common_available_slots를 호출한 다음 반드시 이어서 부른다.\n"
+    "\n"
+    "후보가 0개여서 확정할 수 없는 경우에도 호출한다. 확정 실패도 하나의 결과이므로 "
+    "기록해야 한다. 호출하지 않으면 '판단한 결과 가능한 시간이 없음'과 "
+    "'아직 판단하지 않음'을 상위에서 구분할 수 없다.\n"
     "\n"
     "이 도구는 최종 시간을 대신 골라 주지 않는다. 어느 후보가 가장 나은지 판단하는 일은 "
     "네 몫이고, 이 도구는 네가 고른 결과를 최종 payload로 기록할 뿐이다.\n"
@@ -455,7 +459,8 @@ DECIDE_FINAL_SLOT_DESCRIPTION = (
     "확정할 수 있으면 final_slot과 reason을 채우고 needs_agent_selection을 false로 둔다.\n"
     "\n"
     "후보가 하나도 없거나 근거가 부족해 고를 수 없으면 아무 시간이나 넣지 않는다. "
-    "final_slot은 null, needs_agent_selection은 true로 두고 reason에 이유를 적는다."
+    "final_slot은 null, needs_agent_selection은 true로 두고, reason에 왜 확정할 수 없는지와 "
+    "조건을 얼마나 완화하면 가능한지를 적는다. 이 경우에도 호출을 생략하지 않는다."
 )
 
 
