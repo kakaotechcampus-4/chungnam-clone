@@ -112,6 +112,29 @@ KANA_ONLY_TOOLS = {
 
 
 # --------------------------------------------------------------------- 상태/store 헬퍼
+_CHROMA_ONCE: dict[str, Any] = {}
+
+
+def _shared_chroma_stores() -> dict[str, Any]:
+    """--- 1. 상태 격리: ChromaDB client는 **실행 전체에서 한 번만** 만든다. ---
+
+    ⚠️ 반복마다 PersistentClient를 새로 만들면 파일 핸들이 쌓여
+    `OSError: [Errno 24] Too many open files`로 실행이 통째로 죽는다. 케이스가 24→26개로
+    늘자(멘토 리뷰 축 추가) 26×5=130회가 되어 실제로 터졌다. week05 eval이 결정적 축을
+    경량 rebind로 분리해 우회했던 것과 같은 문제이고, 여기서는 근본 원인인
+    "매 반복 client 생성"을 없앤다.
+
+    임베딩 저장소를 한 번만 만들어도 격리는 유지된다 — 케이스가 쓰는 SQLite와 외부 DB는
+    반복마다 새 temp로 갈아끼우고, 참고자료 seed는 같은 내용을 반복해 넣어도 검색 결과가 같다.
+    """
+    if not _CHROMA_ONCE:
+        chroma_dir = Path(tempfile.mkdtemp()) / "chroma"
+        _CHROMA_ONCE["dir"] = chroma_dir
+        _CHROMA_ONCE["reference"] = PersonalReferenceStore(chroma_dir)  # seed됨
+        _CHROMA_ONCE["conversation"] = ConversationRAGStore(chroma_dir)
+    return _CHROMA_ONCE
+
+
 def rebind_temp_stores() -> Path:
     """--- 1. 상태 격리: 반복마다 새 temp 앱 DB / 외부 DB / ChromaDB로 전 경로를 재바인딩한다. ---
 
@@ -119,11 +142,12 @@ def rebind_temp_stores() -> Path:
     Week 4/5 tool을 그대로 조립하므로, 그 모듈 전역만 돌리면 모든 경로에 반영된다.
     """
     tmp = Path(tempfile.mkdtemp())
+    chroma = _shared_chroma_stores()
     temp_config = replace(
         CONFIG,
         app_db_path=tmp / "app.sqlite3",
         external_db_path=tmp / "external.sqlite3",
-        chroma_dir=tmp / "chroma",
+        chroma_dir=chroma["dir"],
     )
     # (c) MCP subprocess가 읽는 외부 DB — 첫 tool 호출 전에 세팅해야 한다
     os.environ["KANANA_EXTERNAL_DB_PATH"] = str(tmp / "external.sqlite3")
@@ -133,8 +157,9 @@ def rebind_temp_stores() -> Path:
     w3.CONFIG = temp_config
     w4.CONFIG = temp_config
     w4.SQLITE_STORE = store_mod.AppSQLiteStore(tmp / "app.sqlite3")
-    w4.REFERENCE_STORE = PersonalReferenceStore(tmp / "chroma")  # seed됨
-    w4.CONVERSATION_RAG_STORE = ConversationRAGStore(tmp / "chroma")
+    # 임베딩 저장소는 실행 전체에서 한 번만 만든 것을 재사용한다(파일 핸들 고갈 방지).
+    w4.REFERENCE_STORE = chroma["reference"]
+    w4.CONVERSATION_RAG_STORE = chroma["conversation"]
     # (d) Week 1 인메모리 임시 일정 — 리스트 객체는 유지하고 내용만 비운다
     w1.PERSONAL_SCHEDULES[:] = []
     return tmp
@@ -475,6 +500,35 @@ def _c_kana_defers_saving(out, tools):
 
 
 # --- 4군: 임의값 금지 + 이전 주차 회귀 ---
+def _c_shared_listing_no_askback(out, tools):
+    """공유 저장소 전체를 보여달라는 요청은 되묻지 말고 조회해야 한다.
+
+    ⚠️ 멘토 리뷰에서 나온 축이다. 앱에서 `공유 일정 보여줘` 를 넣으면 kana_agent로 위임은 되는데
+    이름을 되묻고 도구를 하나도 부르지 않았다(`inner_tool_names: []`).
+
+    원인은 Kana prompt의 "사람 이름이 하나도 없으면 조회하지 않고 되묻는다" 규칙이 **조회 요청에까지**
+    적용된 것이다. `list_shared_schedules` 는 필터 없이 호출해도 정상 동작한다(ok=true, rows 18건).
+
+    골든셋에 `list_shared_schedules` 케이스가 아예 없어서 이 경로가 한 번도 측정되지 않았다.
+    """
+    inner = set(inner_tools_of(out))
+    ok = "kana_agent" in tools and "list_shared_schedules" in inner
+    return ok, f"delegated={delegated_agents_of(tools)} inner={sorted(inner)} answer={answer_of(out)[:90]!r}"
+
+
+def _c_unnamed_listing_default(out, tools):
+    """이름 없는 '팀원들 일정' 조회도 기본 조회로 답해야 한다.
+
+    판정 기준으로 `list_shared_schedules` 를 요구하는 것은 **설계 결정을 인코딩한 것**이다.
+    `extract_schedules_from_history` 는 `member_names=[]` 면 빈 결과라(week05 계약) 이름 없는
+    조회의 기본값이 될 수 없다. 그래서 "되묻지 말고 조회"가 아니라 "어느 도구로 기본 조회할지"가
+    실제 결정이었고, 공유 저장소 전체 조회를 기본값으로 골랐다.
+    """
+    inner = set(inner_tools_of(out))
+    ok = "kana_agent" in tools and "list_shared_schedules" in inner
+    return ok, f"delegated={delegated_agents_of(tools)} inner={sorted(inner)} answer={answer_of(out)[:90]!r}"
+
+
 def _c_no_invented_member(out, tools):
     # kanana-conventions §3: 사용자가 이름을 하나도 말하지 않았는데 member_names에 fixture 멤버를
     # 지어 넣으면 안 된다. 판정은 **하위 agent의 호출 인자**를 본다.
@@ -701,6 +755,21 @@ CASES: list[Case] = [
     ),
     # --- 임의값 금지 + 회귀 ---
     Case(
+        # 멘토 리뷰 ① — 공유 저장소 전체 조회는 되묻지 않는다.
+        id="shared_listing_no_askback",
+        text="공유 일정 보여줘",
+        check=_c_shared_listing_no_askback,
+        critical=True,
+    ),
+    Case(
+        # 멘토 리뷰 ① — 이름 없는 팀원 일정 조회도 기본 조회로 답한다.
+        id="unnamed_listing_default",
+        text="외부 팀원들 일정 조회해줘",
+        check=_c_unnamed_listing_default,
+        critical=True,
+    ),
+    Case(
+        # 위 둘의 반대편: 조율 요청은 **여전히** 되물어야 한다 (과교정 방지, kanana-conventions §6)
         id="no_invented_member",
         text="이번 주에 회의할 시간 좀 찾아줘.",
         check=_c_no_invented_member,
@@ -841,9 +910,102 @@ def _collect_path_used_once() -> tuple[bool, str]:
     return ok, f"rows={len(rows)} external={sorted(external)} members={members}"
 
 
+class _FailingCollect:
+    """수집이 실패를 payload로 돌려주는 경우를 흉내낸다 (ok=false, rows=[])."""
+
+    def invoke(self, args: dict) -> str:
+        return json.dumps(
+            {"ok": False, "tool_name": "collect_member_schedules", "error": "external store unavailable", "rows": []},
+            ensure_ascii=False,
+        )
+
+
+class _RaisingCollect:
+    """수집이 예외를 던지는 경우 — 오늘 실제로 나는 실패 모양이다."""
+
+    def invoke(self, args: dict) -> str:
+        raise RuntimeError("external MCP unavailable")
+
+
+# 철수의 실제 일정(2026-07-09 14:00-15:30)과 겹치는 후보.
+# 정상 조회에서는 반드시 걸러지고, 수집이 실패하면 걸러지지 않는다.
+_CLASHING_CANDIDATE = {
+    "date": "2026-07-09", "start_time": "14:00", "end_time": "15:00",
+    "duration_minutes": 60, "reason": "겹치는 줄 모르고 고른 시간",
+}
+
+
+def _collect_failure_not_empty_once() -> tuple[bool, str]:
+    """수집 실패를 '바쁜 시간 없음'으로 해석하지 않는가 (멘토 리뷰 축).
+
+    ⚠️ 실패와 빈 결과가 같은 입력이 되면, 실제로 겹치는 시간이 '가능한 시간'으로 통과한다.
+    "이번 주"를 지난 주로 계산했을 때와 **같은 실패 모양**이다 — busy_rows가 비면 전원 통과한다.
+
+    두 실패 경로를 모두 본다. soft failure(payload가 ok=false)와 예외 전파 둘 다에서
+    후보가 통과해서는 안 되고, 실패가 payload로 드러나야 한다.
+    """
+    rebind_temp_dbs()
+    original = m.collect_member_schedules
+    notes: list[str] = []
+    try:
+        for label, fake in (("soft-failure", _FailingCollect()), ("exception", _RaisingCollect())):
+            m.collect_member_schedules = fake
+            try:
+                payload = m.find_common_available_slots_dict(
+                    member_names=["철수", "영희"], date_from="2026-07-07", date_to="2026-07-17",
+                    candidate_slots=[_CLASHING_CANDIDATE],
+                )
+            except Exception as exc:  # noqa: BLE001
+                notes.append(f"{label}: 예외 전파 {type(exc).__name__} (실패가 payload로 안 나옴)")
+                continue
+            if payload.get("candidate_slots"):
+                notes.append(f"{label}: 수집 실패인데 후보 {len(payload['candidate_slots'])}건 통과")
+            if payload.get("ok") is not False:
+                notes.append(f"{label}: ok={payload.get('ok')} (실패가 표시되지 않음)")
+    finally:
+        m.collect_member_schedules = original
+    return (not notes), "; ".join(notes) or "두 실패 경로 모두 후보 통과 없음 + 실패 표시됨"
+
+
+def _retry_keeps_success_once() -> tuple[bool, str]:
+    """재시도가 실패해도 앞선 성공 결과를 잃지 않는가 (멘토 리뷰 축).
+
+    ⚠️ 재시도 자체는 Kana prompt의 `③-b`가 지시한 정상 경로다. 그런데 끌어올리기 조건이
+    값이 아니라 **키의 존재**를 보고 있어(`if "final_slot" in content`) None이 성공값을 덮는다.
+    바로 아래 `final_decision` 쪽은 truthy 검사라 같은 버그가 없다.
+
+    LLM을 거치지 않고 하위 agent를 주입해 끌어올리기 로직만 결정적으로 잰다.
+    """
+    from langchain_core.messages import AIMessage, ToolMessage
+
+    success = json.dumps({"final_slot": "2026-07-10 11:00-12:00", "reason": "첫 호출 성공",
+                          "candidates": ["2026-07-10 11:00-12:00"], "needs_agent_selection": False}, ensure_ascii=False)
+    retry_fail = json.dumps({"final_slot": None, "reason": "재시도 실패",
+                             "candidates": [], "needs_agent_selection": True}, ensure_ascii=False)
+
+    class _Fake:
+        def invoke(self, payload: dict) -> dict:
+            return {"messages": [
+                AIMessage(content="", tool_calls=[{"name": "decide_final_slot", "args": {}, "id": "d1"}]),
+                ToolMessage(content=success, name="decide_final_slot", tool_call_id="d1"),
+                AIMessage(content="", tool_calls=[{"name": "decide_final_slot", "args": {}, "id": "d2"}]),
+                ToolMessage(content=retry_fail, name="decide_final_slot", tool_call_id="d2"),
+                AIMessage(content="회의 시간을 정했습니다."),
+            ]}
+
+    original = m._KANA_SUBAGENT
+    try:
+        m._KANA_SUBAGENT = _Fake()
+        out = json.loads(m.kana_agent.invoke({"query": "회의 시간 정해줘"}))
+    finally:
+        m._KANA_SUBAGENT = original
+    lifted = (out.get("final_slot_payload") or {}).get("final_slot")
+    return (lifted == "2026-07-10 11:00-12:00"), f"끌어올린 final_slot={lifted!r} (성공값=2026-07-10 11:00-12:00)"
+
+
 def check_deterministic(n: int, fn: Callable[[], tuple[bool, str]]) -> dict:
     """LLM 없이 tool/helper를 직접 불러 안전규칙을 n회 단정한다."""
-    passed, notes = 0, []
+    passed, errors, notes = 0, 0, []
     for _ in range(n):
         try:
             ok, why = fn()
@@ -851,8 +1013,10 @@ def check_deterministic(n: int, fn: Callable[[], tuple[bool, str]]) -> dict:
             if not ok:
                 notes.append(why)
         except Exception as e:  # noqa: BLE001
+            errors += 1
             notes.append(f"ERR:{type(e).__name__}:{str(e)[:60]}")
-    return {"passed": passed, "n": n, "critical": True, "ambiguous": False, "notes": notes[:2]}
+            _record_crash(getattr(fn, "__name__", "deterministic"), e)
+    return {"passed": passed, "n": n, "errors": errors, "critical": True, "ambiguous": False, "notes": notes[:2]}
 
 
 # --------------------------------------------------------------------- 3~5. 실행·집계
@@ -960,7 +1124,7 @@ def run(n: int) -> dict[str, dict]:
     agent = m.build_week_agent()  # 1. 채널 고정: 실제 앱 경로 (PROXY_TOKEN 필요)
     results: dict[str, dict] = {}
     for case in CASES:
-        passed, notes = 0, []
+        passed, errors, notes = 0, 0, []
         for _ in range(n):
             rebind_temp_stores()          # 1. 상태 격리
             case.seed()
@@ -982,8 +1146,10 @@ def run(n: int) -> dict[str, dict]:
                 if not ok:
                     notes.append(why)
             except Exception as e:  # noqa: BLE001
+                errors += 1
                 notes.append(f"ERR:{type(e).__name__}:{str(e)[:60]}")
-        results[case.id] = {"passed": passed, "n": n, "critical": case.critical,
+                _record_crash(case.id, e)
+        results[case.id] = {"passed": passed, "n": n, "errors": errors, "critical": case.critical,
                             "ambiguous": case.ambiguous, "notes": notes[:2]}
         _print_row(case.id, results[case.id])
 
@@ -996,29 +1162,90 @@ def run(n: int) -> dict[str, dict]:
         ("decide_no_auto_pick", _decide_no_auto_pick_once),
         ("decide_keeps_agent_choice", _decide_keeps_agent_choice_once),
         ("collect_path_used", _collect_path_used_once),
+        # 멘토 리뷰 ②③ — 실패와 빈 결과의 구분, 재시도 결과 선택 기준
+        ("collect_failure_not_empty", _collect_failure_not_empty_once),
+        ("retry_keeps_success", _retry_keeps_success_once),
     ):
         results[cid] = check_deterministic(n, fn)
         _print_row(cid, results[cid])
     return results
 
 
+CRASH_LOG = REPO_ROOT / "evals" / "week06_crashes.log"
+_CRASH_SEEN: set[str] = set()
+
+
+def _record_crash(case_id: str, exc: BaseException) -> None:
+    """--- 5. 집계: 크래시의 **전체 traceback**을 파일로 남긴다. ---
+
+    ⚠️ 예전에는 `ERR:{type}:{메시지 60자}` 만 notes에 남겨 스택을 통째로 버렸다. 그래서
+    `IntegrityError: UNIQUE constraint failed: schedules.schedule_id` 가 여러 실행에 걸쳐
+    반복됐는데도 **어느 프레임에서 터지는지 알 수 없어** 원인 규명에 실패했다(라이브 재현도 6회 실패).
+
+    같은 (예외 타입, 메시지) 조합은 한 번만 적어 로그가 부풀지 않게 한다.
+    """
+    import traceback
+
+    key = f"{type(exc).__name__}:{exc}"
+    if key in _CRASH_SEEN:
+        return
+    _CRASH_SEEN.add(key)
+    try:
+        CRASH_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with CRASH_LOG.open("a", encoding="utf-8") as handle:
+            handle.write(f"\n{'=' * 72}\n[case] {case_id}\n[error] {key}\n{'-' * 72}\n")
+            handle.write("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    except Exception:  # noqa: BLE001 - 로그 실패가 측정을 막지 않게 한다
+        pass
+
+
+def judged_n(r: dict) -> int:
+    """--- 5. 집계: 크래시로 판정하지 못한 회차를 뺀 **실제 판정 횟수**. ---
+
+    ⚠️ 예외로 죽은 회차는 그 축의 동작을 재지 못한 회차다. 분모에 남겨두면 판정 실패와 구분되지 않는다.
+    """
+    return max(0, r["n"] - r.get("errors", 0))
+
+
 def _print_row(cid: str, r: dict) -> None:
-    mark = "OK " if r["passed"] == r["n"] else ("~~ " if r["passed"] else "XX ")
+    judged = judged_n(r)
+    mark = "OK " if judged and r["passed"] == judged else ("~~ " if r["passed"] else "XX ")
     tag = " [critical]" if r["critical"] else (" [ambiguous]" if r["ambiguous"] else "")
+    err = f" (크래시 {r['errors']}회 제외)" if r.get("errors") else ""
     note = f"   {r['notes'][0]}" if r["notes"] else ""
-    print(f"  {mark}{cid:30} {r['passed']}/{r['n']}{tag}{note}")
+    print(f"  {mark}{cid:30} {r['passed']}/{judged}{err}{tag}{note}")
 
 
 # --------------------------------------------------------------------- 6~7. 비교·게이트
-def gate(results: dict[str, dict], pass_ratio: float) -> tuple[bool, list[str]]:
+def gate(results: dict[str, dict], pass_ratio: float, max_errors: int = 0) -> tuple[bool, list[str]]:
+    """--- 7. 게이트: 크래시를 **자기 이름으로** 실패시킨다. ---
+
+    ⚠️ 이전에는 예외 회차가 그 축의 동작 실패로 집계됐다. `IntegrityError`(fixed/app_store.py,
+    원인 미규명)가 실행마다 **무작위 축에** 꽂히는 바람에, 매번 다른 축이 회귀한 것처럼 보였다
+    — 실측에서 member_names_not_dropped, after_hours_request, kana_chain_to_decide,
+    agent_fills_candidate_slots가 번갈아 걸렸다.
+
+    이제 크래시는 축 분모에서 빠지고 `_crashes` 라는 별도 항목으로 게이트를 실패시킨다.
+    숨기는 것이 아니라 **엉뚱한 축이 아니라 자기 이름으로** 드러나게 하는 것이다.
+    `--max-errors` 로 알려진 크래시를 명시적으로 인정할 수 있고, 기본값은 0(무관용)이다.
+    """
     fails = []
     for cid, r in results.items():
         if r.get("ambiguous"):
             continue
-        if r["critical"] and r["passed"] < r["n"]:
-            fails.append(f"{cid}: critical {r['passed']}/{r['n']}")
-        elif not r["critical"] and r["passed"] < r["n"] * pass_ratio:
-            fails.append(f"{cid}: {r['passed']}/{r['n']} < {pass_ratio:.0%}")
+        judged = judged_n(r)
+        if judged == 0:
+            fails.append(f"{cid}: 전 회차가 크래시로 판정 불가 ({r['n']}회)")
+            continue
+        if r["critical"] and r["passed"] < judged:
+            fails.append(f"{cid}: critical {r['passed']}/{judged}")
+        elif not r["critical"] and r["passed"] < judged * pass_ratio:
+            fails.append(f"{cid}: {r['passed']}/{judged} < {pass_ratio:.0%}")
+
+    total_errors = sum(r.get("errors", 0) for r in results.values())
+    if total_errors > max_errors:
+        hit = sorted(cid for cid, r in results.items() if r.get("errors"))
+        fails.append(f"_crashes: 실행 중 크래시 {total_errors}회 (허용 {max_errors}회) — 걸린 축: {', '.join(hit)}")
     return (not fails), fails
 
 
@@ -1038,15 +1265,18 @@ def compare(cur: dict, base_path: Path) -> None:
     changed = False
     for cid, r in cur.items():
         b = base.get(cid)
-        cur_ratio = r["passed"] / r["n"]
+        # 크래시로 판정하지 못한 회차는 양쪽 모두 분모에서 뺀다.
+        cur_judged = judged_n(r)
+        cur_ratio = (r["passed"] / cur_judged) if cur_judged else 0.0
         if b is None:
-            print(f"  + {cid}: (신규) {r['passed']}/{r['n']}"); changed = True
+            print(f"  + {cid}: (신규) {r['passed']}/{cur_judged}"); changed = True
             continue
-        base_ratio = b["passed"] / b["n"]
+        base_judged = judged_n(b)
+        base_ratio = (b["passed"] / base_judged) if base_judged else 0.0
         if abs(base_ratio - cur_ratio) < 1e-9:
             continue
         arrow = "↑" if cur_ratio > base_ratio else "↓"
-        print(f"  {arrow} {cid}: {b['passed']}/{b['n']} ({base_ratio:.0%}) -> {r['passed']}/{r['n']} ({cur_ratio:.0%})")
+        print(f"  {arrow} {cid}: {b['passed']}/{base_judged} ({base_ratio:.0%}) -> {r['passed']}/{cur_judged} ({cur_ratio:.0%})")
         changed = True
     if not changed:
         print("  (변화 없음)")
@@ -1058,6 +1288,8 @@ def main() -> int:
     ap.add_argument("--pass-ratio", type=float, default=0.66, help="non-critical 합격 통과율")
     ap.add_argument("--save", type=Path, help="결과를 baseline JSON으로 저장")
     ap.add_argument("--baseline", type=Path, help="이 baseline과 비교")
+    ap.add_argument("--max-errors", type=int, default=0,
+                    help="허용할 크래시 횟수. 기본 0(무관용). 알려진 크래시를 명시적으로 인정할 때만 올린다")
     args = ap.parse_args()
 
     if not CONFIG.has_openai_key:
@@ -1069,16 +1301,18 @@ def main() -> int:
     results = run(args.n)
 
     total = sum(r["passed"] for r in results.values())
-    denom = sum(r["n"] for r in results.values())
-    print(f"\n총 통과: {total}/{denom}")
+    denom = sum(judged_n(r) for r in results.values())
+    total_errors = sum(r.get("errors", 0) for r in results.values())
+    print(f"\n총 통과: {total}/{denom}" + (f"  (크래시 {total_errors}회는 분모에서 제외)" if total_errors else ""))
 
     if args.baseline and args.baseline.exists():
         compare(results, args.baseline)
 
-    ok, fails = gate(results, args.pass_ratio)
+    ok, fails = gate(results, args.pass_ratio, args.max_errors)
     print("\n=== 게이트 ===")
     if ok:
-        print("  PASS — 모든 critical 만점 + non-critical 임계 충족")
+        print("  PASS — 모든 critical 만점 + non-critical 임계 충족" +
+              (f" (크래시 {total_errors}회 인정됨)" if total_errors else ""))
     else:
         print("  FAIL")
         for f in fails:
