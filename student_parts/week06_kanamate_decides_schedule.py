@@ -250,12 +250,14 @@ def kana_prompt_parts() -> list[str]:
             "'나'와 다른 멤버들의 일정을 함께 모아 비교해야 하면 collect_member_schedules를 쓴다. "
             "공유 일정 저장소 자체를 확인하려면 list_shared_schedules를 쓴다."
         ),
-        (
-            "공통 가능 시간과 최종 회의 시간을 확정해야 하면 collect_member_schedules로 모은 busy_rows를 근거로 "
-            "find_common_available_slots에 네가 직접 고른 candidate_slots를 넘겨 검증하고, "
-            "이어서 decide_final_slot으로 최종 시간을 기록한다. 이 두 tool은 계산을 대신 해주지 않으므로 "
-            "네가 busy_rows와 겹치지 않는 시간을 직접 고른다."
-        ),
+        # TODO(추가과제 구현 시 되살리기): find_common_available_slots/decide_final_slot이 아직
+        # 미구현 상태라, 지금 이 지시를 넣으면 Kana가 있지도 않은 계산을 시도하다 빈 결과만 받는다.
+        # (
+        #     "공통 가능 시간과 최종 회의 시간을 확정해야 하면 collect_member_schedules로 모은 busy_rows를 근거로 "
+        #     "find_common_available_slots에 네가 직접 고른 candidate_slots를 넘겨 검증하고, "
+        #     "이어서 decide_final_slot으로 최종 시간을 기록한다. 이 두 tool은 계산을 대신 해주지 않으므로 "
+        #     "네가 busy_rows와 겹치지 않는 시간을 직접 고른다."
+        # ),
         (
             "확정된 일정을 저장하는 것은 Nana 담당이므로, 최종 시간을 결정한 뒤 저장이 필요하면 "
             "그 저장은 네 담당이 아니라고 답에 남긴다."
@@ -475,8 +477,10 @@ def kana_tools() -> list[Any]:
         extract_schedules_from_history,
         list_shared_schedules,
         collect_member_schedules,
-        find_common_available_slots,
-        decide_final_slot,
+        # TODO(추가과제 구현 시 되살리기): find_common_available_slots/decide_final_slot이
+        # 아직 미구현(...) 상태라 지금 넣으면 Kana가 호출해도 빈 결과만 받는다.
+        # find_common_available_slots,
+        # decide_final_slot,
     ]
 
 
