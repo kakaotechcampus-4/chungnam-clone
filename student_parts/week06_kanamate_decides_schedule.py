@@ -203,15 +203,20 @@ def week06_prompt_parts() -> list[str]:
         ),
         (
             "Nana 담당: 내 개인 일정 생성/조회/수정/삭제, todo/reminder 저장, "
-            "개인 참고자료와 앱 대화 RAG, '내 일정 보여줘'처럼 나 혼자에 대한 요청."
+            "개인 참고자료와 앱 대화 RAG, '내 일정 보여줘'처럼 나 혼자에 대한 요청. "
+            "단, 사용자가 '저장해줘/등록해줘'처럼 저장을 명시했을 때만 저장을 맡긴다."
         ),
         (
             "Kana 담당: 다른 사람(외부 멤버)과의 일정 조율, 이전 외부 대화/공유 일정 조회, "
-            "멤버 busy-time 수집과 공통 가능 시간·최종 회의 시간 결정."
+            "멤버 busy-time 수집, find_common_available_slots/decide_final_slot로 "
+            "공통 가능 시간·최종 회의 시간 결정. "
+            "'철수와 회의 잡아줘', '시간 맞춰줘', collect/find/decide 지시가 있으면 "
+            "저장이 아니라 조율·시간 확정이므로 kana_agent만 호출한다."
         ),
         (
-            "요청이 섞여 있어도 한 번에 하나의 하위 agent만 고른다. "
-            "개인 업무면 nana_agent, 그룹·외부 멤버 조율이면 kana_agent다."
+            "한 요청에는 하위 agent를 하나만 고른다. "
+            "외부 멤버 조율 뒤에 Nana로 이어서 저장하지 않는다. "
+            "저장은 사용자가 저장을 따로 요청했을 때만 Nana에게 맡긴다."
         ),
     ]
 
@@ -226,8 +231,10 @@ def nana_prompt_parts() -> list[str]:
             f"현재 날짜는 {current_app_date_iso()}이다."
         ),
         (
-            "다른 사람과의 그룹 일정 조율, 외부 멤버 busy-time 조회는 담당이 아니다. "
-            "그런 요청이면 짧게 Kana 담당이라고 안내한다."
+            "다른 사람과의 그룹 일정 조율, busy-time 조회, "
+            "find_common_available_slots/decide_final_slot 흐름은 담당이 아니다. "
+            "그런 요청이면 저장하지 말고 짧게 Kana 담당이라고 안내한다. "
+            "사용자가 저장을 명시하지 않았다면 일정을 새로 저장하지 않는다."
         ),
     ]
 
@@ -241,8 +248,8 @@ def kana_prompt_parts() -> list[str]:
             f"현재 날짜는 {current_app_date_iso()}이다."
         ),
         (
-            "개인 일정을 SQLite에 확정 저장하는 일은 Nana 담당이다. "
-            "저장이 필요하면 저장은 Nana가 한다고 안내하고, 여기서는 조율 결과만 정리한다."
+            "decide_final_slot은 최종 시간을 기록·확정하는 것이며 SQLite 저장이 아니다. "
+            "저장은 Nana 담당이므로, 여기서는 저장했다고 말하지 말고 확정된 시간만 안내한다."
         ),
         (
             "그룹 조율 순서: "
@@ -250,12 +257,12 @@ def kana_prompt_parts() -> list[str]:
             "필요하면 search_previous_conversations / load_conversation_messages / "
             "extract_schedules_from_history / list_shared_schedules도 쓴다. "
             "2) busy_rows를 보고 겹치지 않는 후보 시간을 직접 고른다. "
+            "사용자가 특정 후보 시간을 지정했다면 그 시간을 candidate_slots로 쓴다. "
             "3) find_common_available_slots에 candidate_slots와 busy_rows를 넘겨 검증한다. "
             "이 tool은 후보를 계산하지 않으므로 내가 후보를 채워야 한다. "
             "4) find_common_available_slots 다음에는 반드시 decide_final_slot을 호출한다. "
-            "사용자에게 고르라고 묻기 전에, 추천할 후보를 selected_index 또는 final_slot로 골라 "
-            "decide_final_slot에 기록한다. decide_final_slot도 자동 선택하지 않으므로 "
-            "selected_index/final_slot/reason을 내가 채워야 한다."
+            "추천/지정 후보를 selected_index 또는 final_slot로 골라 기록한다. "
+            "decide_final_slot도 자동 선택하지 않으므로 selected_index/final_slot/reason을 내가 채운다."
         ),
         (
             "근거가 없으면 추측하지 말고 찾지 못했다고 말한다."
@@ -276,8 +283,9 @@ def supervisor_system_prompt() -> str:
         [
             *week06_prompt_parts(),
             (
-                "반드시 nana_agent 또는 kana_agent 중 하나를 호출한 뒤, "
+                "반드시 nana_agent 또는 kana_agent 중 하나만 한 번 호출한 뒤, "
                 "그 하위 agent 결과(answer와 tool 결과)만 근거로 사용자에게 답한다. "
+                "조율 요청에서 kana_agent 다음에 nana_agent를 이어서 호출하지 않는다. "
                 "하위 agent를 호출하지 않고 추측으로 답하지 않는다."
             ),
         ]
