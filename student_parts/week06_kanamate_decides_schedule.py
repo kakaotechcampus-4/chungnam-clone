@@ -252,7 +252,8 @@ def kana_prompt_parts() -> list[str]:
   → list_shared_schedules() 즉시 호출. 파라미터 없이도 됩니다.
 
 - "외부 팀원 일정 조회해줘" (이름 미지정)
-  → search_previous_conversations(query="일정") 으로 전체 대화 검색.
+  → list_shared_schedules() 즉시 호출. 이름·기간을 되묻지 않습니다.
+  → search_previous_conversations는 "이전 대화 원문을 찾아줘" 처럼 대화 내용 자체가 필요한 요청에만 사용합니다.
 
 - "외부 팀원 일정 조회해줘" (이름 지정, 기간 미지정)
   → date_from=오늘, date_to=오늘로부터 14일 뒤를 기본값으로 사용.

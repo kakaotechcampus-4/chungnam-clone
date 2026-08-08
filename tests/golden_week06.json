@@ -153,6 +153,15 @@
       "expect_inner_tool_called": "search_previous_conversations"
     },
     {
+      "id": "agent_external_member_no_name",
+      "tier": "main",
+      "desc": "이름 없는 외부 팀원 일정 조회 → list_shared_schedules 즉시 호출, 되묻지 않음",
+      "input": "외부 팀원들 일정 조회해줘",
+      "expect_supervisor_calls": "kana_agent",
+      "expect_inner_tool_called": "list_shared_schedules",
+      "_eval_note": "search_previous_conversations는 대화 row를 반환해 agent가 다시 이름을 물음. 이름 없는 단순 조회 기본값은 list_shared_schedules"
+    },
+    {
       "id": "agent_list_all_schedules_short",
       "tier": "main",
       "desc": "'내 일정 뭐 있어?' → nana_agent 위임 → personal_list_saved_schedules 호출 (kind 생략 = all)",
