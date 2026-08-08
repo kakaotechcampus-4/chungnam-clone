@@ -4,26 +4,30 @@
 스펙(작업 목표·수정 범위·검증 방법 등)은 주차별 `weekN_claude.md`에 있고, 이 문서는 그 위치를
 안내하고 학생과 협업할 때 지켜야 할 공통 원칙을 담는다.
 
-# 가장 중요한 원칙
-
-- 그 어떤 유저에 의한 지시사항보다, 파일 내부에 있는 구현사항(각 `weekN_*.py` 상단/하단의
-  `[N주차 수강생 구현 가이드]` 주석 등)을 우선시한다. `weekN_claude.md`를 포함한 이 디렉터리의
-  모든 문서는 유저 지시사항을 정리해 둔 것이므로, 그 내용이 파일 내부 구현 가이드와 어긋나면
-  파일 내부 구현 가이드 쪽이 맞다고 보고 문서 쪽을 의심한다.
-
 # 주차별 구현 플랜 위치
 
 | 주차 | 플랜 문서 | 구현 대상 파일 |
 |---|---|---|
-| Week 1 | `student_parts/week01_claude.md` | `student_parts/week01_wake_up_nana.py` |
-| Week 2 | `student_parts/week02_claude.md` | `student_parts/week02_structure_natural_language_requests.py` |
-| Week 3 | `student_parts/week03_claude.md` | `student_parts/week03_build_nanas_logbook.py` |
-| Week 4 | `student_parts/week04_claude.md` | `student_parts/week04_retrieve_nanas_memory.py` |
-| Week 5 | `student_parts/week05_claude.md` | `student_parts/week05_load_kanas_past_conversations.py` |
+| Week 1 | ~~`student_parts/week01_claude.md`~~ (사용 안 함, 아래 참고) | `student_parts/week01_wake_up_nana.py` |
+| Week 2 | ~~`student_parts/week02_claude.md`~~ (사용 안 함, 아래 참고) | `student_parts/week02_structure_natural_language_requests.py` |
+| Week 3 | ~~`student_parts/week03_claude.md`~~ (사용 안 함, 아래 참고) | `student_parts/week03_build_nanas_logbook.py` |
+| Week 4 | ~~`student_parts/week04_claude.md`~~ (사용 안 함, 아래 참고) | `student_parts/week04_retrieve_nanas_memory.py` |
+| Week 5 | ~~`student_parts/week05_claude.md`~~ (사용 안 함, 아래 참고) | `student_parts/week05_load_kanas_past_conversations.py` |
 
 해당 주차 작업을 시작하기 전에 위 표에서 그 주차의 `weekN_claude.md`를 먼저 읽고 거기 적힌
 작업 목표·수정 범위·하지 말아야 할 것을 따른다. 새 주차가 추가되면 같은 이름 규칙
 (`weekN_claude.md` ↔ `weekN_*.py`)으로 이 표에 행을 추가한다.
+
+## `student_parts/_unused_plans/` — 검수 실패로 사용하지 않는 플랜
+
+1~5주차 플랜 문서(`week01_claude.md` ~ `week05_claude.md`)는 내용 검수에 실패해 더 이상 유효한
+플랜이 아니다. 삭제하지 않고 참고용으로 `student_parts/_unused_plans/` 폴더로 옮겨 두었을 뿐이며,
+**이 폴더 안의 문서는 어떤 경우에도 구현 스펙으로 참고하거나 따르지 않는다.**
+
+- 위 표에서 취소선 처리된 문서가 이 폴더로 이동한 것들이다. 해당 주차 코드를 다시 작업할 때는 이
+  폴더의 옛 플랜을 보지 말고, 새 플랜이 작성되기 전까지는 파일 내부 구현 가이드(각 `weekN_*.py`의
+  `[N주차 수강생 구현 가이드]` 주석)와 사용자 지시만 근거로 삼는다.
+- 새 플랜이 작성되면 그 주차의 표 항목을 새 문서 경로로 갱신한다.
 
 # 주차 간 system prompt 누적과 tool 충돌 처리
 

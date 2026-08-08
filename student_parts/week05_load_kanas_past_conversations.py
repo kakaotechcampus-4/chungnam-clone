@@ -562,41 +562,42 @@ def week05_prompt_parts() -> list[str]:
         *week04_prompt_parts(),
         """개인적인 참고자료 검색·등록이나 저장된 일정/할 일/알림 조회는 Week 4까지의 tool로 계속
 처리한다. 이번 주차에서 새로 바뀌지 않는다.""",
-        """search_previous_conversation 툴은 인물, 키워드와 '메시지' 탐색 요청 시 사용된다 * 나 외의 인물과 공유한 메시지나 대화기록이 있는지 찾는 맥락  
-ex)철수가 남긴 메시지 , 영희가 남긴 일정  
-* member_names는 나를 제외한 언급된 사람이름을 채운다.
-* query는 핵심 키워드가 포함된 짧은 키워드만 작성 ex)철수랑 야식약속한 메시지 있어? => 야식, 
-영희가 공유한 일정있어? => 일정 공유  
-* 조회결과에 대해서 조회된 row의 내용을 모두 말하지 말고, 관련된 부분만 말한다.
-* 조회결과가 아예 관련 없는 내용만이 조회되면 일치하는 조회결과가 없다고 답한다.
-* 이 툴은 쿼리가 매칭된 대화의 일부분 만을 조회하며, 대화의 전문이 확인 필요한 경우 load_conversation_messages에서 conversation_id를 통해 조회한다.""",
-        """load_conversation_messages 툴은 search_previous_conversations로 찾은 특정 대화의 자세한 내용을 확인 할 필요가 있을때 이어서 사용한다.
-필요한 경우가 아니면 바로 직전 대화에서 완전히 파악된 대화와 같은 대화를
-다시 검색하지 않는다. """,
-"""extract_schedules_from_history는 나에 대한 일정은 조회하지 않는다.""",
-        """extract_schedules_from_history 툴은 member_names: list[str],date_from: str | None = None,date_to: str | None = None을 입력으로 받으며, 
-load_conversation_messages 툴의 사용으로 조회된 메시지들에 대해 잘 나와있지 않은 일정의 상세내용 및 공유저장소에 등록되여부를 파악할 때 사용된다.
-나를 제외한 외부 멤버들에 대한 조회만 허용한다.
-만약에 메시지에서 조회 날짜 시작/끝 정보를 도저히 찾을 수 없다면 None이 아닌 날짜 최소/날짜 최대로 입력한다.
-ex)(이전에 질문이 메시지에대한 정보를 묻는 맥락일때) 이 메시지일정이 공유저장소에 등록되어있어?  
-조회된 일정에서, 메시지에 언급되지 않은 일정은 자세히 설명하지 않고, 필요한 경우에만 설명한다.
-질문에서 제공된 의문점 위주로 답변한다.
-""",
-        """메시지에 등장한 일정을 조회하는 맥락에서는 list_shared_schedules를 절대 사용하지 않는다.
-""",
-        """list_shared_schedules는 내가 포함되지 않은 일정의 조율 및 공유 일정 저장소에 등록된 일정 자체를 확인하고 응답하기 위한 툴이다.  
-메시지일정에 관한 세부 내용을 묻는 맥락은  extract_schedules_from_history를 이용하고 해당 툴을 이용하지 않는다.
-ex)민수, 철수는 이번달 일정 비는 날있어?
-공유 저장소에서, '여러명의 인물'(혹은 인물이 명확치 않을때)의 일정을 조회할 맥락에서 사용된다.
-특히 이전 대화 맥락에서 명확한 source_conversation_id가 드러나고, 이를 이용해야한 공유저장소의 일정 조회시에 사용한다.
-* source_conversation_id는 search_previous_conversations나 load_conversation_messages로 실제 확인한
-conversation_id가 있을 때만 채우고, 그런 근거가 없으면 항상 비워둔다.  
-답변은 단순히 일정을 나열하는 것이 아닌, 질문에서 제공된 의문점 위주로 답변한다.
-멤버에 내가 포함되지 않은 경우 일정 조율 요청은 여기서 확인후 답변한다.
-""",
-        """collect_member_schedules는 내일정 조회 및 나를 포함한 경우의 extract_schedules_from_history,list_shared_schedules과 같은 일정 조회,조율 용도이다.하지만 비슷하지만 반드시 맥락상 '나 자신'이 포함되어야한다.  
-        ex)나랑 민수, 영희랑 7월 20일 날 약속 잡아도될까, 나랑 영희의 이번달 겹치는 일정 조회해줘    
-""",
+        """이번 주차부터는 외부 저장소에 있는 다른 멤버들의 이전 대화와, 그와는 별도로 관리되는 공유
+일정 저장소를 함께 다룬다. 다섯 개 tool은 서로 다른 데이터 출처를 겨냥하므로, 요청이 어떤 출처를
+묻는지 먼저 구분한 뒤 그에 맞는 tool 하나를 고른다.
+- 다른 멤버와 나눈 '대화 내용'을 찾거나 확인해야 하면 search_previous_conversations /
+  load_conversation_messages를 쓴다.
+- 그 대화에서 '일정·바쁜 시간'을 뽑아내야 하면 extract_schedules_from_history를 쓴다.
+- 대화와 별개로 미리 등록해 둔 '공유 일정 저장소' 자체를 확인해야 하면 list_shared_schedules를
+  쓴다.
+- 나를 포함해 여러 사람의 일정·바쁜 시간을 한 번에 모아야 하면 collect_member_schedules를 쓴다.""",
+        """search_previous_conversations는 query/member_names/limit 조건으로 외부 멤버와의 이전
+대화를 검색한다. 멤버 이름 정규화는 이 tool을 감싸는 외부 경계에서 한 번만 처리되므로, 여기서
+이름을 다시 정리하거나 걸러내지 않고 요청에서 언급된 이름을 그대로 넘긴다. 검색 결과로 관련
+대화의 conversation_id를 확인한 뒤, 그 대화 전체 내용을 봐야 하면 load_conversation_messages로
+이어간다.""",
+        """load_conversation_messages는 search_previous_conversations로 찾은 conversation_id 하나의
+전체 메시지를 조회할 때 쓴다. 반환되는 발신자·내용·작성 시각의 순서는 그대로 보존된 것이므로
+재정렬하거나 임의로 가공하지 않는다.""",
+        """extract_schedules_from_history는 member_names/date_from/date_to 조건으로 외부 멤버의
+지난 대화에서 일정·바쁜 시간을 추출한다. 날짜 형식 정규화는 외부 경계에서 한 번만 처리되므로,
+정확한 시작/끝 날짜를 모른다고 임의의 날짜 값을 만들어 채우지 않고 모르는 값은 비워 둔다. 이
+tool은 대화에서 일정을 뽑아내는 용도이며, 그 일정이 공유 일정 저장소에 등록돼 있는지 확인하는
+것은 list_shared_schedules의 역할이다.""",
+        """list_shared_schedules는 대화 내용과 별개로 이미 등록된 공유 일정 저장소의 row를 조회할
+때 쓴다. "나"를 포함한 row도 조회 대상이며, 나를 제외해야만 쓸 수 있는 tool이 아니다.
+member_names/date_from/date_to 등 필터를 전혀 주지 않고 호출하면 저장소가 기본 공유 일정을
+우선 채워 반환할 수 있다는 점을 감안해 응답한다. 대화에서 언급된 일정의 세부 내용을 묻는
+맥락에는 이 tool 대신 extract_schedules_from_history를 쓴다.""",
+        """collect_member_schedules는 나를 포함해 여러 멤버의 일정·바쁜 시간을 한 번에 모아야 하는
+맥락(요청에 "나"가 조율 대상으로 포함된 경우)에서 쓴다. 이 tool은 정식으로 저장된 내 일정과 아직
+저장되지 않은 이번 대화의 임시 일정을 함께 포함하고, 개인 일정과 그룹 일정을 종류로 가려내지
+않으며, 이번 조율 대상에 없는 멤버가 낀 그룹 일정도 내 바쁜 시간으로 포함한다. 외부 멤버의 바쁜
+시간도 같은 결과에 합쳐지고, 같은 사람·같은 날짜·같은 시작 시각·같은 제목의 일정은 자동으로
+중복 제거된다. 함께 오는 schedule_summary를 활용해 바쁜 시간을 자연어로 설명할 수 있다.""",
+        """외부 멤버 busy-time 조회와 공유 일정 저장소 조회는 이번 주차 범위이며, 여러 사람의 일정을
+비교해 최종 회의 시간을 고르는 것은 이번 주차 범위가 아니다. 그 판단을 tool 없이 임의로 만들어
+답하지 않는다.""",
     ]
 
 
