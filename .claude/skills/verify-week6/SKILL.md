@@ -318,6 +318,44 @@ print('FIND_SLOTS_OK')
 겹침 판정이 **양방향**(겹치는 후보 제외 · 안 겹치는 후보 보존)으로 동작하며,
 tool이 스스로 후보를 만들지 않고 `date_from/date_to`의 ISO datetime을 정규화한다.
 
+## 6-b. 수집 실패를 "빈 시간 없음"으로 만들지 않는가 (멘토 리뷰 ②)
+```bash
+uv run python -X utf8 -c "
+import json
+import student_parts.week06_kanamate_decides_schedule as m
+
+# 철수의 실제 일정(2026-07-09 14:00-15:30)과 겹치는 후보.
+# 정상 조회라면 반드시 걸러지고, 수집이 실패하면 걸러질 근거가 사라진다.
+CLASH = {'date': '2026-07-09', 'start_time': '14:00', 'end_time': '15:00', 'duration_minutes': 60, 'reason': 'x'}
+ARGS = dict(member_names=['철수','영희'], date_from='2026-07-07', date_to='2026-07-17', candidate_slots=[CLASH])
+
+class SoftFail:
+    def invoke(self, args):
+        return json.dumps({'ok': False, 'tool_name': 'collect_member_schedules', 'error': 'store unavailable', 'rows': []}, ensure_ascii=False)
+class Raises:
+    def invoke(self, args):
+        raise RuntimeError('external MCP unavailable')
+
+original = m.collect_member_schedules
+try:
+    for label, fake in (('soft-failure', SoftFail()), ('exception', Raises())):
+        m.collect_member_schedules = fake
+        out = m.find_common_available_slots_dict(**ARGS)   # 예외가 새어나오면 여기서 실패한다
+        print(label, '-> ok =', out.get('ok'), '| candidate_slots =', out.get('candidate_slots'))
+        assert out.get('ok') is False, label + ': 수집이 실패했는데 ok가 False가 아님 (실패가 표시되지 않음)'
+        assert out.get('candidate_slots') == [], label + ': 수집 실패인데 후보가 통과함 -> 겹치는 시간이 확정될 수 있음'
+        assert out.get('busy_rows') == [], label + ': busy_rows가 비어 있지 않음'
+        assert out.get('error') or out.get('error_type'), label + ': 실패 사유가 payload에 없음'
+finally:
+    m.collect_member_schedules = original
+print('COLLECT_FAILURE_OK')
+"
+```
+확인 포인트: 수집 실패는 **예외로 새어나가지 않고** payload에 `ok=False` + 사유로 실려 나오며,
+후보 검증이 **아예 진행되지 않는다**. 실패와 "겹치는 일정이 없어 후보가 통과"가 구분되어야 한다.
+> 이 축이 없으면 실패가 빈 `busy_rows`가 되어 **어떤 후보든 전원 통과**한다.
+> "이번 주"를 지난 주로 계산했을 때와 같은 실패 모양이다.
+
 ## 7. busy_rows=None 수집 경로 (추가 과제 · temp 외부 DB)
 ```bash
 uv run python -X utf8 -c "
@@ -510,6 +548,55 @@ print('KANA_AGENT_OK')
 확인 포인트: 하위 trace에서 `final_slot`이 든 dict를 찾아 `final_slot_payload`로 올리고,
 없으면 **지어내지 않는다**(양방향 검사). `final_decision_payload`는 `propose_group_schedule` 계열
 `final_decision` 값을 담는 자리이므로 없으면 `None`이어도 된다.
+
+## 10-b. 재시도 결과 중 무엇을 최종값으로 올리는가 (멘토 리뷰 ③)
+```bash
+uv run python -X utf8 -c "
+import json
+from langchain_core.messages import AIMessage, ToolMessage
+import student_parts.week06_kanamate_decides_schedule as m
+
+SUCCESS = json.dumps({'final_slot': '2026-07-10 11:00-12:00', 'reason': '첫 호출 성공', 'candidates': ['2026-07-10 11:00-12:00'], 'needs_agent_selection': False}, ensure_ascii=False)
+RETRY_FAIL = json.dumps({'final_slot': None, 'reason': '재시도 실패', 'candidates': [], 'needs_agent_selection': True}, ensure_ascii=False)
+
+def fake(results):
+    msgs = []
+    for i, body in enumerate(results):
+        cid = 'd%d' % i
+        msgs.append(AIMessage(content='', tool_calls=[{'name': 'decide_final_slot', 'args': {}, 'id': cid}]))
+        msgs.append(ToolMessage(content=body, name='decide_final_slot', tool_call_id=cid))
+    msgs.append(AIMessage(content='끝'))
+    class F:
+        def invoke(self, payload): return {'messages': msgs}
+    return F()
+
+# (1) 성공 -> 재시도 실패 : 앞선 성공을 잃지 않는다 (Kana prompt ③-b가 재시도를 지시하므로 정상 경로다)
+m._KANA_SUBAGENT = fake([SUCCESS, RETRY_FAIL])
+out = json.loads(m.kana_agent.invoke({'query': 'q'}))
+got = (out.get('final_slot_payload') or {}).get('final_slot')
+print('성공->실패 : final_slot =', repr(got))
+assert got == '2026-07-10 11:00-12:00', '재시도 실패가 앞선 성공을 덮음: ' + repr(got)
+
+# (2) 실패 -> 성공 : 나중 성공을 쓴다
+m._KANA_SUBAGENT = fake([RETRY_FAIL, SUCCESS])
+out = json.loads(m.kana_agent.invoke({'query': 'q'}))
+got = (out.get('final_slot_payload') or {}).get('final_slot')
+print('실패->성공 : final_slot =', repr(got))
+assert got == '2026-07-10 11:00-12:00', got
+
+# (3) 성공이 하나도 없으면 마지막 시도를 그대로 올려 실패가 보이게 한다 (지어내지 않는다)
+m._KANA_SUBAGENT = fake([RETRY_FAIL, RETRY_FAIL])
+out = json.loads(m.kana_agent.invoke({'query': 'q'}))
+fsp = out.get('final_slot_payload') or {}
+print('실패만 : final_slot =', repr(fsp.get('final_slot')), '| needs =', fsp.get('needs_agent_selection'))
+assert fsp.get('final_slot') is None and fsp.get('needs_agent_selection') is True, fsp
+print('RETRY_LIFT_OK')
+"
+```
+확인 포인트: 같은 도구가 여러 번 불릴 때 **성공한 결과 중 가장 마지막 것**을 올리고,
+성공이 하나도 없으면 마지막 시도를 그대로 올려 실패가 드러난다.
+> 원인은 조건이 값이 아니라 **키의 존재**를 보는 것이었다(`if "final_slot" in content`).
+> 값이 `None`이어도 키만 있으면 덮어썼다. 바로 아래 `final_decision`은 truthy 검사라 같은 버그가 없었다.
 
 ## 11. 배선 대조 — supervisor_tools / agent_tool_names / extract_langchain_trace
 ```bash
