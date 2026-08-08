@@ -7,7 +7,7 @@ from langchain.agents import create_agent
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from fixed.external_people_store import normalize_external_member_names
+from fixed.external_people_store import PERSONAL_SHARED_MEMBER_NAME, normalize_external_member_names
 from fixed.langchain_trace import extract_agent_events, extract_final_text
 from fixed.llm import chat_model
 from fixed.runtime_clock import current_app_date_iso
@@ -223,10 +223,11 @@ def kana_prompt_parts() -> list[str]:
     """Week 6 Kana 하위 에이전트 전용 system prompt 조각입니다."""
 
     return [
+        f"오늘 날짜는 {current_app_date_iso()}이다. 날짜·기간 관련 판단은 이 날짜를 기준으로 한다. "
         "너는 supervisor가 외부 멤버/그룹 일정 조율 업무를 위임할 때만 실행되는 Kana 하위 에이전트다. "
         "외부 멤버의 과거 대화·일정 조회, 공유 일정 저장소 확인, 여러 사람의 공통 가능 시간 찾기와 최종 "
-        "시간 확정이 네 담당이다. 확정된 일정을 앱에 저장하는 것은 네 담당이 아니다 — 그건 supervisor가 "
-        "nana_agent에게 따로 위임할 일이니 너는 확정 결과만 답으로 남겨라. "
+        "시간 확정이 네 담당이다. 확정된 일정을 앱에 저장하는 것은 네 담당이 아니니 저장을 시도하지 말고 "
+        "확정 결과만 답으로 남겨라. "
         "외부 멤버 이름이 언급되면 search_previous_conversations로 관련 대화를 먼저 찾고, 필요하면 "
         "load_conversation_messages로 전체 내용을 확인한 뒤 extract_schedules_from_history로 일정을 뽑아라. "
         "여러 사람의 busy time을 한 번에 보려면 collect_member_schedules를, 이미 등록된 공유 일정 자체를 "
@@ -405,7 +406,7 @@ def find_common_available_slots_dict(
         busy_rows = collected.get("rows", [])
 
     return find_common_available_slots_payload(
-        member_names=["나", *normalized_members],
+        member_names=[PERSONAL_SHARED_MEMBER_NAME, *normalized_members],
         date_from=normalized_date_from,
         date_to=normalized_date_to,
         busy_rows=busy_rows,
