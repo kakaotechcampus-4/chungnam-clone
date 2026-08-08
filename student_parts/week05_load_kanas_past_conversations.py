@@ -15,7 +15,6 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
-    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -286,23 +285,6 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
         original_text=str(row.get("title") or ""),
     )
 
-def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """앱 DB row와 공유 저장소 row가 같은 일정을 가리키면 하나만 남깁니다.
-
-    두 경로가 값을 다르게 다듬으므로 end_time은 비교에서 빼고, title은 소괄호를 지운 뒤 비교합니다.
-    """
-
-    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
-    for row in rows:
-        key = (
-            str(row.get("member_name") or "").strip(),
-            str(row.get("date") or "").strip(),
-            str(row.get("start_time") or "").strip() or "미정",
-            strip_parenthetical_text(str(row.get("title") or "")),
-        )
-        deduped.setdefault(key, row)
-    return list(deduped.values())
-
 
 def _collect_member_schedules(
     *,
@@ -363,7 +345,7 @@ def _collect_member_schedules(
             "end_time":structured.end_time,
             "notes": "내 SQLite 저장 일정" if elem.get("schedule_id") else "현재 대화의 아직 저장 안된 임시 일정",
         })
-    rows= _dedupe_schedule_rows(rows + external_rows)
+    rows = rows + external_rows
     return {
         "rows":rows,
         "schedule_summary":external_schedule_summary(rows),
