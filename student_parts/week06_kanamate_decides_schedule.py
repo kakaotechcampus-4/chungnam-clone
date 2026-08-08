@@ -415,7 +415,7 @@ def find_common_available_slots_dict(
         busy_rows = collected.get("rows", [])
 
     return find_common_available_slots_payload(
-        member_names=[*normalized_members, "나"],
+        member_names=list(dict.fromkeys([*normalized_members, "나"])),
         date_from=normalized_from,
         date_to=normalized_to,
         busy_rows=busy_rows,
@@ -593,7 +593,7 @@ def kana_agent(query: str) -> str:
         "trace": {"events": events},
         "inner_tool_names": _tool_call_names(events),
         "final_slot_payload": final_slot_payload,
-        "final_decision_payload": final_slot_payload,
+        "final_decision_payload": None,
     }
     return json.dumps(payload, ensure_ascii=False)
 
