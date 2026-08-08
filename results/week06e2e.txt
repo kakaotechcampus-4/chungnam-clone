@@ -1,0 +1,153 @@
+WEEK06 ORCHESTRATOR REAL E2E TEST
+created_at: 2026-08-08T22:42:32.506950+09:00
+target: student_parts.week06.orchestrator.entry
+worker_mode: real_nana_kana
+composer_mode: real_llm
+stores: isolated_temp_sqlite_external_chroma
+overall: 7/8 (87.50%)
+average_elapsed_seconds: 7.983
+checks: {'execution': 8, 'agent_mix': 7, 'inner_tools': 7, 'answer': 8, 'db_state': 8, 'no_stub': 8}
+by_category: {'kana_read': {'passed': 3, 'total': 4}, 'mixed_read': {'passed': 1, 'total': 1}, 'nana_read': {'passed': 1, 'total': 1}, 'nana_write': {'passed': 2, 'total': 2}}
+
+[RUN DETAILS]
+
+[PASS] real_personal_schedule_lookup category=nana_read
+question: 2026년 8월 12일 내 개인 일정 중 '내부 점검'을 조회해줘.
+expected_agents: ['nana']
+actual_agents: ['nana']
+expected_inner_tools: ['personal_list_saved_schedules']
+actual_inner_tools: ['personal_list_saved_schedules', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 8월 12일 내 개인 일정 중 제목이 '내부 점검'인 일정을 조회", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "ok", "answer": "2026년 8월 12일에 \"내부 점검\"이라는 제목의 개인 일정이 있습니다. 시간은 오후 3시부터 4시까지입니다.", "inner_tool_names": ["personal_list_saved_schedules", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "personal_list_saved_schedules", "arguments": {"date_from": "2026-08-12", "date_to": "2026-08-12"}, "id": "call_4SsPg4GMskOLMAPns7xviYEu"}, {"event": "tool_result", "tool_name": "personal_list_saved_schedules", "content": {"ok": true, "tool_name": "personal_list_saved_schedules", "filters": {"kind": null, "date_from": "2026-08-12", "date_to": "2026-08-12", "limit": 50}, "schedules": [{"schedule_id": "sch_f999bfb003", "request_id": "req_98e62324bd", "owner": "me", "title": "내부 점검", "date": "2026-08-12", "start_time": "15:00", "end_time": "16:00", "source": "structured_output", "created_at": "2026-08-08T22:41:22.177436+09:00", "request_kind": "personal_schedule", "attendees": []}]}, "id": "call_4SsPg4GMskOLMAPns7xviYEu"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "2026년 8월 12일에 \"내부 점검\"이라는 제목의 개인 일정이 있습니다. 시간은 오후 3시부터 4시까지입니다."}, "id": "call_8PP0Qnupg5F1jw7CMEazz87a"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='2026년 8월 12일에 \"내부 점검\"이라는 제목의 개인 일정이 있습니다. 시간은 오후 3시부터 4시까지입니다.' condition_value=None", "id": "call_8PP0Qnupg5F1jw7CMEazz87a"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 5.13
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 8월 12일에 "내부 점검"이라는 제목의 개인 일정이 있습니다. 시간은 오후 3시부터 4시까지입니다.
+
+[PASS] real_personal_schedule_create category=nana_write
+question: 2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동'이라는 내 개인 일정을 저장해줘.
+expected_agents: ['nana']
+actual_agents: ['nana']
+expected_inner_tools: ['save_request']
+actual_inner_tools: ['save_request', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동'이라는 개인 일정 생성", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "ok", "answer": "2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동' 개인 일정이 생성되었습니다.", "inner_tool_names": ["save_request", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "save_request", "arguments": {"query": "2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동'이라는 개인 일정 생성"}, "id": "call_K0veaAHrNmWCUlgIOkw5aKYt"}, {"event": "tool_result", "tool_name": "save_request", "content": {"ok": true, "tool_name": "save_request", "saved_count": 1, "results": [{"ok": true, "tool_name": "save_structured_request", "request_id": "req_c94ff89b76", "kind": "personal_schedule", "saved_rows": [{"table": "structured_requests", "id": "req_c94ff89b76"}, {"table": "schedules", "id": "sch_3bb8c399e2"}], "shared_sync": {"ok": true, "status": "created", "tool_name": "create_shared_schedule", "shared_schedule": {"schedule_id": "shared_sch_3bb8c399e2", "member_name": "나", "title": "실제 E2E 운동", "date": "2026-08-13", "start_time": "18:00", "end_time": "19:00", "source_conversation_id": "app:req_c94ff89b76", "notes": "앱 개인 일정 자동 동기화", "sync_status": "created"}}}]}, "id": "call_K0veaAHrNmWCUlgIOkw5aKYt"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동' 개인 일정이 생성되었습니다."}, "id": "call_xnFWJByYl4Y7AUOm9DkiCqAp"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer=\"2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동' 개인 일정이 생성되었습니다.\" condition_value=None", "id": "call_xnFWJByYl4Y7AUOm9DkiCqAp"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 10.222
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 8월 13일 18시부터 19시까지 '실제 E2E 운동' 개인 일정이 생성되었습니다.
+
+[PASS] real_personal_reminder_create category=nana_write
+question: 2026년 8월 13일 20시에 '약 먹기' 알림을 저장해줘.
+expected_agents: ['nana']
+actual_agents: ['nana']
+expected_inner_tools: ['save_request']
+actual_inner_tools: ['save_request', 'list_saved_requests', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 8월 13일 20시에 '약 먹기' 알림을 생성한다.", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "ok", "answer": "2026년 8월 13일 20시에 '약 먹기' 알림을 생성했습니다.", "inner_tool_names": ["save_request", "list_saved_requests", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "save_request", "arguments": {"query": "2026년 8월 13일 20시에 '약 먹기' 알림 생성"}, "id": "call_6aatwEnFfIgxSwx8YJhNhMvb"}, {"event": "tool_result", "tool_name": "save_request", "content": {"ok": true, "tool_name": "save_request", "saved_count": 1, "results": [{"ok": true, "tool_name": "save_structured_request", "request_id": "req_368dde1312", "kind": "reminder", "saved_rows": [{"table": "structured_requests", "id": "req_368dde1312"}, {"table": "reminders", "id": "rem_08cb4cdebb"}], "shared_sync": null}]}, "id": "call_6aatwEnFfIgxSwx8YJhNhMvb"}, {"event": "tool_call", "tool_name": "list_saved_requests", "arguments": {"kind": "reminder"}, "id": "call_8ezpuyvcRsD0eQuWVxsGf21A"}, {"event": "tool_result", "tool_name": "list_saved_requests", "content": {"ok": true, "tool_name": "list_saved_requests", "rows": [{"request_id": "req_368dde1312", "kind": "reminder", "title": "약 먹기", "date": "2026-08-13", "start_time": "20:00", "end_time": null, "members_json": "[]", "priority": null, "reason": null, "raw_json": "{\"kind\": \"reminder\", \"title\": \"약 먹기\", \"date\": \"2026-08-13\", \"start_time\": \"20:00\", \"members\": [], \"original_text\": \"2026년 8월 13일 20시에 '약 먹기' 알림 생성\"}", "created_at": "2026-08-08T22:41:49.002056+09:00"}]}, "id": "call_8ezpuyvcRsD0eQuWVxsGf21A"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "2026년 8월 13일 20시에 '약 먹기' 알림을 생성했습니다."}, "id": "call_l0C2SER5yUMguRgFb9K8E9Bx"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer=\"2026년 8월 13일 20시에 '약 먹기' 알림을 생성했습니다.\" condition_value=None", "id": "call_l0C2SER5yUMguRgFb9K8E9Bx"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 7.784
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 8월 13일 20시에 '약 먹기' 알림을 생성했습니다.
+
+[PASS] real_external_conversation_search category=kana_read
+question: 하린과 나눈 과거 대화에서 파트너 콜 관련 내용을 찾아줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+expected_inner_tools: ['search_previous_conversations']
+actual_inner_tools: ['search_previous_conversations', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린과 나눈 과거 대화에서 파트너 콜 관련 내용을 찾아줘.", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다.", "inner_tool_names": ["search_previous_conversations", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "search_previous_conversations", "arguments": {"query": "파트너 콜", "member_names": ["하린"], "include_messages": true}, "id": "call_fEXR77cnm9pykLV8XCoT2fe3"}, {"event": "tool_result", "tool_name": "search_previous_conversations", "content": {"rows": [{"conversation_id": "ext_hr", "member_name": "하린", "title": "하린의 일정 공유", "content": "하린: 7월 8일 11시는 온보딩 세션, 7월 10일 14시는 파트너 콜, 7월 17일 9시는 회고 준비가 있어요.", "created_at": "2026-08-08T22:41:56+09:00", "messages": [{"role": "user", "sender": "하린", "content": "하린: 7월 8일 11시는 온보딩 세션, 7월 10일 14시는 파트너 콜, 7월 17일 9시는 회고 준비가 있어요.", "created_at": "2026-08-08T22:41:56+09:00"}]}]}, "id": "call_fEXR77cnm9pykLV8XCoT2fe3"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다."}, "id": "call_nkUMnx7dJBQ2kXax83aFKuRv"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다.' condition_value=None", "id": "call_nkUMnx7dJBQ2kXax83aFKuRv"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 6.003
+orchestrator_error: None
+runtime_error: None
+answer: 하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다.
+
+[PASS] real_external_schedule_lookup category=kana_read
+question: 민준의 2026년 7월 7일부터 7월 17일까지 일정을 알려줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+expected_inner_tools: ['extract_schedules_from_history']
+actual_inner_tools: ['extract_schedules_from_history', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 7일부터 7월 17일까지 일정 조회", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 09:30-10:30 데이터 정리\n- 7월 9일 11:00-12:00 백엔드 리뷰\n- 7월 14일 15:00-16:30 운영 회의", "inner_tool_names": ["extract_schedules_from_history", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "extract_schedules_from_history", "arguments": {"member_names": ["민준"], "date_from": "2026-07-07", "date_to": "2026-07-17"}, "id": "call_kKqwHatrale5CafP25NwQpp9"}, {"event": "tool_result", "tool_name": "extract_schedules_from_history", "content": {"ok": true, "tool_name": "extract_schedules_from_history", "rows": [{"member_name": "민준", "title": "데이터 정리", "date": "2026-07-08", "start_time": "09:30", "end_time": "10:30", "notes": "", "source_conversation_id": "ext_mj"}, {"member_name": "민준", "title": "백엔드 리뷰", "date": "2026-07-09", "start_time": "11:00", "end_time": "12:00", "notes": "", "source_conversation_id": "ext_mj"}, {"member_name": "민준", "title": "운영 회의", "date": "2026-07-14", "start_time": "15:00", "end_time": "16:30", "notes": "", "source_conversation_id": "ext_mj"}], "schedule_summary": "- 민준 | 데이터 정리 | 2026-07-08 09:30-10:30\n- 민준 | 백엔드 리뷰 | 2026-07-09 11:00-12:00\n- 민준 | 운영 회의 | 2026-07-14 15:00-16:30"}, "id": "call_kKqwHatrale5CafP25NwQpp9"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 09:30-10:30 데이터 정리\n- 7월 9일 11:00-12:00 백엔드 리뷰\n- 7월 14일 15:00-16:30 운영 회의"}, "id": "call_izKoPqGYhRT0p7dfioBRKQT7"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\\n- 7월 8일 09:30-10:30 데이터 정리\\n- 7월 9일 11:00-12:00 백엔드 리뷰\\n- 7월 14일 15:00-16:30 운영 회의' condition_value=None", "id": "call_izKoPqGYhRT0p7dfioBRKQT7"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 6.211
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.
+- 7월 8일 09:30-10:30 데이터 정리
+- 7월 9일 11:00-12:00 백엔드 리뷰
+- 7월 14일 15:00-16:30 운영 회의
+
+[PASS] real_shared_schedule_lookup category=kana_read
+question: 공유 일정 저장소에 있는 지훈의 2026년 7월 7일부터 7월 17일까지 일정을 직접 보여줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+expected_inner_tools: ['list_shared_schedules']
+actual_inner_tools: ['list_shared_schedules', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["지훈"], "query": "지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 있는 일정 조회", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\n- 7월 7일 15:00-16:00 모델 평가\n- 7월 14일 10:00-11:30 보안 점검\n- 7월 16일 13:00-14:00 릴리즈 회의", "inner_tool_names": ["list_shared_schedules", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "list_shared_schedules", "arguments": {"member_names": ["지훈"], "date_from": "2026-07-07", "date_to": "2026-07-17"}, "id": "call_grIuHTA58A3q5MyOmCOvU7sQ"}, {"event": "tool_result", "tool_name": "list_shared_schedules", "content": {"ok": true, "tool_name": "list_shared_schedules", "rows": [{"schedule_id": "extsch_july_jh_1", "member_name": "지훈", "title": "모델 평가", "date": "2026-07-07", "start_time": "15:00", "end_time": "16:00", "notes": "", "source_conversation_id": "ext_jh"}, {"schedule_id": "extsch_july_jh_2", "member_name": "지훈", "title": "보안 점검", "date": "2026-07-14", "start_time": "10:00", "end_time": "11:30", "notes": "", "source_conversation_id": "ext_jh"}, {"schedule_id": "extsch_july_jh_3", "member_name": "지훈", "title": "릴리즈 회의", "date": "2026-07-16", "start_time": "13:00", "end_time": "14:00", "notes": "", "source_conversation_id": "ext_jh"}], "schedule_summary": "- 지훈 | 모델 평가 | 2026-07-07 15:00-16:00\n- 지훈 | 보안 점검 | 2026-07-14 10:00-11:30\n- 지훈 | 릴리즈 회의 | 2026-07-16 13:00-14:00"}, "id": "call_grIuHTA58A3q5MyOmCOvU7sQ"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\n- 7월 7일 15:00-16:00 모델 평가\n- 7월 14일 10:00-11:30 보안 점검\n- 7월 16일 13:00-14:00 릴리즈 회의"}, "id": "call_tPE26mQ0pbt9XqJ6AncIVmfU"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.\\n- 7월 7일 15:00-16:00 모델 평가\\n- 7월 14일 10:00-11:30 보안 점검\\n- 7월 16일 13:00-14:00 릴리즈 회의' condition_value=None", "id": "call_tPE26mQ0pbt9XqJ6AncIVmfU"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 6.193
+orchestrator_error: None
+runtime_error: None
+answer: 지훈의 2026년 7월 7일부터 7월 17일까지 공유 일정 저장소에 등록된 일정은 다음과 같습니다.
+- 7월 7일 15:00-16:00 모델 평가
+- 7월 14일 10:00-11:30 보안 점검
+- 7월 16일 13:00-14:00 릴리즈 회의
+
+[FAIL] real_collect_personal_external category=kana_read
+question: 내 일정과 민준의 일정을 2026년 7월 7일부터 7월 17일까지 함께 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana', 'nana']
+expected_inner_tools: ['collect_member_schedules']
+actual_inner_tools: ['extract_schedules_from_history', 'SubagentResponse', 'personal_list_saved_schedules', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': False, 'inner_tools': False, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 7일부터 7월 17일까지 일정 조회", "dependencies": []}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "나의 2026년 7월 7일부터 7월 17일까지 일정 조회", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 09:30-10:30 데이터 정리\n- 7월 9일 11:00-12:00 백엔드 리뷰\n- 7월 14일 15:00-16:30 운영 회의", "inner_tool_names": ["extract_schedules_from_history", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "extract_schedules_from_history", "arguments": {"member_names": ["민준"], "date_from": "2026-07-07", "date_to": "2026-07-17"}, "id": "call_B6zlueZExoywrwota3a5zqKc"}, {"event": "tool_result", "tool_name": "extract_schedules_from_history", "content": {"ok": true, "tool_name": "extract_schedules_from_history", "rows": [{"member_name": "민준", "title": "데이터 정리", "date": "2026-07-08", "start_time": "09:30", "end_time": "10:30", "notes": "", "source_conversation_id": "ext_mj"}, {"member_name": "민준", "title": "백엔드 리뷰", "date": "2026-07-09", "start_time": "11:00", "end_time": "12:00", "notes": "", "source_conversation_id": "ext_mj"}, {"member_name": "민준", "title": "운영 회의", "date": "2026-07-14", "start_time": "15:00", "end_time": "16:30", "notes": "", "source_conversation_id": "ext_mj"}], "schedule_summary": "- 민준 | 데이터 정리 | 2026-07-08 09:30-10:30\n- 민준 | 백엔드 리뷰 | 2026-07-09 11:00-12:00\n- 민준 | 운영 회의 | 2026-07-14 15:00-16:30"}, "id": "call_B6zlueZExoywrwota3a5zqKc"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\n- 7월 8일 09:30-10:30 데이터 정리\n- 7월 9일 11:00-12:00 백엔드 리뷰\n- 7월 14일 15:00-16:30 운영 회의"}, "id": "call_fOi4tCA6489t5uo3LO973Glx"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='민준의 2026년 7월 7일부터 7월 17일까지 일정은 다음과 같습니다.\\n- 7월 8일 09:30-10:30 데이터 정리\\n- 7월 9일 11:00-12:00 백엔드 리뷰\\n- 7월 14일 15:00-16:30 운영 회의' condition_value=None", "id": "call_fOi4tCA6489t5uo3LO973Glx"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "2026년 7월 7일부터 7월 17일까지의 일정 중에는 7월 9일 오전 9시부터 10시까지 \"개인 회고\" 일정이 있습니다.", "inner_tool_names": ["personal_list_saved_schedules", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "personal_list_saved_schedules", "arguments": {"date_from": "2026-07-07", "date_to": "2026-07-17"}, "id": "call_ObBdklWW5toVAqz6It1crok6"}, {"event": "tool_result", "tool_name": "personal_list_saved_schedules", "content": {"ok": true, "tool_name": "personal_list_saved_schedules", "filters": {"kind": null, "date_from": "2026-07-07", "date_to": "2026-07-17", "limit": 50}, "schedules": [{"schedule_id": "sch_cadfa702f4", "request_id": "req_2f470d462a", "owner": "me", "title": "개인 회고", "date": "2026-07-09", "start_time": "09:00", "end_time": "10:00", "source": "structured_output", "created_at": "2026-08-08T22:41:24.633878+09:00", "request_kind": "personal_schedule", "attendees": []}]}, "id": "call_ObBdklWW5toVAqz6It1crok6"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "2026년 7월 7일부터 7월 17일까지의 일정 중에는 7월 9일 오전 9시부터 10시까지 \"개인 회고\" 일정이 있습니다."}, "id": "call_k2m7lVisJajy1Di2dN80a7dM"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='2026년 7월 7일부터 7월 17일까지의 일정 중에는 7월 9일 오전 9시부터 10시까지 \"개인 회고\" 일정이 있습니다.' condition_value=None", "id": "call_k2m7lVisJajy1Di2dN80a7dM"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 12.444
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 7일부터 7월 17일까지 민준님의 일정은 다음과 같습니다.
+- 7월 8일 09:30-10:30 데이터 정리
+- 7월 9일 11:00-12:00 백엔드 리뷰
+- 7월 14일 15:00-16:30 운영 회의
+
+사용자님의 일정은 7월 9일 09:00-10:00에 "개인 회고"가 있습니다.
+
+[PASS] real_independent_nana_kana category=mixed_read
+question: 2026년 8월 12일 내 개인 일정을 조회하고, 하린과 나눈 과거 대화에서 파트너 콜도 찾아줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana', 'kana']
+expected_inner_tools: ['personal_list_saved_schedules', 'search_previous_conversations']
+actual_inner_tools: ['personal_list_saved_schedules', 'SubagentResponse', 'search_previous_conversations', 'SubagentResponse']
+checks: {'execution': True, 'agent_mix': True, 'inner_tools': True, 'answer': True, 'db_state': True, 'no_stub': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 8월 12일 내 개인 일정 조회", "dependencies": []}, {"id": "t2", "requires_external_data": true, "external_members": ["하린"], "query": "하린과 나눈 과거 대화에서 파트너 콜 관련 내용 조회", "dependencies": []}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "ok", "answer": "2026년 8월 12일에는 \"내부 점검\" 일정이 15:00부터 16:00까지 예정되어 있습니다.", "inner_tool_names": ["personal_list_saved_schedules", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "personal_list_saved_schedules", "arguments": {"date_from": "2026-08-12", "date_to": "2026-08-12", "kind": "personal_schedule"}, "id": "call_OXBiGkLOD5NKTt971q0fYUiz"}, {"event": "tool_result", "tool_name": "personal_list_saved_schedules", "content": {"ok": true, "tool_name": "personal_list_saved_schedules", "filters": {"kind": "personal_schedule", "date_from": "2026-08-12", "date_to": "2026-08-12", "limit": 50}, "schedules": [{"schedule_id": "sch_f999bfb003", "request_id": "req_98e62324bd", "owner": "me", "title": "내부 점검", "date": "2026-08-12", "start_time": "15:00", "end_time": "16:00", "source": "structured_output", "created_at": "2026-08-08T22:41:22.177436+09:00", "request_kind": "personal_schedule", "attendees": []}]}, "id": "call_OXBiGkLOD5NKTt971q0fYUiz"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "2026년 8월 12일에는 \"내부 점검\" 일정이 15:00부터 16:00까지 예정되어 있습니다."}, "id": "call_HWZw2cd2dLrKnwsf8SZthDUx"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='2026년 8월 12일에는 \"내부 점검\" 일정이 15:00부터 16:00까지 예정되어 있습니다.' condition_value=None", "id": "call_HWZw2cd2dLrKnwsf8SZthDUx"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "ok", "answer": "하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다.", "inner_tool_names": ["search_previous_conversations", "SubagentResponse"], "trace": [{"event": "tool_call", "tool_name": "search_previous_conversations", "arguments": {"query": "파트너 콜", "member_names": ["하린"], "include_messages": true, "limit": 5}, "id": "call_Xlq6NGJoSUixf0TAXSbE91GA"}, {"event": "tool_result", "tool_name": "search_previous_conversations", "content": {"rows": [{"conversation_id": "ext_hr", "member_name": "하린", "title": "하린의 일정 공유", "content": "하린: 7월 8일 11시는 온보딩 세션, 7월 10일 14시는 파트너 콜, 7월 17일 9시는 회고 준비가 있어요.", "created_at": "2026-08-08T22:42:29+09:00", "messages": [{"role": "user", "sender": "하린", "content": "하린: 7월 8일 11시는 온보딩 세션, 7월 10일 14시는 파트너 콜, 7월 17일 9시는 회고 준비가 있어요.", "created_at": "2026-08-08T22:42:29+09:00"}]}]}, "id": "call_Xlq6NGJoSUixf0TAXSbE91GA"}, {"event": "tool_call", "tool_name": "SubagentResponse", "arguments": {"answer": "하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다."}, "id": "call_wGdS6ezziCcCqZ5oCcVwTiPk"}, {"event": "tool_result", "tool_name": "SubagentResponse", "content": "Returning structured response: answer='하린과 나눈 과거 대화에서 7월 10일 14시에 파트너 콜 일정이 있습니다.' condition_value=None", "id": "call_wGdS6ezziCcCqZ5oCcVwTiPk"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 9.874
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 8월 12일에는 15:00부터 16:00까지 내부 점검 일정이 있습니다. 그리고 하린과 나눈 과거 대화에서는 7월 10일 14시에 파트너 콜 일정이 확인됩니다.

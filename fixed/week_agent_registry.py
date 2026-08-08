@@ -38,7 +38,7 @@ WEEK_AGENT_MODULES = {
     3: "student_parts.week03_build_nanas_logbook",
     4: "student_parts.week04_retrieve_nanas_memory",
     5: "student_parts.week05_load_kanas_past_conversations",
-    6: "student_parts.week06_kanamate_decides_schedule",
+    6:  "student_parts.week06.orchestrator.entry",
 }
 
 

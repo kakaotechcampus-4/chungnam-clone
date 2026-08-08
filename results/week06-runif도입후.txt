@@ -1,0 +1,473 @@
+WEEK06 ORCHESTRATOR DEPENDENCY TEST
+created_at: 2026-08-08T17:59:35.526119+09:00
+target: student_parts.week06.orchestrator.entry
+worker_mode: deterministic_stub
+overall: 13/30 (43.33%)
+average_elapsed_seconds: 4.534
+timeout_summary: 0/30 cases hit 45s cap; 0.000/136.035 elapsed seconds (0.00%)
+checks: {'execution': 13, 'agent_sequence': 13, 'forbidden_agents': 30, 'dependency_edge': 30, 'dependency_injection': 13, 'task_results': 13}
+agent_sequences: {'kana': 17, 'nana': 6, 'kana -> nana': 7}
+
+[CASE STABILITY]
+kana_to_nana_end_time: 0/3
+kana_to_nana_time_arithmetic: 0/3
+nana_to_kana_same_time: 0/3
+nana_to_kana_overlap: 0/3
+conditional_true_busy: 3/3
+conditional_false_busy: 3/3
+conditional_true_empty: 3/3
+conditional_false_empty: 3/3
+history_to_nana_date: 1/3
+history_to_nana_time_arithmetic: 0/3
+
+[RUN DETAILS]
+
+[FAIL] kana_to_nana_end_time repeat=1 category=kana_to_nana
+question: 민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 먼저 확인해. 그 결과가 나온 다음, 정확히 그 시각에 시작하는 내 개인 일정이 있는지도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 알려줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 9일 민준의 백엔드 리뷰가 끝나는 시각에 시작하는 내 개인 일정이 있는지 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 알려줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.725
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 9일 백엔드 리뷰는 11:00부터 12:00까지 진행됩니다. 다만, 정확히 그 시각에 시작하는 사용자의 개인 일정 조회는 선행 작업 실패로 인해 확인하지 못했습니다.
+
+[FAIL] kana_to_nana_time_arithmetic repeat=1 category=kana_to_nana
+question: 하린의 2026년 7월 10일 파트너 콜 종료 시각을 먼저 확인해. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 개인 일정이 있는지 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 10일 하린의 파트너 콜 종료 시각 30분 뒤에 시작하는 내 개인 일정이 있는지 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.678
+orchestrator_error: None
+runtime_error: None
+answer: 하린의 2026년 7월 10일 파트너 콜은 15:00에 종료됩니다. 다만, 종료 30분 뒤에 시작하는 개인 일정 조회는 선행 작업 실패로 인해 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_same_time repeat=1 category=nana_to_kana
+question: 내 2026년 7월 14일 개인 일정 중 '내부 점검'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간대에 민준 일정이 있는지도 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["민준"], "query": "2026년 7월 14일 민준의 개인 일정 중 '내부 점검' 일정과 같은 시간대에 있는 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "내부 점검은 2026-07-14 15:00부터 16:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.789
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 14일 '내부 점검' 일정은 15:00부터 16:00까지입니다. 그러나 이 시간대에 민준님의 일정 조회는 내부 점검 일정 확인 작업이 완료되지 않아 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_overlap repeat=1 category=nana_to_kana
+question: 내 2026년 7월 8일 개인 일정 중 '온보딩 준비'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간에 하린 일정이 겹치는지 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 8일에 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["하린"], "query": "2026년 7월 8일에 하린의 개인 일정 중 내가 확인한 '온보딩 준비' 일정 시간과 겹치는 일정이 있는지 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "온보딩 준비는 2026-07-08 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 8일에 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.665
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 8일 '온보딩 준비' 일정은 11:00부터 12:00까지입니다. 다만, 이 시간에 하린님의 일정 겹침 여부는 선행 작업 실패로 확인하지 못했습니다.
+
+[PASS] conditional_true_busy repeat=1 category=conditional
+question: 영희의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 12시에 시작하는 내 개인 일정도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["영희"], "query": "영희의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 2026년 7월 10일 12시 일정 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n영희\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n영희의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "콘텐츠 대응은 2026-07-10 12:00부터 13:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.\n\n[현재 작업]\n\n내 2026년 7월 10일 12시 일정 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.632
+orchestrator_error: None
+runtime_error: None
+answer: 영희의 2026년 7월 10일 10시 일정은 '콘텐츠 점검'으로 확인되었습니다. 같은 날 12시부터는 사용자의 개인 일정인 '콘텐츠 대응'이 있습니다.
+
+[PASS] conditional_false_busy repeat=1 category=conditional
+question: 민준의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 11시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 10일 11시에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준은 2026-07-10 10:00에 일정이 없습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 4.733
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 10일 10시 일정은 없습니다. 따라서 같은 날 11시에 시작하는 사용자의 개인 일정 조회는 실행하지 않았습니다.
+
+[PASS] conditional_true_empty repeat=1 category=conditional
+question: 민준의 2026년 7월 11일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 2026-07-11 일정은 비어 있습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "집중 작업은 2026-07-11 10:00부터 11:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 민준의 2026-07-11 일정은 비어 있습니다.\n\n[현재 작업]\n\n2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.097
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 11일 일정은 비어 있어서, 그날 10시에 시작하는 '집중 작업' 일정은 10시부터 11시까지입니다.
+
+[PASS] conditional_false_empty repeat=1 category=conditional
+question: 민준의 2026년 7월 14일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 14일 일정이 비어 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 10시에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 운영 회의는 2026-07-14 15:00부터 16:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 14일 일정이 비어 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 4.342
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 14일 일정에 운영 회의가 있어 비어 있지 않습니다. 따라서 그날 10시에 시작하는 개인 일정 조회는 실행하지 않았습니다.
+
+[PASS] history_to_nana_date repeat=1 category=history_to_nana
+question: 민준과의 과거 대화에서 '백엔드 리뷰' 날짜와 시간을 먼저 찾아. 찾은 결과가 나온 다음, 그날 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "민준과의 과거 대화에서 찾은 '백엔드 리뷰' 일정 날짜에 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": null}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[현재 작업]\n\n민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "리뷰 후속 작업은 2026-07-09 13:00부터 14:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.\n\n[현재 작업]\n\n민준과의 과거 대화에서 찾은 '백엔드 리뷰' 일정 날짜에 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.725
+orchestrator_error: None
+runtime_error: None
+answer: 민준과의 백엔드 리뷰는 2026년 7월 9일 11시부터 12시까지였습니다. 같은 날 13시에 시작하는 사용자의 리뷰 후속 작업 일정은 13시부터 14시까지입니다.
+
+[FAIL] history_to_nana_time_arithmetic repeat=1 category=history_to_nana
+question: 하린과의 과거 대화에서 '파트너 콜' 날짜와 종료 시간을 먼저 찾아. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 '후속 연락' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 개인 일정에서 '후속 연락' 일정 중, t1 작업 결과의 종료 시간 30분 뒤에 시작하는 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 5.043
+orchestrator_error: None
+runtime_error: None
+answer: 하린과의 파트너 콜은 2026년 7월 10일 14시부터 15시까지였습니다. 그러나 종료 30분 뒤에 시작하는 후속 연락 일정 조회는 파트너 콜 정보 확인이 완전히 되지 않아 진행하지 못했습니다. 추가로 도와드릴 내용이 있으면 알려주세요.
+
+[FAIL] kana_to_nana_end_time repeat=2 category=kana_to_nana
+question: 민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 먼저 확인해. 그 결과가 나온 다음, 정확히 그 시각에 시작하는 내 개인 일정이 있는지도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 조회해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 9일에 민준의 백엔드 리뷰가 끝나는 시각에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.513
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 9일 백엔드 리뷰는 11:00부터 12:00까지 진행됩니다. 다만, 정확히 그 시각에 시작하는 개인 일정 조회는 선행 작업이 완료되지 않아 확인하지 못했습니다.
+
+[FAIL] kana_to_nana_time_arithmetic repeat=2 category=kana_to_nana
+question: 하린의 2026년 7월 10일 파트너 콜 종료 시각을 먼저 확인해. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 개인 일정이 있는지 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 10일 하린의 파트너 콜 종료 시각 30분 뒤에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 5.017
+orchestrator_error: None
+runtime_error: None
+answer: 하린의 2026년 7월 10일 파트너 콜은 15:00에 종료됩니다. 그러나 종료 30분 뒤에 시작하는 개인 일정 조회는 선행 작업 실패로 인해 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_same_time repeat=2 category=nana_to_kana
+question: 내 2026년 7월 14일 개인 일정 중 '내부 점검'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간대에 민준 일정이 있는지도 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["민준"], "query": "2026년 7월 14일 민준의 개인 일정 중 '내부 점검' 일정과 같은 시간대에 있는 일정이 있는지 확인해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "내부 점검은 2026-07-14 15:00부터 16:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.453
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 14일 '내부 점검' 일정은 15:00부터 16:00까지입니다. 같은 시간대에 민준님의 일정 조회는 내부 점검 일정 확인 작업이 완료되지 않아 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_overlap repeat=2 category=nana_to_kana
+question: 내 2026년 7월 8일 개인 일정 중 '온보딩 준비'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간에 하린 일정이 겹치는지 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 8일에 있는 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["하린"], "query": "2026년 7월 8일에 하린의 개인 일정 중 t1 작업 결과로 나온 '온보딩 준비' 일정 시간과 겹치는 일정이 있는지 확인해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "온보딩 준비는 2026-07-08 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 8일에 있는 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 5.488
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 8일 '온보딩 준비' 일정은 11:00부터 12:00까지입니다. 다만, 이 시간에 하린님의 일정 겹침 여부는 앞선 작업 실패로 확인하지 못했습니다.
+
+[PASS] conditional_true_busy repeat=2 category=conditional
+question: 영희의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 12시에 시작하는 내 개인 일정도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["영희"], "query": "2026년 7월 10일 10시에 영희의 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 10일 12시에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n영희\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 10일 10시에 영희의 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "콘텐츠 대응은 2026-07-10 12:00부터 13:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.\n\n[현재 작업]\n\n2026년 7월 10일 12시에 시작하는 내 개인 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.038
+orchestrator_error: None
+runtime_error: None
+answer: 영희의 2026년 7월 10일 10시 일정은 '콘텐츠 점검'으로 확인되었습니다. 같은 날 12시부터 시작하는 사용자의 개인 일정은 '콘텐츠 대응'입니다.
+
+[PASS] conditional_false_busy repeat=2 category=conditional
+question: 민준의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 11시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 2026년 7월 10일 11시 시작하는 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준은 2026-07-10 10:00에 일정이 없습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 4.36
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 10일 10시 일정이 없어서 같은 날 11시 시작하는 개인 일정 조회는 진행하지 않았습니다.
+
+[PASS] conditional_true_empty repeat=2 category=conditional
+question: 민준의 2026년 7월 11일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 2026-07-11 일정은 비어 있습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "집중 작업은 2026-07-11 10:00부터 11:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 민준의 2026-07-11 일정은 비어 있습니다.\n\n[현재 작업]\n\n2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.267
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 11일 일정은 비어 있으며, 그날 10시에 시작하는 '집중 작업' 일정은 10시부터 11시까지입니다.
+
+[PASS] conditional_false_empty repeat=2 category=conditional
+question: 민준의 2026년 7월 14일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 14일 일정이 비어 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 10시에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 운영 회의는 2026-07-14 15:00부터 16:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 14일 일정이 비어 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 4.074
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 14일 일정에 운영 회의가 있어 비어 있지 않습니다. 따라서 그날 10시에 시작하는 개인 일정 조회는 실행하지 않았습니다.
+
+[FAIL] history_to_nana_date repeat=2 category=history_to_nana
+question: 민준과의 과거 대화에서 '백엔드 리뷰' 날짜와 시간을 먼저 찾아. 찾은 결과가 나온 다음, 그날 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "민준과의 과거 대화에서 찾은 '백엔드 리뷰' 일정 날짜에 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.232
+orchestrator_error: None
+runtime_error: None
+answer: 민준과의 백엔드 리뷰는 2026년 7월 9일 11시에 있었습니다. 해당 날짜 13시에 시작하는 '리뷰 후속 작업' 일정은 조건 충족 문제로 조회하지 못했습니다.
+
+[FAIL] history_to_nana_time_arithmetic repeat=2 category=history_to_nana
+question: 하린과의 과거 대화에서 '파트너 콜' 날짜와 종료 시간을 먼저 찾아. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 '후속 연락' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 개인 일정에서 '후속 연락' 제목의 일정을 조회하는데, 시작 시간이 t1 종료 시간 30분 뒤인 일정을 찾아줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.22
+orchestrator_error: None
+runtime_error: None
+answer: 하린과의 파트너 콜은 2026년 7월 10일 14시부터 15시까지였습니다. 이후 종료 30분 뒤인 15시 30분에 시작하는 후속 연락 일정은 조건이 충족되지 않아 조회하지 못했습니다.
+
+[FAIL] kana_to_nana_end_time repeat=3 category=kana_to_nana
+question: 민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 먼저 확인해. 그 결과가 나온 다음, 정확히 그 시각에 시작하는 내 개인 일정이 있는지도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 알려줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 9일 민준의 백엔드 리뷰가 끝나는 시각에 시작하는 내 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 9일 백엔드 리뷰가 끝나는 시각을 알려줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.494
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 9일 백엔드 리뷰는 11:00부터 12:00까지 진행됩니다. 다만, 정확히 그 시각에 시작하는 사용자의 개인 일정 조회는 선행 작업 실패로 인해 확인하지 못했습니다.
+
+[FAIL] kana_to_nana_time_arithmetic repeat=3 category=kana_to_nana
+question: 하린의 2026년 7월 10일 파트너 콜 종료 시각을 먼저 확인해. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 개인 일정이 있는지 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 10일 하린의 파트너 콜 종료 시각 30분 뒤에 시작하는 내 개인 일정이 있는지 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린의 2026년 7월 10일 파트너 콜 종료 시각을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.167
+orchestrator_error: None
+runtime_error: None
+answer: 하린의 2026년 7월 10일 파트너 콜은 15:00에 종료됩니다. 다만, 종료 30분 뒤에 시작하는 개인 일정 조회는 선행 작업 실패로 인해 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_same_time repeat=3 category=nana_to_kana
+question: 내 2026년 7월 14일 개인 일정 중 '내부 점검'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간대에 민준 일정이 있는지도 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["민준"], "query": "2026년 7월 14일 민준의 개인 일정 중 '내부 점검' 일정과 같은 시간대에 있는 일정이 있는지 확인해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "내부 점검은 2026-07-14 15:00부터 16:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 14일 내 개인 일정 중 제목이 '내부 점검'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.465
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 14일 '내부 점검' 일정은 15:00부터 16:00까지입니다. 같은 시간대에 민준님의 일정 조회는 내부 점검 일정 확인 작업이 완료되지 않아 진행하지 못했습니다.
+
+[FAIL] nana_to_kana_overlap repeat=3 category=nana_to_kana
+question: 내 2026년 7월 8일 개인 일정 중 '온보딩 준비'의 시간을 먼저 확인해. 그 결과가 나온 다음, 같은 시간에 하린 일정이 겹치는지 조회해줘.
+expected_agents: ['nana', 'kana']
+actual_agents: ['nana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": false, "external_members": [], "query": "2026년 7월 8일에 있는 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": true, "external_members": ["하린"], "query": "2026년 7월 8일에 하린의 개인 일정 중에서 t1 작업 결과로 나온 시간과 겹치는 일정이 있는지 확인해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "nana", "status": "fail", "answer": "온보딩 준비는 2026-07-08 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n2026년 7월 8일에 있는 내 개인 일정 중 제목이 '온보딩 준비'인 일정의 시간을 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "kana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.771
+orchestrator_error: None
+runtime_error: None
+answer: 2026년 7월 8일 '온보딩 준비' 일정은 11:00부터 12:00까지입니다. 다만, 같은 시간에 하린님의 일정 겹침 여부는 선행 작업 실패로 확인하지 못했습니다.
+
+[PASS] conditional_true_busy repeat=3 category=conditional
+question: 영희의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 12시에 시작하는 내 개인 일정도 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["영희"], "query": "영희의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 2026년 7월 10일 12시 시작하는 개인 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n영희\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n영희의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "콘텐츠 대응은 2026-07-10 12:00부터 13:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 영희의 콘텐츠 점검은 2026-07-10 10:00부터 11:30까지입니다.\n\n[현재 작업]\n\n내 2026년 7월 10일 12시 시작하는 개인 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 3.995
+orchestrator_error: None
+runtime_error: None
+answer: 영희의 2026년 7월 10일 10시 일정은 "콘텐츠 점검"으로 확인되었습니다. 같은 날 12시에 시작하는 사용자의 개인 일정은 "콘텐츠 대응"입니다.
+
+[PASS] conditional_false_busy repeat=3 category=conditional
+question: 민준의 2026년 7월 10일 10시 일정이 실제로 있는지 먼저 확인해. 있을 때만 같은 날 11시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 2026년 7월 10일 11시 일정 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준은 2026-07-10 10:00에 일정이 없습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 10일 10시 일정이 실제로 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 5.005
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 10일 10시 일정이 없어서 같은 날 11시 시작하는 개인 일정 조회는 진행하지 않았습니다.
+
+[PASS] conditional_true_empty repeat=3 category=conditional
+question: 민준의 2026년 7월 11일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana', 'nana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: ok
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 2026-07-11 일정은 비어 있습니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 11일 일정이 비어 있는지 확인해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": true}
+task_result: {"task_id": "t2", "agent": "nana", "status": "ok", "answer": "집중 작업은 2026-07-11 10:00부터 11:00까지입니다.", "inner_tool_names": ["stub_personal_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[선행 작업 결과]\n\ntask_id: t1\nagent: kana\nstatus: ok\nanswer: 민준의 2026-07-11 일정은 비어 있습니다.\n\n[현재 작업]\n\n2026년 7월 11일 10시에 시작하는 내 '집중 작업' 일정을 조회해줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": null}
+elapsed_seconds: 4.671
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 11일 일정은 비어 있으며, 그날 10시에 시작하는 '집중 작업' 일정은 10시부터 11시까지입니다.
+
+[PASS] conditional_false_empty repeat=3 category=conditional
+question: 민준의 2026년 7월 14일 일정이 비어 있는지 먼저 확인해. 비어 있을 때만 그날 10시에 시작하는 내 개인 일정을 조회해줘.
+expected_agents: ['kana']
+actual_agents: ['kana']
+checks: {'execution': True, 'agent_sequence': True, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': True, 'task_results': True}
+status: partial
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준의 2026년 7월 14일 일정이 비어 있는지 확인해", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "2026년 7월 14일 10시에 시작하는 내 개인 일정 조회", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "ok", "answer": "민준의 운영 회의는 2026-07-14 15:00부터 16:30까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준의 2026년 7월 14일 일정이 비어 있는지 확인해"}], "final_slot_payload": null, "final_decision_payload": null, "error": null, "condition_value": false}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "실행 조건이 충족되지 않아 실행하지 않았습니다: t1=False, expected=True", "condition_value": null}
+elapsed_seconds: 3.998
+orchestrator_error: None
+runtime_error: None
+answer: 민준의 2026년 7월 14일 일정에 운영 회의가 있어 비어 있지 않습니다. 따라서 그날 10시에 시작하는 개인 일정 조회는 실행하지 않았습니다.
+
+[FAIL] history_to_nana_date repeat=3 category=history_to_nana
+question: 민준과의 과거 대화에서 '백엔드 리뷰' 날짜와 시간을 먼저 찾아. 찾은 결과가 나온 다음, 그날 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["민준"], "query": "민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "'백엔드 리뷰' 일정이 있는 날의 13시에 시작하는 내 '리뷰 후속 작업' 일정을 조회해줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "민준의 백엔드 리뷰는 2026-07-09 11:00부터 12:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n민준\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n민준과의 과거 대화에서 '백엔드 리뷰' 일정의 날짜와 시간을 찾아줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 4.134
+orchestrator_error: None
+runtime_error: None
+answer: 민준과의 과거 대화에서 '백엔드 리뷰'는 2026년 7월 9일 11시에 있었습니다. 해당 날짜 13시에 시작하는 '리뷰 후속 작업' 일정은 조건 충족 문제로 조회하지 못했습니다.
+
+[FAIL] history_to_nana_time_arithmetic repeat=3 category=history_to_nana
+question: 하린과의 과거 대화에서 '파트너 콜' 날짜와 종료 시간을 먼저 찾아. 그 결과가 나온 다음, 종료 30분 뒤에 시작하는 내 '후속 연락' 일정을 조회해줘.
+expected_agents: ['kana', 'nana']
+actual_agents: ['kana']
+checks: {'execution': False, 'agent_sequence': False, 'forbidden_agents': True, 'dependency_edge': True, 'dependency_injection': False, 'task_results': False}
+status: fail
+execution_order: ['t1', 't2']
+plan: {"tasks": [{"id": "t1", "requires_external_data": true, "external_members": ["하린"], "query": "하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘.", "depends_on": [], "run_if": null}, {"id": "t2", "requires_external_data": false, "external_members": [], "query": "내 개인 일정에서 '후속 연락' 제목의 일정을 조회하는데, 시작 시간이 t1 종료 시간 30분 뒤인 일정을 찾아줘.", "depends_on": ["t1"], "run_if": {"task_id": "t1", "equals": true}}]}
+task_result: {"task_id": "t1", "agent": "kana", "status": "fail", "answer": "하린의 파트너 콜은 2026-07-10 14:00부터 15:00까지입니다.", "inner_tool_names": ["stub_external_lookup"], "trace": [{"event": "stub_worker_call", "delegated_query": "[외부 데이터 대상 멤버]\n\n하린\n\n[조건 판정 작업]\n\n도구 결과를 근거로 현재 작업의 질문이 참이면 condition_value=true, 거짓이면 false로 반환한다. 판정할 근거가 부족하면 추측하지 말고 null을 반환한다.\n\n[현재 작업]\n\n하린과의 과거 대화에서 '파트너 콜'의 날짜와 종료 시간을 찾아줘."}], "final_slot_payload": null, "final_decision_payload": null, "error": "조건 판정 작업이 condition_value를 반환하지 않았습니다.", "condition_value": null}
+task_result: {"task_id": "t2", "agent": "nana", "status": "skipped", "answer": null, "inner_tool_names": [], "trace": [], "final_slot_payload": null, "final_decision_payload": null, "error": "선행 작업 실패 또는 보류로 실행하지 않았습니다: t1", "condition_value": null}
+elapsed_seconds: 5.244
+orchestrator_error: None
+runtime_error: None
+answer: 하린과의 파트너 콜은 2026년 7월 10일 14시부터 15시까지였습니다. 이후 종료 30분 뒤인 15시 30분에 시작하는 후속 연락 일정은 조건이 충족되지 않아 조회하지 못했습니다.
