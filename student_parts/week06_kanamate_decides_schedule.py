@@ -532,14 +532,30 @@ def kana_agent(query: str) -> str:
             system_prompt=kana_system_prompt(),
         )
     result = _KANA_SUBAGENT.invoke({"messages": [{"role": "user", "content": query}]})
-    trace = extract_langchain_trace(result)
+    events = extract_agent_events(result)
+
+    # extract_langchain_trace()는 supervisor가 nana_agent/kana_agent 호출을 한 단계
+    # 언랩할 때 쓰는 함수라, kana_agent 자신의 leaf tool 이벤트에는 맞지 않습니다.
+    # 여기서는 nana_agent와 동일하게 자기 events에서 직접 뽑습니다.
+    final_slot_payload: dict[str, Any] | None = None
+    final_decision_payload: dict[str, Any] | None = None
+    for event in events:
+        content = event.get("content")
+        if isinstance(content, dict):
+            if content.get("final_slot_payload"):
+                final_slot_payload = content["final_slot_payload"]
+            elif "final_slot" in content:
+                final_slot_payload = content
+            if content.get("final_decision_payload"):
+                final_decision_payload = content["final_decision_payload"]
+
     return json.dumps(
         {
             "answer": extract_final_text(result),
-            "trace": {"events": trace["events"]},
-            "inner_tool_names": trace["inner_tool_names"],
-            "final_slot_payload": trace["final_slot_payload"],
-            "final_decision_payload": trace["final_decision_payload"],
+            "trace": {"events": events},
+            "inner_tool_names": _tool_call_names(events),
+            "final_slot_payload": final_slot_payload,
+            "final_decision_payload": final_decision_payload,
         },
         ensure_ascii=False,
     )
