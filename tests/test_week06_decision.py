@@ -22,8 +22,11 @@ tool description을 읽고 직접 골라 argument로 넘기고, 여기서는 그
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 import json
 import sys
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
@@ -282,6 +285,19 @@ def test_find_collects_busy_rows_when_not_given():
     )
     assert payload["busy_rows"], "외부 멤버 일정을 수집하지 못했다"
     assert {row["member_name"] for row in payload["busy_rows"]} == {"철수"}
+
+
+def test_find_raises_when_collect_contract_breaks(monkeypatch):
+    # rows 키가 사라지면 빈 목록으로 넘어가 "아무도 바쁘지 않다"가 된다. 조용히 지나가면 안 된다.
+    # 실제 tool은 계약을 지키므로 이 상황은 만들 수 없다. 반환이 바뀐 미래를 대역으로 흉내낸다
+    import student_parts.week06_kanamate_decides_schedule as week06
+
+    renamed_key = SimpleNamespace(invoke=lambda _: json.dumps({"ok": True, "schedules": []}))
+    monkeypatch.setattr(week06, "collect_member_schedules", renamed_key)
+    with pytest.raises(KeyError):
+        find_common_available_slots_dict(
+            member_names=["철수"], date_from=DATE_FROM, date_to=DATE_TO, busy_rows=None
+        )
 
 
 def test_find_collects_nothing_for_unknown_member():
