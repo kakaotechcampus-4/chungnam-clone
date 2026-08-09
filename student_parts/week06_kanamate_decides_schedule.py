@@ -199,7 +199,9 @@ def week06_prompt_parts() -> list[str]:
         *week05_prompt_parts(),
         """
         당신은 supervisor로써, 나나 혹은 카나 에이전트가 아니다. 직접 업무를 처리하지 않고 나나 에이전트 또는 카나 에이전트에게 업무를 위임한다.
-        답변 시 스스로를 나나 혹은 다른 이름으로 소개하지 않고 바로 요청에 대한 대답을 진행한다. 
+        답변 시 스스로를 나나 혹은 다른 이름으로 소개하지 않고 바로 요청에 대한 대답을 진행한다.
+        nana_agent 또는 kana_agent의 답변을 인용하거나 근거로 쓸 때도, 그 답변에 포함된 자기소개 문구는
+        제외하고 요청에 대한 결과만 전달한다.
         나만의 개인 일정 생성/조회/수정/삭제, 개인 참고자료·메모, 대화 RAG 요청은 nana_agent에게 위임한다.
         다른 팀원과 함께 조율해야 하는 일정, 외부 대화 기록/공유 일정 조회, 공통 가능 시간 검토는 kana_agent에게 위임한다.
         """,
@@ -249,6 +251,10 @@ def supervisor_system_prompt() -> str:
             """
             요청 내용에 따라 nana_agent 또는 kana_agent 중 필요한 쪽을 호출한다.
             둘 다 필요하면 nana_agent를 먼저 호출해 개인 일정을 확인한 뒤 kana_agent를 호출한다.
+            요청에 나 아닌 외부 멤버의 이름이 하나라도 포함되어 있다면, 시간이 이미 정해져 있어도
+            반드시 먼저 kana_agent를 호출해 그 멤버의 일정과 겹치지 않는지 확인·확정시킨다.
+            kana_agent가 확정한 시간을 근거로만 nana_agent에게 저장을 요청하며, kana_agent 확인 없이
+            nana_agent만으로 외부 멤버가 걸린 약속을 저장하지 않는다.
             kana_agent를 호출할 때는 nana_agent가 확인한 개인 일정의 세부 내용을 전달하지 않는다.
             각 하위 에이전트가 반환한 결과만 근거로 최종 답변을 작성하며, 스스로 추측해 내용을 채우지 않는다.
             """,
@@ -408,12 +414,6 @@ def find_common_available_slots_dict(
         candidate_slots=candidate_slots,
         llm_reason=llm_reason,
     )
-
-    # TODO: 멤버 이름/날짜 범위를 정규화하고, busy_rows를 수집한 뒤 후보 검증 payload를 만드세요.
-    #   - normalize_external_member_names(...)로 멤버 이름을, normalize_date_bound(...)로 날짜를 정규화합니다.
-    #   - busy_rows가 None이면 collect_member_schedules.invoke({...})를 호출해 rows를 채웁니다.
-    #   - 검증 payload 생성은 find_common_available_slots_payload(...)에 넘깁니다. 이때 내 일정도 근거이므로
-    #     member_names에는 "나"를 함께 포함합니다.
 
 
 @tool(description=FIND_COMMON_AVAILABLE_SLOTS_DESCRIPTION, args_schema=FindCommonAvailableSlotsInput)
