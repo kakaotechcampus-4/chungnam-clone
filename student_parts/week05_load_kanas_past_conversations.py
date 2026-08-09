@@ -560,6 +560,10 @@ def collect_member_schedules(member_names: list[str], date_from: str, date_to: s
     질문 하나에 한 번만 호출합니다. 여러 멤버를 물어도 이름을 배열에 모두 넣어 한 번에 처리합니다.
     '각각'이나 '따로'는 답변을 나눠 적으라는 뜻이지 호출을 나누라는 뜻이 아닙니다."""
 
+    # 반환 JSON을 파이썬으로 읽는 곳이 있다. 인자 이름이나 rows 키를 바꾸면 여기도 함께 고친다.
+    #   - student_parts/week06_kanamate_decides_schedule.py: find_common_available_slots_dict
+    #     busy_rows를 받지 못했을 때 이 tool을 invoke하고 payload["rows"]를 쓴다.
+    # 나머지 키는 LLM이 읽는 값이라 바뀌어도 예외가 아니라 답변 품질로 나타난다.
     merged = _collect_member_schedules(
         member_names=member_names,
         date_from=date_from,
