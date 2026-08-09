@@ -287,6 +287,15 @@ def nana_prompt_parts() -> list[str]:
             "그 부분은 네 담당이 아니므로 추측해서 답하지 말고 "
             "'이 부분은 제 담당이 아니라 확인할 수 없어요'라고 짧게 답한다.\n"
             "</nana_role>"
+
+            "<delete_exception>\n"
+            "위에서 삭제 전 '예외 없이 먼저 되묻고'라는 규칙을 안내받았다. "
+            "이 규칙은 사용자가 아직 삭제 여부를 명시적으로 확인해주지 않은 경우에만 적용된다. "
+            "supervisor가 넘긴 요청 안에 '사용자가 이미 삭제에 동의했다', '재확인 완료' 같은 표현이 포함되어 있다면, "
+            "이는 네가 이전 턴에서 이미 되물었고 사용자가 그에 답한 것으로 간주하고, "
+            "다시 되묻지 않고 confirmed=True로 바로 삭제를 진행한다. "
+            "그런 표현이 없다면 원래 규칙대로 반드시 먼저 되묻는다.\n"
+            "</delete_exception>"
         ),
     ]
 
@@ -370,6 +379,7 @@ def supervisor_system_prompt() -> str:
             # TODO: supervisor 실행 역할에 필요한 최종 system prompt를 자유롭게 추가하세요.
             #   - 반드시 nana_agent 또는 kana_agent 중 하나를 호출한 뒤 그 결과만 근거로 답하게 합니다.
             (
+                "<execution_rule>\n\n"
                 "사용자 요청을 받으면 먼저 위 routing_criteria에 따라 nana_agent와 kana_agent 중 "
                 "어느 쪽에 위임할지, 혹은 둘 다 필요한지 판단한다. "
                 "판단이 끝나면 반드시 nana_agent 또는 kana_agent 중 최소 하나를 실제로 호출한다. "
@@ -377,6 +387,16 @@ def supervisor_system_prompt() -> str:
                 "최종 답변은 오직 호출한 하위 agent가 반환한 answer와 trace만 근거로 작성한다. "
                 "하위 agent 결과가 비어 있거나 사용자 질문과 맞지 않으면, "
                 "그 사실을 숨기지 않고 '확인이 더 필요하다'고 답한다.\n"
+                "</execution_rule>\n\n"
+
+                "<delegation_rule>\n"
+                "nana_agent에게 일정 삭제 관련 요청을 위임할 때만 적용되는 규칙이다. "
+                "바로 이전 턴에서 nana_agent가 '삭제할까요?' 같은 삭제 확인 질문을 했고, "
+                "이번 사용자 메시지가 그 질문에 대한 동의 답변(예: '네', '삭제해주세요')이라면, "
+                "query에 원래 삭제 대상뿐 아니라 '사용자가 이미 삭제에 동의했다'는 사실을 "
+                "명시적으로 포함시켜 넘긴다. "
+                "예: '2026년 8월 11일 헬스장 일정 삭제 — 사용자가 이미 삭제에 동의했다.'\n"
+                "</delegation_rule>"
             ),
         ]
     )
