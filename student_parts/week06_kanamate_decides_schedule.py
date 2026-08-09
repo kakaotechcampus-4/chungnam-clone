@@ -491,7 +491,11 @@ def find_common_available_slots_dict(
                 {"member_names": external_members, "date_from": window_from, "date_to": window_to}
             )
         )
-        rows = collected.get("rows") or []
+        # rows 키가 없는 것과 빈 목록은 뜻이 다르다. 전자는 collect_member_schedules의 반환이 바뀐 것이고,
+        # 그대로 빈 목록으로 넘기면 "아무도 바쁘지 않다"가 되어 이미 회의가 있는 시간을 추천하게 된다.
+        if "rows" not in collected:
+            raise KeyError("collect_member_schedules 반환에 rows가 없다. 두 함수의 계약이 어긋났다.")
+        rows = collected["rows"]
 
     # 겹침 검증은 날짜를 문자열 완전 일치로 비교하고 후보 쪽만 정규화한다. busy_rows는 LLM이
     # 복사해 넘기는 값이라 ISO datetime으로 옮겨 적히면 그 일정이 통째로 안 걸린다.
