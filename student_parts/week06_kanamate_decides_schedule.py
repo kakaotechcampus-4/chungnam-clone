@@ -343,9 +343,7 @@ def tool_name(tool_object: Any) -> str:
     return getattr(tool_object, "name", getattr(tool_object, "__name__", str(tool_object)))
 
 
-# 하위 agent의 tool 결과 하나가 이 길이를 넘으면 잘라서 올린다. 대화 RAG는 원문 passage를 담아
-# 한 번에 18KB를 넘겼는데, 그 전체가 supervisor의 tool 결과로 들어가 매 턴 다시 전송된다.
-# supervisor가 답변에 쓰는 것은 하위 agent의 answer이므로 원문까지 올릴 이유가 없다.
+# 하위 trace는 supervisor의 tool 결과로 들어가 매 턴 다시 전송된다. 대화 RAG가 한 번에 18KB였다.
 DELEGATE_TRACE_CONTENT_LIMIT = 1200
 
 
@@ -365,10 +363,9 @@ def _trim_trace_field(event: dict[str, Any], field: str) -> dict[str, Any]:
 
 
 def _delegate_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """supervisor에게 올릴 하위 trace를 만든다. 큰 tool 결과와 인자는 잘라내고 잘렸다는 사실을 남긴다.
+    """supervisor에게 올릴 하위 trace를 만든다. 결과와 인자 양쪽을 자른다.
 
-    tool 결과뿐 아니라 인자도 자른다. agent가 busy_rows와 candidate_slots를 인자에 그대로 복사해
-    넘기기 때문에, 멤버나 일정이 늘어나면 인자 쪽이 결과만큼 커진다.
+    agent가 busy_rows를 인자에 복사해 넘겨서 인자 쪽도 결과만큼 커진다.
     """
 
     return [_trim_trace_field(_trim_trace_field(event, "content"), "arguments") for event in events]
