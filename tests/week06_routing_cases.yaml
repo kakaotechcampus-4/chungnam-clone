@@ -1,0 +1,61 @@
+# Week 6 위임 라우팅 케이스.
+#
+# 수동으로 돌려보다 새 실패를 찾으면 여기에 한 항목만 추가하면 회귀로 고정된다.
+# 테스트 코드는 건드리지 않는다.
+#
+# 필드
+#   name               케이스 이름. 실패 메시지에 그대로 나온다
+#   input              사용자가 채팅창에 치는 문장. 실제로 쓰지 않을 마커는 넣지 않는다
+#   expect_agents      supervisor가 호출해야 하는 위임 tool. 순서대로. 빈 목록이면 위임하지 않아야 한다
+#   expect_inner_any   하위 agent가 부른 tool 중 최소 하나는 여기 있어야 한다 (선택)
+#   expect_inner_order 하위 tool이 이 순서로 나와야 한다. 사이에 다른 호출이 끼는 것은 허용 (선택)
+#   expect_final_slot  최종 시간이 확정돼야 하면 true (선택)
+#
+# 외부 실습 데이터는 2026-07-07~17 구간에 있다. 상대 날짜는 앱 기준일에 따라 흔들리므로
+# 날짜를 명시한다.
+
+- name: 개인 일정 조회는 Nana 담당
+  input: "2026년 7월 7일부터 17일까지 내 일정 뭐 있어?"
+  expect_agents: [nana_agent]
+  expect_inner_any: [list_saved_requests, personal_list_saved_schedules, search_saved_requests]
+
+- name: 개인 참고자료 검색도 Nana 담당
+  input: "내 참고자료에서 회의 관련해서 메모해 둔 거 찾아줘"
+  expect_agents: [nana_agent]
+  expect_inner_any: [search_personal_references]
+
+- name: 외부 멤버 일정 조회는 Kana 담당
+  input: "2026년 7월 7일부터 17일까지 철수가 언제 바쁜지 알려줘"
+  expect_agents: [kana_agent]
+  expect_inner_any: [collect_member_schedules, extract_schedules_from_history, list_shared_schedules]
+
+# "잡아줘"는 조율만 뜻할 수도 저장까지 뜻할 수도 있어 위임 대상이 실행마다 갈린다.
+# 3단 흐름을 확인하는 케이스이므로 조회로만 읽히는 문장을 쓴다. 저장 위임은 아래 별도 케이스에서 본다.
+- name: 회의 시간 조율은 Kana가 세 단계를 모두 밟는다
+  input: "2026년 7월 7일부터 17일까지 철수, 영희가 함께 1시간 비어 있는 시간을 알려줘"
+  expect_agents: [kana_agent]
+  expect_inner_order: [collect_member_schedules, find_common_available_slots, decide_final_slot]
+  expect_final_slot: true
+
+- name: 질문형으로 물어도 조율 흐름을 탄다
+  input: "2026년 7월 13일부터 15일 사이에 영희랑 30분만 이야기할 시간 있을까?"
+  expect_agents: [kana_agent]
+  expect_inner_order: [collect_member_schedules, find_common_available_slots, decide_final_slot]
+  expect_final_slot: true
+
+# 바쁜 일정이 하나도 없으면 모든 시간이 가능한데, 후보를 못 고른다고 보고 반대로 답하던 자리다.
+# "잡아줘"는 저장 요청으로도 읽혀 위임 대상이 갈리므로 조회로만 읽히는 문장을 쓴다.
+- name: 바쁜 사람이 없는 구간에서도 후보를 만든다
+  input: "2026년 8월 17일부터 21일까지 철수와 1시간 회의가 가능한 시간을 알려줘"
+  expect_agents: [kana_agent]
+  expect_inner_order: [find_common_available_slots, decide_final_slot]
+  expect_final_slot: true
+
+- name: 조율하고 저장하려면 두 하위 agent를 차례로 부른다
+  input: "2026년 9월 7일부터 11일까지 철수와 1시간 회의 시간을 잡고 그 일정을 저장해줘"
+  expect_agents: [kana_agent, nana_agent]
+  expect_inner_order: [decide_final_slot, save_structured_request]
+
+- name: 잡담에는 위임하지 않는다
+  input: "안녕! 오늘 기분 어때?"
+  expect_agents: []
