@@ -373,26 +373,40 @@ def _collect_member_schedules(
     # 외부 조회 대상이 없으면(내 일정만 물었으면) MCP 왕복을 하지 않는다.
     # "나" 를 빼로 넘기지 않고 그대로 넘긴 뒤, 공유 저장소로 동기화된 내 일정 복사본은
     # dedup 으로 걸러낸다(두 경로가 같은 일정을 다르게 다듬어 값 비교로는 안 걸러지기 때문).
+    # 외부 조회 대상이 없으면(내 일정만 물었으면) MCP 왕복을 하지 않는다. 이 경우는 실패가 아니다.
     external_rows: list[dict[str, Any]] = []
+    external_error: str | None = None
     if normalized_members:
-        external = call_external_tool_payload(
-            "extract_schedules_from_history",
-            {"member_names": normalized_members, "date_from": date_from, "date_to": date_to},
-        )
+        try:
+            external = call_external_tool_payload(
+                "extract_schedules_from_history",
+                {"member_names": normalized_members, "date_from": date_from, "date_to": date_to},
+            )
+        except Exception as exc:  # MCP 왕복 자체가 실패 (응답이 JSON 이 아님, tool 이름 오류 등)
+            external = None
+            external_error = f"외부 멤버 일정 조회에 실패했습니다: {exc}"
         if isinstance(external, dict):
             external_rows = external.get("rows") or []
+        elif external_error is None:
+            external_error = "외부 멤버 일정 조회 결과를 읽지 못했습니다."
 
     rows = _dedupe_schedule_rows([*my_rows, *external_rows])
     # 같은 시간대 충돌을 LLM 이 바로 읽을 수 있도록 (날짜, 시작 시각, 이름) 기준으로 정렬한다.
     rows.sort(key=lambda row: (row.get("date") or "", row.get("start_time") or "", row.get("member_name") or ""))
 
-    return {
-        "ok": True,
+    result: dict[str, Any] = {
+        "ok": external_error is None,
         "tool_name": "collect_member_schedules",
         "members": [PERSONAL_SHARED_MEMBER_NAME, *[name for name in normalized_members if name != PERSONAL_SHARED_MEMBER_NAME]],
         "rows": rows,
         "schedule_summary": external_schedule_summary(rows),
     }
+    # 외부 조회를 못 읽은 것을 "일정 없음(빈 rows)" 과 구분되게 흔적으로 남긴다.
+    # 6주차에서 이 rows 가 find_common 의 busy_rows 가 되므로, 조회 실패가 "아무도 안 바쁨" 으로
+    # 읽혀 그 위에 회의가 확정되면 안 된다. (삭제 wrapper 가 실패를 ok=False 로 남기는 것과 같은 방식)
+    if external_error is not None:
+        result["error"] = external_error
+    return result
 
 
 @tool(args_schema=SearchPreviousConversationsInput)

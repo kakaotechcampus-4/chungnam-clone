@@ -233,7 +233,9 @@ def kana_prompt_parts() -> list[str]:
         "find_common_available_slots 에 candidate_slots 로 넘겨 검증한다. "
         "검증된 후보 중 하나를 selected_index 로 골라 decide_final_slot 에 final_slot 까지 채워 "
         "최종 시간을 확정한다. 사용자가 특정 시간을 지정하지 않았으면 가장 이른 후보를 고른다. "
-        "이 세 단계를 한 흐름으로 이어서 호출하고, 후보 검증이나 needs_agent_selection 상태로 멈추지 않는다.",
+        "이 세 단계를 한 흐름으로 이어서 호출하고, 고를 후보가 있는 한 needs_agent_selection 상태로 멈추지 않는다. "
+        "단, find_common_available_slots 검증 뒤 겹치지 않는 후보가 하나도 없으면 없는 시간을 지어내 확정하지 말고, "
+        "가능한 시간이 없다는 사실과 그 이유(겹치는 일정)를 답한다.",
         "후보와 최종 시간은 네가 직접 고른다. 도구가 대신 계산해주지 않는다.",
         "확정한 일정을 앱 DB 에 저장하는 일은 Nana 담당이다. 너는 시간을 정하고 그 이유를 설명한다.",
     ]
