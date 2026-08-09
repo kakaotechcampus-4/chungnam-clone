@@ -203,15 +203,18 @@ def week06_prompt_parts() -> list[str]:
         ),
         (
             "nana_agent는 개인 일정, 개인 todo/reminder, 개인 저장 요청, 개인 참고자료, "
-            "Nana의 개인 기억/RAG가 필요한 요청을 담당한다."
+            "Nana의 개인 기억/RAG가 필요한 요청을 담당한다. "
+            "다른 사람이 참석자에 있어도 날짜와 시작 시간이 이미 정해진 일정 등록 요청은 nana_agent가 담당한다."
         ),
         (
             "kana_agent는 외부 멤버 일정, 이전 외부 대화 기록, 공유 일정 저장소, "
-            "여러 사람의 공통 가능 시간 찾기, 그룹 일정 조율, 최종 회의 시간 결정을 담당한다."
+            "여러 사람의 공통 가능 시간 찾기, 그룹 일정 조율, 최종 회의 시간 결정을 담당한다. "
+            "아직 시간이 정해지지 않아 새 시간을 찾아야 하는 요청만 kana_agent로 보낸다."
         ),
         (
-            "개인 업무와 그룹 업무가 섞여 있으면 최종 목적을 기준으로 판단한다. "
-            "최종 목적이 그룹 일정 조율이면 kana_agent를 우선 호출한다."
+            "라우팅 우선 규칙: '8월 20일 10시에 철수랑 개발 미팅 잡아줘'처럼 날짜와 시작 시간이 이미 있고 "
+            "'잡아줘', '등록해줘', '추가해줘', '저장해줘'가 포함된 요청은 참석자가 있어도 nana_agent로 보낸다. "
+            "'가능한 시간 찾아줘', '다음 주 중에 정해줘', '언제 만날 수 있어?'처럼 새 시간을 찾아야 하는 요청만 kana_agent로 보낸다."
         ),
         (
             "하위 agent에게 넘기는 query에는 사용자의 원문 요청, 날짜 범위, 사람 이름, 회의 길이 같은 핵심 조건을 빠뜨리지 않는다."
@@ -231,11 +234,14 @@ def nana_prompt_parts() -> list[str]:
         (
             "Week 6에서 너는 Nana 하위 agent다. "
             "너는 개인 일정, 개인 todo/reminder, 저장된 개인 요청, 개인 참고자료, "
-            "Nana의 개인 기억/RAG가 필요한 요청만 담당한다."
+            "Nana의 개인 기억/RAG가 필요한 요청을 담당한다. "
+            "다른 사람이 참석자에 있어도 날짜와 시작 시간이 이미 정해진 일정 등록 요청은 Nana가 담당한다."
         ),
         (
             "사용자가 내 일정 조회, 개인 일정 생성/수정/삭제, 저장된 요청 검색, "
-            "개인 참고자료 추가/검색, 이전 앱 대화 검색을 요청하면 적절한 Week 4 도구를 사용한다."
+            "개인 참고자료 추가/검색, 이전 앱 대화 검색을 요청하면 적절한 Week 4 도구를 사용한다. "
+            "'잡아줘', '등록해줘', '추가해줘', '저장해줘' 같은 저장 표현이 있고 날짜와 시작 시간이 있으면 "
+            "extract_schedule_request로 구조화한 뒤 save_structured_request로 저장한다."
         ),
         (
             "저장된 개인 일정이나 요청을 조회해야 하면 추측하지 말고 먼저 personal_list_saved_schedules, "
@@ -247,9 +253,10 @@ def nana_prompt_parts() -> list[str]:
         ),
         (
             "다른 사람의 일정, 외부 멤버의 이전 대화, 공유 일정 저장소, 여러 사람의 공통 가능 시간, "
-            "그룹 회의 시간 결정은 Nana의 담당이 아니다. 그런 요청을 받으면 직접 처리하지 말고 "
-            "그룹 일정 조율은 Kana 담당이라고 간단히 알린다."
-            "\"오늘 7시에 철수와 회의 일정 잡아줘.\"와 같은 그룹 일정으로 분류된 일정 추가 요청은 Nana가 담당한다."
+            "아직 시간이 정해지지 않은 그룹 회의 시간 결정은 Nana의 담당이 아니다. 그런 요청을 받으면 직접 처리하지 말고 "
+            "그룹 일정 조율은 Kana 담당이라고 간단히 알린다. "
+            "단, \"오늘 7시에 철수와 회의 일정 잡아줘.\"처럼 날짜와 시작 시간이 이미 정해진 등록 요청은 "
+            "group_schedule으로 분류되더라도 거절하지 말고 extract_schedule_request 결과를 save_structured_request로 이어 저장한다."
         ),
         (
             "답변은 도구 결과를 근거로 작성한다. 도구 결과에 없는 일정, 저장 내용, 기억을 임의로 만들어내지 않는다."
@@ -264,11 +271,12 @@ def kana_prompt_parts() -> list[str]:
         (
             "너는 Week 6 Kana 하위 agent다. "
             "외부 멤버 일정, 이전 외부 대화 기록, 공유 일정 저장소, 여러 사람의 공통 가능 시간 확인, "
-            "그룹 일정 조율과 최종 회의 시간 결정을 담당한다."
+            "그룹 일정 조율과 최종 회의 시간 결정을 담당한다. "
+            "이미 날짜와 시작 시간이 정해진 일정 등록 요청은 Kana 담당이 아니라 Nana 담당이다."
         ),
         (
             "개인 일정만 조회/생성/수정/삭제하거나 개인 참고자료, 개인 기억, 개인 RAG가 필요한 요청은 담당하지 않는다. "
-            "그런 요청을 받으면 개인 업무는 Nana 담당이라고 간단히 알린다."
+            "그런 요청을 받으면 개인 업무는 Nana 담당이라고 간단히 알린다. "
         ),
         (
             "사용자의 요청에서 일정 제목, 날짜 범위, 회의 길이, 멤버 이름, 제약 조건을 파악한다. "
@@ -343,15 +351,18 @@ def supervisor_system_prompt() -> str:
             ),
             (
                 "nana_agent는 개인 일정, 개인 todo/reminder, 개인 저장 요청, 개인 참고자료, Nana의 기억/RAG가 필요한 요청에 사용한다. "
-                "예: 내 일정 보여줘, 내 약속 저장해줘, 내가 전에 말한 선호를 찾아줘."
+                "다른 사람이 참석자에 있어도 날짜와 시작 시간이 이미 정해진 일정 등록 요청은 nana_agent에 사용한다. "
+                "예: 내 일정 보여줘, 내 약속 저장해줘, 8월 20일 10시에 철수랑 개발 미팅 잡아줘."
             ),
             (
                 "kana_agent는 다른 멤버의 일정, 외부 대화 기록, 공유 일정 저장소, 여러 사람의 공통 가능 시간, "
-                "그룹 일정 조율/최종 시간 결정이 필요한 요청에 사용한다. "
+                "아직 시간이 정해지지 않은 그룹 일정 조율/최종 시간 결정이 필요한 요청에 사용한다. "
                 "예: 철수와 가능한 시간 찾아줘, 팀 회의 시간 정해줘, 멤버들의 바쁜 시간을 모아줘."
             ),
             (
-                "요청이 개인 업무와 그룹 업무를 모두 포함하면, 최종 목적이 그룹 조율이면 kana_agent를우선 호출한다. "
+                "가장 중요한 라우팅 규칙: '잡아줘', '등록해줘', '추가해줘', '저장해줘'처럼 등록 의도가 있고 "
+                "날짜와 시작 시간이 이미 정해진 요청은 참석자 이름이 있어도 nana_agent로 바로 보낸다. "
+                "'가능한 시간 찾아줘', '다음 주 중에 정해줘', '언제 가능해?'처럼 새 시간을 찾아야 하는 요청만 kana_agent로 보낸다. "
                 "요청이 모호하면 사용자에게 되묻기보다 가장 관련 있는 하위 agent 하나를 선택해 원문 요청과 필요한 맥락을 그대로 전달한다."
             ),
             (
@@ -365,6 +376,49 @@ def supervisor_system_prompt() -> str:
 
 def _tool_call_names(events: list[dict[str, Any]]) -> list[str]:
     return [event["tool_name"] for event in events if event.get("event") == "tool_call" and event.get("tool_name")]
+
+
+def _is_confirmed_final_slot_payload(payload: dict[str, Any]) -> bool:
+    return (
+        payload.get("ok") is not False
+        and bool(payload.get("final_slot"))
+        and payload.get("needs_agent_selection") is not True
+    )
+
+
+def _extract_kana_final_payloads(
+    events: list[dict[str, Any]],
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    latest_slot_payload: dict[str, Any] | None = None
+    latest_success_slot_payload: dict[str, Any] | None = None
+    latest_decision_payload: dict[str, Any] | None = None
+    latest_confirmed_decision_payload: dict[str, Any] | None = None
+
+    for event in events:
+        content = event.get("content")
+        if not isinstance(content, dict):
+            continue
+
+        if content.get("tool_name") == "find_common_available_slots":
+            latest_slot_payload = content
+            if content.get("ok") is not False:
+                latest_success_slot_payload = content
+
+        decision_payload: dict[str, Any] | None = None
+        if content.get("tool_name") == "decide_final_slot" or "final_slot" in content:
+            decision_payload = content
+        elif isinstance(content.get("final_decision"), dict):
+            decision_payload = content["final_decision"]
+
+        if decision_payload is not None:
+            latest_decision_payload = decision_payload
+            if _is_confirmed_final_slot_payload(decision_payload):
+                latest_confirmed_decision_payload = decision_payload
+
+    return (
+        latest_success_slot_payload or latest_slot_payload,
+        latest_confirmed_decision_payload or latest_decision_payload,
+    )
 
 
 def extract_langchain_trace(result: dict[str, Any]) -> dict[str, Any]:
@@ -784,34 +838,7 @@ def kana_agent(query: str) -> str:
     answer = extract_final_text(result)
     inner_tool_names = _tool_call_names(events)
 
-    latest_slot_payload: dict[str, Any] | None = None
-    latest_success_slot_payload: dict[str, Any] | None = None
-    latest_decision_payload: dict[str, Any] | None = None
-    latest_success_decision_payload: dict[str, Any] | None = None
-
-    for event in events:
-        content = event.get("content")
-        if not isinstance(content, dict):
-            continue
-
-        if content.get("tool_name") == "find_common_available_slots":
-            latest_slot_payload = content
-            if content.get("ok") is not False:
-                latest_success_slot_payload = content
-
-        if content.get("tool_name") == "decide_final_slot" or "final_slot" in content:
-            latest_decision_payload = content
-            if content.get("ok") is not False:
-                latest_success_decision_payload = content
-
-        if content.get("final_decision"):
-            final_decision = content["final_decision"]
-            latest_decision_payload = final_decision
-            if content.get("ok") is not False:
-                latest_success_decision_payload = final_decision
-
-    final_slot_payload = latest_success_slot_payload or latest_slot_payload
-    final_decision_payload = latest_success_decision_payload or latest_decision_payload
+    final_slot_payload, final_decision_payload = _extract_kana_final_payloads(events)
 
     payload = {
         "selected_agent": "kana_agent",
