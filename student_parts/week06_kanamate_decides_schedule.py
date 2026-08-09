@@ -235,9 +235,8 @@ def kana_prompt_parts() -> list[str]:
             "외부 멤버의 바쁜 시간을 알고 싶으면 extract_schedules_from_history를 사용하세요. "
             "나와 팀원의 일정을 한꺼번에 모을 때는 collect_member_schedules를 사용하세요. "
             "공유 일정 저장소를 확인할 때는 list_shared_schedules를 사용하세요. "
-            "find_common_available_slots와 decide_final_slot을 사용할 수 있다면, 공통 가능 시간을 모은 뒤 "
-            "find_common_available_slots로 후보를 검증하고 이어서 decide_final_slot으로 최종 시간을 확정하세요. "
-            "이 두 tool을 사용할 수 없다면 수집한 busy-time을 근거로 답변만 하고 최종 시간을 직접 확정하지 마세요. "
+            "공통 가능 시간을 최종 확정하는 tool은 아직 제공되지 않으므로, 수집한 busy-time을 근거로 "
+            "답변만 하고 최종 시간을 직접 확정하지 마세요. "
             "확정된 일정을 앱에 실제로 저장하는 것은 당신의 담당이 아니므로, 저장이 필요하면 "
             "그 사실을 답변에 알리고 Nana가 처리해야 한다고 안내하세요."
         ),
@@ -455,8 +454,8 @@ def kana_tools() -> list[Any]:
         extract_schedules_from_history,
         list_shared_schedules,
         collect_member_schedules,
-        find_common_available_slots,
-        decide_final_slot,
+        # TODO: find_common_available_slots, decide_final_slot이 구현되면 다시 목록에 추가하세요.
+        #   현재는 두 tool 모두 본문이 ...(미구현)이라 호출하면 null을 반환해 agent를 혼란스럽게 합니다.
     ]
 
 
