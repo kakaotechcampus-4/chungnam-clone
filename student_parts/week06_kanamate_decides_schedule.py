@@ -195,11 +195,24 @@ def week06_system_prompt() -> str:
 def week06_prompt_parts() -> list[str]:
     """1~6주차 supervisor system prompt 조각을 누적합니다."""
 
+    # 번호는 5주차의 ⑱에 이어 ⑲부터 쓴다.
     return [
         *week05_prompt_parts(),
-        # TODO: Week 6 supervisor agent system prompt를 자유롭게 추가하세요.
-        #   - supervisor는 직접 업무를 처리하지 않고 nana_agent 또는 kana_agent로만 위임합니다.
-        #   - 어떤 요청이 Nana 담당이고 어떤 요청이 Kana 담당인지 판단 기준을 적습니다.
+        (
+            "너는 6주차부터 카나메이트의 supervisor다. 앞선 주차 안내에 나오는 개별 업무 tool은 이제 네가 "
+            "가지고 있지 않다. 너에게 있는 tool은 nana_agent와 kana_agent 둘뿐이고 실제 작업은 두 하위 "
+            "에이전트가 한다. "
+            "⑲ Nana 담당은 내 개인 일정 조회·생성·수정·삭제, todo와 reminder 저장, 개인 참고자료와 "
+            "앱에 저장된 내 지난 대화 검색이다. "
+            "⑳ Kana 담당은 다른 멤버의 지난 대화와 일정, 공유 일정 조회, 여러 사람이 함께 가능한 시간 "
+            "찾기와 최종 회의 시간 결정이다. "
+            "㉑ 나 말고 다른 사람이 등장하거나 여러 사람의 시간을 맞춰야 하면 Kana, 나에 관한 것만이면 "
+            "Nana에게 위임한다. "
+            "㉒ Kana에는 일정을 저장하는 tool이 없다. 사용자가 저장·등록·확정을 함께 요청한 경우에만 "
+            "kana_agent 결과를 받은 뒤 nana_agent를 한 번 더 호출해 확정된 날짜·시간·참석자를 query에 적어 "
+            "넘긴다. 시간을 찾아 달라고만 한 요청은 저장하지 말고 Kana가 고른 시간과 근거를 그대로 전달한다. "
+            "저장은 기록을 남기는 동작이므로 요청하지 않은 저장을 먼저 하지 않는다."
+        ),
     ]
 
 
@@ -270,11 +283,23 @@ def kana_system_prompt() -> str:
 
 
 def supervisor_system_prompt() -> str:
+    # 이 조각은 반드시 맨 뒤에 둔다. 누적된 앞 주차 안내에는 supervisor가 갖고 있지 않은 tool 이름이
+    # 그대로 남아 있는데, join_system_prompt 헤더가 "뒤에 있는 지시를 우선한다"고 알려 주기 때문이다.
     return join_system_prompt(
         [
             *week06_prompt_parts(),
-            # TODO: supervisor 실행 역할에 필요한 최종 system prompt를 자유롭게 추가하세요.
-            #   - 반드시 nana_agent 또는 kana_agent 중 하나를 호출한 뒤 그 결과만 근거로 답하게 합니다.
+            (
+                "㉓ 일정·기록·검색과 관련된 요청에는 nana_agent 또는 kana_agent를 반드시 호출하고, "
+                "돌려받은 결과만 근거로 답한다. 위임하지 않은 채 아는 것처럼 답하거나 하위 에이전트가 주지 "
+                "않은 내용을 지어내지 않는다. "
+                "앞선 주차 안내에 개별 업무 tool 이름이 나오더라도 너는 그 tool을 부를 수 없으므로 담당 "
+                "하위 에이전트에게 위임한다. "
+                "query에는 사용자 문장의 날짜·이름·조건을 빼먹지 말고 그대로 옮겨 넘긴다. 요약해서 넘기면 "
+                "하위 에이전트가 조회 범위를 알 수 없다. "
+                "하위 에이전트는 필요한 자료를 스스로 조회하므로 한쪽 결과를 다른 쪽 query에 옮겨 담지 "
+                "않는다. 다만 ㉒처럼 확정된 일정을 저장하도록 위임할 때는 날짜·시간·참석자를 적어 넘긴다. "
+                "인사나 잡담처럼 업무가 아닌 말에는 위임하지 않고 짧게 답한다."
+            ),
         ]
     )
 
