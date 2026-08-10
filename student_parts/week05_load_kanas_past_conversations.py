@@ -15,6 +15,7 @@ from fixed.external_people_store import (
     external_schedule_summary,
     normalize_external_member_names,
     normalize_external_schedule_date_bounds,
+    strip_parenthetical_text,
 )
 from fixed.llm import chat_model
 from fixed.mcp_client import (
@@ -44,6 +45,22 @@ _PERSONAL_SCHEDULE_FETCH_LIMIT = 200
 _UNSPECIFIED_TIME_MINUTES = -1
 _DEFAULT_BUSY_MINUTES = 60
 _DAY_END_MINUTES = 24 * 60
+# collect_member_schedules payload의 top-level 키입니다. 이 이름들은 파이썬 코드만 읽는 게 아니라
+# 이 tool의 description과 system prompt가 이름 그대로 참조합니다. 그래서 키를 바꾸면 어디서도
+# 에러가 나지 않고 설명만 조용히 어긋나고, 증상은 "agent가 이상한 말을 한다" 하나로만 나타납니다.
+# _collect_member_schedules가 반환 직전에 이 목록과 맞는지 확인해 rename을 그 자리에서 드러냅니다.
+COLLECT_MEMBER_SCHEDULES_PAYLOAD_KEYS = frozenset(
+    {
+        "rows",
+        "schedule_summary",
+        "time_unspecified_rows",
+        "member_names",
+        "external_member_names",
+        "external_lookup",
+        "date_from",
+        "date_to",
+    }
+)
 
 
 # [5주차 수강생 구현 가이드]
@@ -298,6 +315,37 @@ def _structured_request_from_schedule_row(row: dict[str, Any]) -> StructuredRequ
     )
 
 
+def _dedupe_schedule_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """같은 일정이 rows에 두 번 실리지 않게 한 번 걸러냅니다.
+
+    이 tool은 "나"를 외부 조회 대상에서 빼기 때문에 앱 DB row와 공유 저장소 복사본이
+    함께 들어오는 경로는 원래 생기지 않습니다. 다만 앱 DB 자체에 같은 일정이 두 번
+    저장돼 있거나, create_shared_schedule로 "나" row를 직접 등록한 뒤 조회하는 경우가
+    남아 있어 마지막 방어선으로 둡니다.
+
+    두 경로가 같은 일정을 다르게 다듬으므로 값을 그대로 비교하면 안 됩니다.
+      - 공유 저장소는 제목에서 소괄호를 지우고 공백을 줄이지만 앱 DB는 원문을 둡니다.
+      - end_time은 경로마다 보정 방식이 달라 키에서 뺐습니다. 같은 사람이 같은 날
+        같은 시각에 시작하는 같은 제목의 일정은 하나로 봅니다.
+      - start_time이 비어 있으면 공유 저장소는 "미정"으로 저장하므로 값을 맞춰 둡니다.
+
+    dict은 넣은 순서를 유지하고 setdefault는 기존 키를 덮어쓰지 않으므로, 앞에 오는
+    앱 DB row가 남습니다. notes에 담아 둔 출처 설명을 잃지 않으려면 호출할 때
+    내 일정을 외부 rows보다 앞에 두어야 합니다.
+    """
+
+    deduped: dict[tuple[str, ...], dict[str, Any]] = {}
+    for row in rows:
+        key = (
+            str(row.get("member_name") or "").strip(),
+            str(row.get("date") or "").strip(),
+            str(row.get("start_time") or "").strip() or "미정",
+            strip_parenthetical_text(str(row.get("title") or "")),
+        )
+        deduped.setdefault(key, row)
+    return list(deduped.values())
+
+
 def _collect_member_schedules(
     *,
     member_names: list[str],
@@ -395,7 +443,8 @@ def _collect_member_schedules(
             )
         )
         external_rows = payload.get("rows", [])
-    rows.extend(external_rows)
+    # 내 일정을 앞에 두어야 notes의 출처 설명이 살아남습니다.
+    rows = _dedupe_schedule_rows([*rows, *external_rows])
 
     rows.sort(
         key=lambda row: (
@@ -411,7 +460,7 @@ def _collect_member_schedules(
         )
     if external_lookup == "skipped":
         schedule_summary += "\n(외부 멤버가 지정되지 않아 MCP 조회는 하지 않았습니다.)"
-    return {
+    payload = {
         "rows": rows,
         "schedule_summary": schedule_summary,
         "time_unspecified_rows": time_unspecified_rows,
@@ -424,6 +473,15 @@ def _collect_member_schedules(
         "date_from": normalized_date_from,
         "date_to": normalized_date_to,
     }
+    # 키 이름 자체가 계약이라 여기서 한 번 맞춰 봅니다. 이유는 상수 주석에 적어 두었습니다.
+    if set(payload) != COLLECT_MEMBER_SCHEDULES_PAYLOAD_KEYS:
+        raise RuntimeError(
+            "collect_member_schedules payload 키가 계약과 다릅니다: "
+            f"{sorted(set(payload) ^ COLLECT_MEMBER_SCHEDULES_PAYLOAD_KEYS)}. "
+            "키를 바꿨다면 COLLECT_MEMBER_SCHEDULES_PAYLOAD_KEYS와 이 tool의 description, "
+            "그리고 그 이름을 참조하는 system prompt도 함께 고치세요."
+        )
+    return payload
 
 
 @tool(args_schema=SearchPreviousConversationsInput)
@@ -548,7 +606,25 @@ def list_shared_schedules(
 
 @tool(args_schema=CollectMemberSchedulesInput)
 def collect_member_schedules(member_names: list[str], date_from: str, date_to: str) -> str:
-    """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다."""
+    """내 일정과 다른 사람들의 일정을 MCP SQLite 기록에서 모읍니다.
+
+    member_names에는 외부 멤버 이름만 넣습니다. 내 일정은 앱 SQLite에서 따로 읽어 함께 합쳐 주므로
+    "나"를 넣을 필요가 없고, 사람 수만큼 반복 호출할 필요도 없습니다.
+
+    반환 JSON의 키:
+    - rows: 내 일정과 외부 멤버 일정을 합친 busy-time 목록. 각 row는
+      member_name/title/date/start_time/end_time/notes를 가집니다.
+      다른 tool에 busy_rows로 넘길 때는 이 목록을 그대로 복사합니다.
+    - schedule_summary: rows를 사람이 읽는 문장으로 요약한 것.
+    - time_unspecified_rows: 시작 시각을 몰라 busy 계산에서 뺀 내 일정. rows에는 들어 있지 않으므로
+      시간을 제안할 때 이 일정도 확인이 필요하다고 사용자에게 알려야 합니다.
+    - member_names: 이 tool이 다룬 전체 대상. external_member_names: "나"를 뺀 뒤 실제로 외부에 물어본 목록.
+    - external_lookup: 외부 조회를 실제로 했으면 "called", 대상이 없어 건너뛰었으면 "skipped".
+    - date_from / date_to: 실제로 사용한 조회 날짜 범위.
+
+    rows가 비어 있는 것은 "일정이 없다"가 아니라 "이 조건으로는 찾지 못했다"는 뜻입니다.
+    external_lookup과 날짜 범위를 함께 보고 판단하세요.
+    """
 
     payload = _collect_member_schedules(
         member_names=member_names,
