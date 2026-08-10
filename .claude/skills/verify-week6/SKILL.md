@@ -37,6 +37,11 @@ Week 6는 **supervisor + Nana/Kana 하위 agent 위임 구조**다. 위임 wrapp
 | `nana_agent` / `kana_agent` 반환 계약 | 전역 `_NANA_SUBAGENT`/`_KANA_SUBAGENT`에 fake agent 주입 → `create_agent` 미호출 |
 | prompt 누적 구조 | 문자열 조립뿐 |
 
+⚠️ **명령문 안에 백틱(`` ` ``)을 쓰지 않는다.** `python -c "..."`는 큰따옴표 문자열이라 셸이 백틱을
+명령 치환으로 해석한다. 파이썬 주석 안이어도 마찬가지다. zsh는 파싱 단계에서 죽어 명령이 아예
+안 돌고, bash는 `command substitution: syntax error`만 뱉고 그냥 진행한다 — **bash에서 통과했다는
+것이 문서가 멀쩡하다는 근거가 못 된다**(멘토 리뷰 ⑤). 강조가 필요하면 작은따옴표를 쓴다.
+
 ## 격리 하네스 (외부/앱 DB를 건드리는 단계 공통 — 7단계)
 
 ⚠️ **환경변수 격리가 필수다.** `busy_rows=None` 경로는 Week 5 `collect_member_schedules`를 타고,
@@ -306,7 +311,7 @@ iso = json.loads(m.find_common_available_slots.invoke({**ARGS, 'date_from': '202
 assert len(iso['candidate_slots']) == 1, 'ISO datetime 경계에서 후보가 전부 탈락 → normalize_date_bound 미적용: ' + str(iso['candidate_slots'])
 
 # (5) busy_rows=[]는 '빈 목록을 이미 받았다'는 뜻이다 — None이 아니므로 재수집하면 안 된다.
-#     `if not busy_rows:` 로 잘못 쓰면 외부 DB를 타면서 rows가 채워져 여기서 잡힌다.
+#     'if not busy_rows:' 로 잘못 쓰면 외부 DB를 타면서 rows가 채워져 여기서 잡힌다.
 given_empty = json.loads(m.find_common_available_slots.invoke({**ARGS, 'busy_rows': [],
     'candidate_slots': [{'date': '2026-07-09', 'start_time': '14:00', 'end_time': '15:00', 'duration_minutes': 60, 'reason': 'r'}]}))
 assert given_empty['busy_rows'] == [], \"busy_rows=[]를 받고도 재수집함 ('is None'이 아니라 falsy로 판정): \" + str(given_empty['busy_rows'])
@@ -355,6 +360,42 @@ print('COLLECT_FAILURE_OK')
 후보 검증이 **아예 진행되지 않는다**. 실패와 "겹치는 일정이 없어 후보가 통과"가 구분되어야 한다.
 > 이 축이 없으면 실패가 빈 `busy_rows`가 되어 **어떤 후보든 전원 통과**한다.
 > "이번 주"를 지난 주로 계산했을 때와 같은 실패 모양이다.
+
+## 6-c. 하루짜리 범위(date_from == date_to)가 무너지지 않는가 (멘토 리뷰 ④)
+```bash
+uv run python -X utf8 -c "
+import json
+import student_parts.week06_kanamate_decides_schedule as m
+
+# 날짜를 하나만 말한 요청은 date_from == date_to로 들어온다. 여기서 후보가 전멸하면
+# agent가 '이 날은 안 된다'로 오답하고, 그 회피로 범위를 주 단위로 넓히게 된다.
+DAY = '2026-07-09'
+BUSY = [{'member_name': '철수', 'date': DAY, 'start_time': '14:00', 'end_time': '15:30', 'title': '고객 인터뷰'}]
+ARGS = {'member_names': ['철수'], 'date_from': DAY, 'date_to': DAY, 'duration_minutes': 60, 'busy_rows': BUSY,
+    'candidate_slots': [
+        {'date': DAY, 'start_time': '10:00', 'end_time': '11:00', 'duration_minutes': 60, 'reason': 'free'},
+        {'date': DAY, 'start_time': '14:00', 'end_time': '15:00', 'duration_minutes': 60, 'reason': 'busy와 겹침'},
+    ]}
+found = json.loads(m.find_common_available_slots.invoke(ARGS))
+kept = found['candidate_slots']
+assert len(kept) == 1 and kept[0]['start_time'] == '10:00', \
+    '하루 범위에서 겹침 판정이 무너짐 (전멸/전원통과): ' + str(kept)
+
+decided = json.loads(m.decide_final_slot.invoke({'candidate_slots': kept, 'selected_index': 0,
+    'final_slot': DAY + ' 10:00-11:00', 'reason': 'r', 'needs_agent_selection': False,
+    'member_names': ['철수'], 'date_from': DAY, 'date_to': DAY, 'busy_rows': BUSY}))
+assert str(decided.get('final_slot', '')).startswith(DAY), \
+    'decide가 요청한 날짜 밖으로 나감: ' + str(decided.get('final_slot'))
+assert decided['date_from'][:10] == DAY and decided['date_to'][:10] == DAY, \
+    'decide payload가 받은 하루 범위를 넓혀서 되돌려줌: ' + str([decided['date_from'], decided['date_to']])
+print('SINGLE_DAY_OK')
+"
+```
+확인 포인트: `date_from == date_to`여도 겹침 판정이 **양방향**으로 동작하고, tool이 범위를 임의로
+넓히지 않으며, 확정 시각이 그 날짜를 벗어나지 않는다.
+> 이 단계는 **tool 쪽에 하루 범위를 막는 요인이 없다**는 것까지만 보증한다.
+> agent가 실제로 범위를 그 날로 고정하는지는 prompt 동작이라 `week06_eval`의 `single_date_scope`
+> (그리고 반대편 `period_request_still_widens`)에서 통과율로 잰다.
 
 ## 7. busy_rows=None 수집 경로 (추가 과제 · temp 외부 DB)
 ```bash
