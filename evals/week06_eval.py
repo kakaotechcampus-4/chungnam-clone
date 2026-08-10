@@ -87,6 +87,10 @@ TODAY = rc.current_app_date_iso()  # 2026-07-06
 CHULSOO_THU = ("2026-07-09", "14:00", "고객 인터뷰")   # 철수 · 이번 주 목요일
 YOUNGHEE_TUE = ("2026-07-07", "13:00", "디자인 피드백")  # 영희 · 이번 주 화요일
 
+# 날짜를 하나만 말한 요청의 기준일. 오늘(월)이 든 주의 목요일이라, 범위를 주 단위로 넓히면
+# 곧바로 다른 날짜가 후보에 섞인다 — 넓힘이 있었는지가 인자에서 그대로 드러난다.
+SINGLE_DATE_CASE_DAY = CHULSOO_THU[0]  # 2026-07-09
+
 # 하위 agent별 tool 세력권 — 라우팅이 새는 것을 이름으로 잡는다
 NANA_ONLY_TOOLS = {
     "personal_list_saved_schedules",
@@ -108,6 +112,12 @@ KANA_ONLY_TOOLS = {
     "collect_member_schedules",
     "find_common_available_slots",
     "decide_final_slot",
+}
+# 앱 상태를 실제로 바꾸는 tool. "조율해줘"에 저장까지 딸려가는 것을 이름으로 잡는다(멘토 리뷰 ④).
+SAVE_TOOLS = {
+    "personal_create_schedule",
+    "personal_update_saved_schedules",
+    "save_structured_request",
 }
 
 
@@ -465,6 +475,76 @@ def _c_no_invented_final_slot(out, tools):
     return ok, f"final_slot={final_slot!r} declared={declared} looked_up={looked_up} answer={answer[:120]!r}"
 
 
+def _query_date_bounds(out) -> list[tuple[str, str, str]]:
+    """하위 tool 인자에서 (tool, key, YYYY-MM-DD)를 모은다. ISO datetime이 와도 날짜만 본다."""
+    bounds = []
+    for name, args in inner_tool_calls_with_args(out):
+        for key in ("date_from", "date_to"):
+            value = str(args.get(key) or "")[:10]
+            if value:
+                bounds.append((name, key, value))
+    return bounds
+
+
+def _c_single_date_scope(out, tools):
+    """멘토 리뷰 ④ — 날짜를 **하나로 지정한** 요청에서 조회 범위가 그 날 밖으로 넓어지지 않는가.
+
+    Kana 인자 규칙에는 "기간을 말하지 않은 요청은 하루로 좁히지 않는다"만 있어서, 날짜를 **말한**
+    요청까지 주 단위로 넓히는 근거로 읽혔다. 넓어진 범위는 그대로 후보와 최종 시각으로 새어나가
+    사용자가 말한 적 없는 날짜가 확정된다.
+
+    ⚠️ 기존 축이 왜 못 잡았는지가 이 케이스의 존재 이유다. `no_past_date_queried`는 date_from이
+    **과거**인지만 보고, `final_slot_in_requested_week`는 **주** 단위라 같은 주 안의 다른 날짜를
+    그대로 통과시킨다. `no_invented_final_slot`은 날짜 이탈과 무단 저장을 한 축에서 같이 먹어
+    통과율만 봐서는 원인이 구분되지 않았다 — 실측에서 4/5가 두 번 떴는데 note를 파고들지 않고
+    변이로 넘긴 것이 이번 리뷰에서 지적으로 돌아왔다.
+    """
+    day = SINGLE_DATE_CASE_DAY
+    bad = [f"{name}.{key}={value}" for name, key, value in _query_date_bounds(out) if value != day]
+    final_slot = str((final_slot_payload_of(out) or {}).get("final_slot") or "")
+    if final_slot and not final_slot.startswith(day):
+        bad.append(f"final_slot={final_slot}")
+    # 최소 행동: 아무것도 조회하지 않으면 범위를 어길 일이 없어 금지 조건만으로는 자동 만점이 된다.
+    looked_up = "collect_member_schedules" in inner_tools_of(out)
+    return (looked_up and not bad), f"요청일={day} looked_up={looked_up} 범위이탈={bad}"
+
+
+def _c_period_request_still_widens(out, tools):
+    """`single_date_scope`의 반대편(kanana-conventions §6): 기간을 **말하지 않은** 요청은 여전히 넓게 본다.
+
+    위 축만 두면 "언제나 하루로 좁혀라"로 과교정될 수 있다. 그러면 '이번 주'처럼 범위를 맡긴
+    요청에서 하루만 조회하고 "빈 시간이 없다"고 답하는 반대 방향 결함이 생긴다.
+    """
+    bounds = _query_date_bounds(out)
+    days = {value for _, _, value in bounds}
+    spans = [
+        (name, args.get("date_from"), args.get("date_to"))
+        for name, args in inner_tool_calls_with_args(out)
+        if args.get("date_from") and args.get("date_to")
+    ]
+    widened = any(str(a)[:10] != str(b)[:10] for _, a, b in spans)
+    looked_up = "collect_member_schedules" in inner_tools_of(out)
+    return (looked_up and widened), f"looked_up={looked_up} widened={widened} 조회날짜={sorted(days)}"
+
+
+def _c_no_unrequested_save(out, tools):
+    """멘토 리뷰 ④ — '정해줘'까지만 말한 요청에 저장을 이어붙이지 않는가.
+
+    supervisor prompt에는 이미 "사용자가 저장을 요구하지 않았으면 저장을 위임하지 않는다"가
+    있었는데도 깨졌다. 규칙이 없어서가 아니라 **판별 기준**이 없어서다. 축을 따로 세워
+    문구를 세게 쓴 것이 아니라 판별이 고쳐졌는지 본다.
+
+    ⚠️ 위임 이름과 tool 이름을 **둘 다** 본다. nana_agent를 부르고도 저장 tool을 안 쓸 수 있고,
+    반대로 kana_agent 안에서 저장이 일어날 길은 없지만 답변만 '저장했다'로 나갈 수 있다.
+    """
+    delegated = delegated_agents_of(tools)
+    saved = sorted(set(inner_tools_of(out)) & SAVE_TOOLS)
+    answer = answer_of(out)
+    claimed = any(cue in answer for cue in ("저장했", "저장해", "등록했", "추가했"))
+    ok = "nana_agent" not in delegated and not saved and not claimed
+    return ok, f"delegated={delegated} 저장tool={saved} claimed={claimed} answer={answer[:120]!r}"
+
+
 # --- 3군: 하위 agent 역할 경계 (하위 agent는 supervisor prompt를 공유하지 않는다) ---
 def _c_nana_declines_group(out, tools):
     """가이드 line 213: Nana는 그룹 조율 요청을 담당이 아니라고 짧게 알린다.
@@ -740,6 +820,27 @@ CASES: list[Case] = [
         text="철수랑 7월 8일에 한 시간 회의할 시간을 정해줘.",
         check=_c_no_invented_final_slot,
         seed=lambda: seed_fully_busy_day("2026-07-08"),
+        critical=True,
+    ),
+    Case(
+        # 멘토 리뷰 ④ — 날짜를 하나만 말했는데 주 전체를 조회하고 다른 날짜를 고른다.
+        id="single_date_scope",
+        text=f"철수랑 {int(SINGLE_DATE_CASE_DAY[5:7])}월 {int(SINGLE_DATE_CASE_DAY[8:10])}일에 한 시간 회의할 시간을 정해줘.",
+        check=_c_single_date_scope,
+        critical=True,
+    ),
+    Case(
+        # 위 축의 반대편(§6): 기간을 안 말한 요청까지 하루로 좁히는 과교정을 막는다.
+        id="period_request_still_widens",
+        text="철수랑 이번 주에 한 시간 회의할 시간을 정해줘.",
+        check=_c_period_request_still_widens,
+        critical=True,
+    ),
+    Case(
+        # 멘토 리뷰 ④ — '정해줘'까지만 말했는데 Nana로 이어가 실제 개인 일정으로 저장한다.
+        id="no_unrequested_save",
+        text=f"철수랑 {int(SINGLE_DATE_CASE_DAY[5:7])}월 {int(SINGLE_DATE_CASE_DAY[8:10])}일에 한 시간 회의할 시간을 정해줘.",
+        check=_c_no_unrequested_save,
         critical=True,
     ),
     # --- 하위 agent 역할 경계 (nana_agent/kana_agent를 직접 부르는 별도 채널) ---
@@ -1116,7 +1217,27 @@ def direct_inner_tools_of(out: dict) -> list[str]:
     return inner_tools_of(out)
 
 
-def run(n: int) -> dict[str, dict]:
+DETERMINISTIC_CHECKS = (
+    ("slots_overlap_filtered", _slots_overlap_filtered_once),
+    ("slots_no_over_filter", _slots_no_over_filter_once),
+    ("find_no_invented_candidates", _find_no_invented_candidates_once),
+    ("decide_no_auto_pick", _decide_no_auto_pick_once),
+    ("decide_keeps_agent_choice", _decide_keeps_agent_choice_once),
+    ("collect_path_used", _collect_path_used_once),
+    # 멘토 리뷰 ②③ — 실패와 빈 결과의 구분, 재시도 결과 선택 기준
+    ("collect_failure_not_empty", _collect_failure_not_empty_once),
+    ("retry_keeps_success", _retry_keeps_success_once),
+)
+DETERMINISTIC_CASE_IDS = {cid for cid, _ in DETERMINISTIC_CHECKS}
+
+
+def run(n: int, only: set[str] | None = None) -> dict[str, dict]:
+    """--- 하네스: `only`는 **반복 수정 중 빠른 확인용** 부분 실행이다. ---
+
+    골든셋의 값은 전체를 한 번에 재는 데 있으므로 부분 실행 결과는 baseline이 될 수 없다
+    (`--save`와 함께 쓰지 못하게 막아 둔다). 고친 축만 보고 통과했다고 판단하면, 이번에
+    `no_invented_member`가 그랬듯 **다른 축을 깨뜨린 것**을 놓친다.
+    """
     # 1. 입력 고정: 고정 시계로 세 agent의 prompt를 다시 조립한다
     m._SUPERVISOR_AGENT = None
     m._NANA_SUBAGENT = None
@@ -1124,6 +1245,8 @@ def run(n: int) -> dict[str, dict]:
     agent = m.build_week_agent()  # 1. 채널 고정: 실제 앱 경로 (PROXY_TOKEN 필요)
     results: dict[str, dict] = {}
     for case in CASES:
+        if only is not None and case.id not in only:
+            continue
         passed, errors, notes = 0, 0, []
         for _ in range(n):
             rebind_temp_stores()          # 1. 상태 격리
@@ -1155,17 +1278,9 @@ def run(n: int) -> dict[str, dict]:
 
     # 비-LLM 결정적 안전규칙 — 잘못된 후보를 확정하는 결함은 여기서 통과율로 즉시 드러난다.
     # 거르는 로직은 양방향으로 (kanana-conventions §6)
-    for cid, fn in (
-        ("slots_overlap_filtered", _slots_overlap_filtered_once),
-        ("slots_no_over_filter", _slots_no_over_filter_once),
-        ("find_no_invented_candidates", _find_no_invented_candidates_once),
-        ("decide_no_auto_pick", _decide_no_auto_pick_once),
-        ("decide_keeps_agent_choice", _decide_keeps_agent_choice_once),
-        ("collect_path_used", _collect_path_used_once),
-        # 멘토 리뷰 ②③ — 실패와 빈 결과의 구분, 재시도 결과 선택 기준
-        ("collect_failure_not_empty", _collect_failure_not_empty_once),
-        ("retry_keeps_success", _retry_keeps_success_once),
-    ):
+    for cid, fn in DETERMINISTIC_CHECKS:
+        if only is not None and cid not in only:
+            continue
         results[cid] = check_deterministic(n, fn)
         _print_row(cid, results[cid])
     return results
@@ -1290,15 +1405,27 @@ def main() -> int:
     ap.add_argument("--baseline", type=Path, help="이 baseline과 비교")
     ap.add_argument("--max-errors", type=int, default=0,
                     help="허용할 크래시 횟수. 기본 0(무관용). 알려진 크래시를 명시적으로 인정할 때만 올린다")
+    ap.add_argument("--only", help="쉼표로 구분한 case id만 실행 (수정 중 빠른 확인용. baseline 저장 불가)")
     args = ap.parse_args()
+
+    only = {cid.strip() for cid in args.only.split(",")} if args.only else None
+    if only:
+        unknown = only - ({c.id for c in CASES} | DETERMINISTIC_CASE_IDS)
+        if unknown:
+            print(f"알 수 없는 case id: {sorted(unknown)}")
+            return 2
+        if args.save:
+            print("--only는 부분 실행이라 baseline이 될 수 없다. --save 없이 돌리고, 전체 실행으로 저장한다.")
+            return 2
 
     if not CONFIG.has_openai_key:
         print("SKIP: PROXY_TOKEN 없음 — Week 6 eval은 supervisor/하위 agent 경로(및 Week 4 임베딩)가 필요하다.")
         print("      키 없는 결정적 계약 검증은 `verify-week6` skill이 담당한다.")
         return 0
 
-    print(f"채널=build_week_agent() (supervisor) | 오늘={TODAY} | N={args.n}\n")
-    results = run(args.n)
+    scope = f" | 부분실행={sorted(only)}" if only else ""
+    print(f"채널=build_week_agent() (supervisor) | 오늘={TODAY} | N={args.n}{scope}\n")
+    results = run(args.n, only)
 
     total = sum(r["passed"] for r in results.values())
     denom = sum(judged_n(r) for r in results.values())

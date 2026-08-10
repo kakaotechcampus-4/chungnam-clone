@@ -106,6 +106,30 @@
       "ambiguous": false,
       "notes": []
     },
+    "single_date_scope": {
+      "passed": 5,
+      "n": 5,
+      "errors": 0,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "period_request_still_widens": {
+      "passed": 5,
+      "n": 5,
+      "errors": 0,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
+    "no_unrequested_save": {
+      "passed": 5,
+      "n": 5,
+      "errors": 0,
+      "critical": true,
+      "ambiguous": false,
+      "notes": []
+    },
     "nana_declines_group": {
       "passed": 5,
       "n": 5,
@@ -139,12 +163,15 @@
       "notes": []
     },
     "no_invented_member": {
-      "passed": 5,
+      "passed": 3,
       "n": 5,
       "errors": 0,
       "critical": true,
       "ambiguous": false,
-      "notes": []
+      "notes": [
+        "delegated=['kana_agent'] invented_member_names=['철수', '영희', '철수', '영희', '철수', '영희'] inner=['collect_member_schedules', 'find_common_available_slots', 'decide_final_slot']",
+        "delegated=['kana_agent'] invented_member_names=['철수', '영희', '철수', '영희', '철수', '영희'] inner=['collect_member_schedules', 'find_common_available_slots', 'decide_final_slot']"
+      ]
     },
     "member_names_not_dropped": {
       "passed": 5,
