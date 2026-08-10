@@ -119,6 +119,11 @@ def kana_prompt_parts() -> list[str]:
         extract_schedules_from_history를 사용한다. 내 일정과 외부 멤버 일정을 비교하거나 공통 시간을
         찾아야 할 때는 collect_member_schedules를 사용한다.
 
+        사용자가 구체적인 이름 없이 "외부 팀원", "외부 팀원들", "외부 멤버 전체"처럼
+        전체를 뜻하는 표현을 사용하면 철수, 영희, 민준, 서연, 지훈, 하린 전원을 의미한다.
+        관련 도구의 member_names에는 이 실제 이름들을 모두 전달하고, "외부 팀원"이라는
+        표현 자체를 사람 이름으로 전달하지 않는다.
+
         일정 조회와 조율에는 date_from과 date_to가 필요하다. 오늘·내일·이번 주·다음 주처럼
         해석 가능한 표현은 현재 날짜를 기준으로 구체적인 ISO 날짜 범위로 바꾼다. 기간을 알 수
         없으면 임의로 생성하지 말고 먼저 사용자에게 물어본다. 일정 수집 결과의 ok가 false이거나
@@ -448,17 +453,17 @@ def decide_final_slot(
     """LLM이 직접 고른 후보/최종 시간을 course repo payload로 기록합니다."""
 
     result = decide_final_slot_payload(
-        candidate_slots,
-        selected_slot,
-        selected_index,
-        final_slot,
-        needs_agent_selection,
-        member_names,
-        date_from,
-        date_to,
-        duration_minutes,
-        reason,
-        busy_rows,
+        candidate_slots=candidate_slots,
+        selected_slot=selected_slot,
+        selected_index=selected_index,
+        member_names=member_names,
+        date_from=date_from,
+        date_to=date_to,
+        duration_minutes=duration_minutes,
+        final_slot=final_slot,
+        needs_agent_selection=needs_agent_selection,
+        reason=reason,
+        busy_rows=busy_rows,
     )
     return json.dumps(result, ensure_ascii=False)
 
@@ -564,20 +569,20 @@ def kana_agent(query: str) -> str:
 
     global _KANA_SUBAGENT
 
-    if _NANA_SUBAGENT is None:
+    if _KANA_SUBAGENT is None:
         _KANA_SUBAGENT = create_agent(
             model=chat_model(), tools=kana_tools(), system_prompt=kana_system_prompt()
         )
-        result = _KANA_SUBAGENT.invoke(
-            {
-                "messages": [
-                    {
-                        "role": "user",
-                        "content": query,
-                    }
-                ]
-            }
-        )
+    result = _KANA_SUBAGENT.invoke(
+        {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": query,
+                }
+            ]
+        }
+    )
 
     trace = extract_agent_events(result)
     answer = extract_final_text(result)
