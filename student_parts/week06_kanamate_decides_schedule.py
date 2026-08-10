@@ -237,6 +237,9 @@ def nana_prompt_parts() -> list[str]:
             search_personal_references - 개인 참고자료를 검색할 때 사용한다.
             search_saved_requests - 저장된 일정/할 일/알림 텍스트를 검색할 때 사용한다.
 
+            사용자가 저장을 요청하면 save_structured_request만 사용하고, 같은 요청에 personal_create_schedule을
+            함께 호출하지 않는다. personal_create_schedule은 이번 대화에서만 참고할 임시 일정에만 사용한다.
+
             이 외의 그룹 조율 요청은 담당이 아님으로 사용자에게 알리는 짧은 오류 메시지를 반환한다.
             """
         ),
@@ -547,7 +550,6 @@ def nana_agent(query: str) -> str:
             "inner_tool_names": _tool_call_names(events),
         }
         )
-
 
 
 @tool(args_schema=AgentQueryInput)
