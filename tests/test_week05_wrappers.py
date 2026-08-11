@@ -170,6 +170,93 @@ class Week05CollectMerge(unittest.TestCase):
         self.assertEqual(result["rows"], [])
 
 
+class Week05GroupAndDedupe(unittest.TestCase):
+    """정답 코드 업데이트(공지) 반영 검증: 그룹 일정 busy-time 포함 + 두 경로 중복 제거."""
+
+    def _collect(self, external_rows: list[dict], **kwargs) -> dict:
+        original = w5.call_external_tool_payload
+        w5.call_external_tool_payload = lambda name, args: {"ok": True, "rows": external_rows}
+        try:
+            return w5._collect_member_schedules(date_from="2026-07-01", date_to="2026-07-31", **kwargs)
+        finally:
+            w5.call_external_tool_payload = original
+
+    def test_group_schedule_is_busy_time_with_attendee_notes(self) -> None:
+        """버그 ①: 참석자가 빠진 사람과 조율해도 잡아둔 그룹 일정이 내 바쁜 시간으로 잡힌다."""
+
+        my = [
+            {
+                "schedule_id": "sch_group",
+                "title": "하린과 사전 미팅",
+                "date": "2026-07-14",
+                "start_time": "15:00",
+                "end_time": "16:00",
+                "attendees": ["하린"],
+                "request_kind": "group_schedule",  # 그룹 일정 (list_schedules가 주는 값)
+            }
+        ]
+        result = self._collect([], member_names=["민준"], personal_schedules=my)
+        mine = [row for row in result["rows"] if row["member_name"] == "나"]
+        self.assertEqual(len(mine), 1, result["rows"])
+        self.assertEqual(mine[0]["title"], "하린과 사전 미팅")
+        self.assertEqual(mine[0]["notes"], "Nana 그룹 일정 · 참석자: 하린")
+
+    def test_personal_schedule_notes(self) -> None:
+        """개인 일정(request_kind 없음/personal)은 notes가 'Nana 개인 일정'."""
+
+        my = [{"schedule_id": "sch_p", "title": "내 집중", "date": "2026-07-10", "start_time": "10:00", "end_time": "11:00"}]
+        result = self._collect([], member_names=[], personal_schedules=my)
+        self.assertEqual(result["rows"][0]["notes"], "Nana 개인 일정")
+
+    def test_same_schedule_from_both_paths_is_deduped(self) -> None:
+        """버그 ②: "나"를 조회 대상에 넣어 같은 일정이 두 경로로 와도 1건만 남는다.
+
+        공유 저장소 경로는 제목 소괄호를 지우고 end_time "미정"을 그대로 두므로 값이 달라
+        단순 비교로는 안 걸러진다. 앞에 오는 앱 DB row(notes가 Nana …)가 남아야 한다.
+        """
+
+        my = [
+            {
+                "schedule_id": "sch_dup",
+                "title": "팀 회의 (온라인)",   # 앱 DB: 원문 유지
+                "date": "2026-07-14",
+                "start_time": "15:00",
+                "end_time": "18:00",           # 앱 DB 경로: "미정" → 18:00 치환된 값
+                "attendees": [],
+            }
+        ]
+        external = [
+            {
+                "member_name": "나",
+                "title": "팀 회의",            # 공유 저장소: 소괄호 제거됨
+                "date": "2026-07-14",
+                "start_time": "15:00",
+                "end_time": "미정",            # 공유 저장소: 미정 그대로
+                "notes": "앱 개인 일정 자동 동기화",
+            },
+            {
+                "member_name": "민준",
+                "title": "운영 회의",
+                "date": "2026-07-14",
+                "start_time": "10:00",
+                "end_time": "11:00",
+                "notes": "",
+            },
+        ]
+        result = self._collect(external, member_names=["나", "민준"], personal_schedules=my)
+        mine = [row for row in result["rows"] if row["member_name"] == "나"]
+        self.assertEqual(len(mine), 1, mine)
+        self.assertEqual(mine[0]["title"], "팀 회의 (온라인)")  # 앱 DB row가 남음
+        self.assertEqual(mine[0]["notes"], "Nana 개인 일정")
+        self.assertTrue(any(row["member_name"] == "민준" for row in result["rows"]))  # 남의 일정은 유지
+
+    def test_members_contains_me_once(self) -> None:
+        """members 목록에 "나"가 중복으로 들어가지 않는다."""
+
+        result = self._collect([], member_names=["나", "민준"], personal_schedules=[])
+        self.assertEqual(result["members"], ["나", "민준"])
+
+
 class Week05PersonalScope(unittest.TestCase):
     """_personal_schedules_for_current_scope: SQLite 저장 + 현재 대화 임시 일정, id 중복 제거."""
 
