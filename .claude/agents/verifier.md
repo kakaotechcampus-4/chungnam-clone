@@ -10,6 +10,7 @@ skills:
   - verify-week3
   - verify-week4
   - verify-week5
+  - verify-week6
 ---
 
 # 역할 (Role)
