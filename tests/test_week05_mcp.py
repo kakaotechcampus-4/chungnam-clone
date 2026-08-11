@@ -654,6 +654,88 @@ def test_collect_empty_result_uses_helper_wording():
     assert result["schedule_summary"] == external_schedule_summary([])
 
 
+MIRROR_SOURCE = "w5test:mirror"
+MIRROR_SCHEDULE_ID = "w5test_mirror_1"
+MIRRORED_TITLE = "팀 회의 (온라인)"
+
+
+@pytest.fixture()
+def mirrored_my_schedule():
+    """내 일정 하나를 앱 DB row 모양과 공유 저장소 미러 양쪽으로 준비한다.
+
+    앱에 일정을 저장하면 공유 저장소에도 "나" 이름으로 자동 동기화된다. 그래서 member_names에
+    "나"가 들어오면 같은 일정이 앱 DB 경로와 공유 저장소 경로로 두 번 들어온다.
+    두 경로가 값을 다르게 다듬는 것까지 재현하려고 제목에 소괄호를 넣는다. 공유 저장소는 읽을 때
+    소괄호를 지우므로, 값을 그대로 비교하면 중복이 걸러지지 않는다.
+    """
+
+    store = ExternalPeopleSQLiteStore(APP_CONFIG.external_db_path)
+    store.create_shared_schedule(
+        member_name="나",
+        title=MIRRORED_TITLE,
+        date="2026-07-08",
+        start_time="09:00",
+        end_time="미정",
+        source_conversation_id=MIRROR_SOURCE,
+        schedule_id=MIRROR_SCHEDULE_ID,
+    )
+    yield my_schedule(MIRRORED_TITLE, "2026-07-08", "09:00", "미정")
+    store.delete_shared_schedules(schedule_id=MIRROR_SCHEDULE_ID)
+
+
+def test_collect_dedupes_my_schedule_mirrored_in_shared_store(mirrored_my_schedule):
+    # 버그 ②: 같은 일정이 앱 DB 경로와 공유 저장소 미러 경로로 두 번 들어온다.
+    # 공유 저장소는 제목의 소괄호를 지우므로 값 비교로는 걸러지지 않는다.
+    # 같은 구간에 다른 "나" row를 심는 fixture가 있어서, 이 일정만 골라 센다.
+    result = collect(["나"], [mirrored_my_schedule])
+    mine = [
+        row for row in result["rows"]
+        if row["member_name"] == "나" and "팀 회의" in str(row.get("title") or "")
+    ]
+    assert len(mine) == 1, f"같은 일정이 두 번 들어왔다: {[row['title'] for row in mine]}"
+
+
+def test_collect_notes_marks_group_schedule_with_attendees():
+    # 앱 row의 request_kind로 그룹 일정을 알아보고 참석자를 notes에 담는지.
+    # 그룹 회의도 내가 바쁜 시간이라 종류가 보여야 6주차가 근거로 쓸 수 있다
+    group_row = {
+        "schedule_id": "w5test_group_1",
+        "request_kind": "group_schedule",
+        "title": "팀 리뷰",
+        "date": "2026-07-09",
+        "start_time": "14:00",
+        "end_time": "15:00",
+        "attendees": ["하린", "민준"],
+    }
+    result = collect([], [group_row])
+    notes = [row["notes"] for row in result["rows"] if row["title"] == "팀 리뷰"]
+    assert notes and "그룹" in notes[0], notes
+    assert "하린" in notes[0] and "민준" in notes[0], notes
+
+
+def test_collect_notes_marks_personal_schedule():
+    # request_kind가 없는 Week 1 임시 일정 row는 개인 일정으로 본다
+    result = collect([], [my_schedule("치과 예약", "2026-07-09")])
+    notes = [row["notes"] for row in result["rows"] if row["title"] == "치과 예약"]
+    assert notes and "개인" in notes[0], notes
+
+
+def test_collect_normalizes_missing_times():
+    # 빈 시각은 "미정"으로 맞춘다. 공유 저장소 표기와 같아야 요약이 일관되고,
+    # 6주차 겹침 검증이 "미정"을 자정까지로 보수적으로 다룬다
+    result = collect([], [my_schedule("시간 미정 회의", "2026-07-09", start_time="", end_time="")])
+    row = next(row for row in result["rows"] if row["title"] == "시간 미정 회의")
+    assert row["start_time"] == "미정"
+    assert row["end_time"] == "미정"
+
+
+def test_collect_members_does_not_repeat_me():
+    # member_names에 "나"가 들어와도 members에 두 번 들어가지 않는다
+    result = collect(["나", "철수"], [])
+    assert result["members"].count("나") == 1, result["members"]
+    assert "철수" in result["members"]
+
+
 # ── collect_member_schedules tool 배선 (두 helper를 실제로 연결했는지) ──
 def test_collect_tool_returns_json_with_rows_and_summary(tmp_app_db, pending_sandbox):
     # 반환이 JSON 문자열이고 rows/schedule_summary 두 키를 가지며 한글이 그대로 실려오는지
@@ -663,7 +745,10 @@ def test_collect_tool_returns_json_with_rows_and_summary(tmp_app_db, pending_san
     )
     assert "철수" in raw, "ensure_ascii=False로 한글이 그대로 나와야 한다"
     payload = json.loads(raw)
-    assert set(payload) == {"rows", "schedule_summary"}
+    # 다른 MCP tool과 같은 모양이 되도록 ok/tool_name/members를 함께 돌려준다.
+    assert set(payload) >= {"ok", "tool_name", "members", "rows", "schedule_summary"}
+    assert payload["ok"] is True
+    assert payload["tool_name"] == "collect_member_schedules"
     assert all(MERGED_ROW_KEYS <= set(row) for row in payload["rows"])
 
 

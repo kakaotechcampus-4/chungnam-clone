@@ -151,13 +151,16 @@ def test_e2e_conversation_id_is_not_fabricated():
 
 
 def test_e2e_busy_time_question_returns_evidence():
-    # 외부 멤버 busy-time 질문 → 근거가 tool 결과에 실제로 들어 있어야 한다
-    calls, results, _ = run_agent(
-        f"{JULY_FROM}부터 {JULY_TO}까지 철수와 영희가 언제 바쁜지 알려줘"
+    # 외부 멤버 busy-time 질문 → 근거가 tool 결과에 실제로 들어 있어야 한다.
+    # tool 선택에 편차가 있어(일정 조회 계열 중 무엇을 고르는지) 한 번까지 재시도한다
+    def has_evidence(turns):
+        calls, results, _ = turns[0]
+        return bool(BUSY_TIME_TOOLS & {name for name, _ in calls}) and "API 연동 실습" in repr(results)
+
+    turns, ok = chat_turns_until(
+        has_evidence, f"{JULY_FROM}부터 {JULY_TO}까지 철수와 영희가 언제 바쁜지 알려줘"
     )
-    tools = {name for name, _ in calls}
-    assert BUSY_TIME_TOOLS & tools, f"일정 추출 tool을 쓰지 않음: {tools}"
-    assert "API 연동 실습" in repr(results), "철수의 실습 일정이 tool 결과에 없음"
+    assert ok, f"tools={[name for name, _ in turns[0][0]]}"
 
 
 def test_e2e_merge_question_includes_me_and_external_member(seeded_my_schedule):

@@ -6,6 +6,8 @@
 
 - 외부 공유 저장소: MCP 서버가 별도 프로세스로 뜨고 호출 시점에 os.environ을 읽으므로 환경변수로 넘긴다.
 - 앱 SQLite: 환경변수 훅이 없어서, 학생 코드가 CONFIG를 읽기 전에 경로만 바꿔 끼운다.
+- ChromaDB: 대화 RAG의 sync는 "앱 DB에 없어진 대화"의 청크를 지운다. 앱 DB만 임시로 돌리고 chroma를
+  실제 경로로 두면, 빈 임시 DB로 sync하는 순간 실제 대화 임베딩이 전부 지워진다. 그래서 함께 옮긴다.
 
 임시 폴더는 세션이 끝나면 통째로 지운다. 개별 row를 지우는 정리가 빠져도 실제 데이터에 남지 않는다.
 """
@@ -37,6 +39,7 @@ _config.CONFIG = dataclasses.replace(
     _config.CONFIG,
     app_db_path=APP_DB_PATH,
     external_db_path=EXTERNAL_DB_PATH,
+    chroma_dir=TEST_DATA_DIR / "chroma",
 )
 
 
