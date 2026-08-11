@@ -20,8 +20,10 @@ from fixed.external_people_store import PERSONAL_SHARED_MEMBER_NAME
 from fixed.session_scope import conversation_session_scope
 from student_parts.week01_wake_up_nana import PERSONAL_SCHEDULES
 from student_parts.week05_load_kanas_past_conversations import (
+    GROUP_SCHEDULE_NOTES,
     PERSONAL_SCHEDULE_NOTES,
     _collect_member_schedules,
+    _dedupe_schedule_rows,
     collect_member_schedules,
     create_shared_schedule,
     delete_shared_schedule,
@@ -129,9 +131,17 @@ def test_collect_member_schedules_merges_both_sources() -> None:
     check("collect_member_schedules: 외부 조회 대상에서 '나' 제외")
 
     mine = [row for row in payload["rows"] if row["member_name"] == PERSONAL_SHARED_MEMBER_NAME]
-    assert any(row["title"] == temporary["title"] for row in mine), "현재 대화의 임시 일정이 빠졌습니다."
-    assert all(row["notes"] == PERSONAL_SCHEDULE_NOTES for row in mine)
+    temporary_rows = [row for row in mine if row["title"] == temporary["title"]]
+    assert temporary_rows, "현재 대화의 임시 일정이 빠졌습니다."
+    # 임시 일정 row에는 request_kind가 없으므로 항상 개인 일정으로 읽습니다.
+    assert all(row["notes"] == PERSONAL_SCHEDULE_NOTES for row in temporary_rows)
+    # 앱 DB에서 온 다른 "나" row는 개인/그룹 둘 다 가능하지만 반드시 둘 중 하나로 표시됩니다.
+    assert all(row["notes"].startswith((PERSONAL_SCHEDULE_NOTES, GROUP_SCHEDULE_NOTES)) for row in mine)
     check("collect_member_schedules: 현재 대화 임시 일정이 '나' row로 포함")
+
+    assert payload["member_names"][0] == PERSONAL_SHARED_MEMBER_NAME
+    assert payload["member_names"].count(PERSONAL_SHARED_MEMBER_NAME) == 1, "'나'가 두 번 들어가면 안 됩니다."
+    check("collect_member_schedules: members 목록에 '나'는 맨 앞 한 번만")
 
     for row in payload["rows"]:
         assert {"member_name", "title", "date", "start_time", "end_time", "notes"} <= set(row)
@@ -171,6 +181,60 @@ def test_other_members_only_when_i_am_not_requested() -> None:
     )
     assert collected["personal_row_count"] == 1
     check("_collect_member_schedules: member_names에 '나'가 없어도 내 일정 포함")
+
+
+def test_group_schedule_is_my_busy_time() -> None:
+    """이미 잡아둔 그룹 회의도 내 바쁜 시간으로 잡혀야 합니다(공지_코드업데이트.md 버그 ①)."""
+
+    collected = _collect_member_schedules(
+        member_names=["민준"],
+        date_from="2026-07-01",
+        date_to="2026-07-31",
+        personal_schedules=[
+            {
+                "title": "하린과 사전 미팅",
+                "date": "2026-07-14",
+                "start_time": "15:00",
+                "end_time": "16:00",
+                "attendees": ["하린"],
+                "request_kind": "group_schedule",
+            },
+            {"title": "개인 집중 작업", "date": "2026-07-15", "start_time": "09:00", "end_time": "10:00"},
+        ],
+    )
+    mine = {row["title"]: row for row in collected["rows"] if row["member_name"] == PERSONAL_SHARED_MEMBER_NAME}
+    assert "하린과 사전 미팅" in mine, "그룹 일정이 빠지면 그 시간이 '빈 시간'으로 추천됩니다."
+    assert mine["하린과 사전 미팅"]["notes"] == f"{GROUP_SCHEDULE_NOTES} · 참석자: 하린"
+    assert mine["개인 집중 작업"]["notes"] == PERSONAL_SCHEDULE_NOTES
+    check("_collect_member_schedules: 그룹 일정도 내 busy-time에 포함되고 notes로 구분")
+
+
+def test_dedupe_schedule_rows_matches_differently_trimmed_rows() -> None:
+    """앱 DB row와 공유 저장소 복사본은 다듬는 방식이 달라도 같은 일정으로 봅니다."""
+
+    app_row = {
+        "member_name": "나",
+        "title": "팀 회의 (온라인)",
+        "date": "2026-07-14",
+        "start_time": "15:00",
+        "end_time": "18:00",
+        "notes": PERSONAL_SCHEDULE_NOTES,
+    }
+    shared_copy = {
+        "member_name": "나",
+        "title": "팀 회의",
+        "date": "2026-07-14",
+        "start_time": "15:00",
+        "end_time": "미정",
+        "notes": "앱 개인 일정 자동 동기화",
+    }
+    other = {**app_row, "member_name": "철수"}
+
+    deduped = _dedupe_schedule_rows([app_row, shared_copy, other])
+    assert len(deduped) == 2, deduped
+    assert deduped[0]["notes"] == PERSONAL_SCHEDULE_NOTES, "먼저 온 앱 DB row의 notes가 남아야 합니다."
+    assert deduped[1]["member_name"] == "철수", "사람이 다르면 같은 일정이라도 각자 바쁜 시간입니다."
+    check("_dedupe_schedule_rows: 소괄호·end_time 차이를 넘어 중복 제거, 앞선 row 유지")
 
 
 # ---------------------------------------------------------------- 추가 과제(심화)
@@ -397,6 +461,8 @@ def main() -> None:
         test_collect_member_schedules_merges_both_sources,
         test_collect_member_schedules_filters_out_of_range_dates,
         test_other_members_only_when_i_am_not_requested,
+        test_group_schedule_is_my_busy_time,
+        test_dedupe_schedule_rows_matches_differently_trimmed_rows,
         test_shared_schedule_create_list_delete_round_trip,
         test_delete_shared_schedule_guard,
         test_delete_shared_schedule_by_source_conversation_id,
