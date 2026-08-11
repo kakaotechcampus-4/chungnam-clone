@@ -47,6 +47,18 @@ WEEK03_TOOL_CALL_PROMPT = """
   save_structured_request의 인자로 전달해 저장한다.
 - 리퀘스트 단위의 조회: 특정기간의 구조화 요청 목록이 올시 list_saved_requests, 리퀘스트 아이디를 사용한 요청은 get_saved_request을 이용하여 조회한다."""
 
+WEEK03_SCHEDULE_MAINTENANCE_PROMPT = """
+저장된 일정을 수정하거나 삭제할 때는 다음을 지킨다.
+- 수정: "시간 바꿔줘", "제목 바꿔줘"처럼 이미 저장된 일정 내용을 바꾸는 요청이면 personal_update_saved_schedule을
+  호출한다. 정확한 schedule_id를 모르면 먼저 personal_list_saved_schedules로 후보를 확인한 뒤 그 schedule_id를
+  넘긴다. 바꿀 필드에만 새 값을 채우고, 바꾸지 않는 필드는 None으로 둔다(None은 "수정하지 않음"이라는 뜻이다).
+  응답의 shared_sync는 공유 일정 복사본도 같은 값으로 갱신됐는지 참고하는 값이다. ok=False로 오면 schedule_id가
+  맞는지 다시 확인한다.
+- 삭제: "지워줘", "취소해줘", "삭제해줘"처럼 저장된 일정을 없애는 요청이면 먼저 personal_list_saved_schedules로
+  삭제 후보를 확인한 뒤, personal_delete_saved_schedules에 schedule_ids 또는 date/title/start_time/
+  time_unspecified 같은 명시 필터를 넘겨 호출한다. schedule_ids나 필터 없이, 그리고 사용자가 전체 삭제를
+  명확히 요청한 경우가 아니면 delete_all도 사용하지 않는다 — 조건 없는 삭제 요청은 tool이 실패 응답으로 막는다."""
+
 WEEK03_PERSONAL_SCHEDULE_LOOKUP_PROMPT = """
 "내 일정 보여줘", "오늘 뭐 있어?"처럼 저장된 일정 목록을 확인하는 질문에는 personal_list_saved_schedules를
 호출해 앱 SQLite 일정 row를 확인한다. 몇시 부터 몇시 사이, 몇시 이후에, 몇시 전에 처럼 특정 기간이 언급되면
@@ -446,8 +458,7 @@ def save_structured_request(
     original_text: str = "",
     source_schedule_id: str | None = None,
 ) -> str:
-    """extract_schedule_request가 구조화한 structured_request 필드 값을 그대로 인자로 받아
-    SQLite DB에 새 일정/할 일/알림으로 저장합니다."""
+    """Week 2 structured_request 필드를 검증한 뒤 SQLite에 저장합니다."""
 
     # args_schema가 이미 검증했더라도, 이 tool이 args_schema 검증 없이 일반 함수처럼 직접
     # 호출될 수 있으므로 SaveStructuredRequestInput으로 한 번 더 구성/검증한다.
@@ -645,15 +656,17 @@ def week03_prompt_parts() -> list[str]:
 
     return [
         *week02_prompt_parts(),
+        "이전 주차 툴 personal_list_schedules, personal_delete_schedule를 절대 사용해선 안돼. 해당 툴은 임시 저장소의 일정만 조회 가능하다. 앞으로 **임시 저장소**라는 명시적 지시가 있는 경우에만 사용해.",
         "Week 2 요청 구조화 agent는 대화를 StructuredRequest로 직접 반환해 구조화 결과를 확인했다. "
         "Week 3부터는 최종 답변은 자연어로 작성하되, 새 개인 일정 저장 요청은 personal_create_schedule에 "
         "바로 넘기고, 할 일/알림처럼 personal_create_schedule이 표현하지 못하는 저장 요청만 "
         "extract_schedule_request tool 결과의 structured_request를 SQLite 저장 도구(save_structured_request)에 넘긴다.",
         SQLITE_MEMORY_PROMPT,
         WEEK03_TOOL_CALL_PROMPT,
+        WEEK03_SCHEDULE_MAINTENANCE_PROMPT,
         "너는 Kanana의 Week 3 Nana logbook agent다. "
         f"현재 날짜는 앱 시작 시 OS에서 읽은 {current_app_date_iso()}이다. "
-        "Week 3부터는 새 개인 일정 생성은 personal_create_schedule을 호출한다 — 이 tool 자체가 SQLite 저장과 "
+        "Week 3부터는 새 개인 일정 생성은 personal_create_schedule을 호출한다 — 이 tool 자체가 해당 주차에 재정의되어 SQLite 저장과 "
         "외부 공유 저장소 동기화까지 처리한다. 할 일/알림 등 personal_create_schedule이 다루지 않는 종류만 "
         "extract_schedule_request/save_structured_request로 저장한다. "
         "저장된 요청 조회는 list_saved_requests/get_saved_request를 사용한다. "
