@@ -325,7 +325,7 @@ def _collect_member_schedules(
             "date": structured.date,
             "start_time": structured.start_time,
             "end_time": structured.end_time,
-            "notes": None,
+            "notes": f"참석자: {','.join(structured.members)}" if structured.members else None,
         })
 
     rows = personal_rows + external_rows
