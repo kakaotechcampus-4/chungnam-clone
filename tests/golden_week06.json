@@ -1,0 +1,191 @@
+{
+  "_comment": "Week 6 골든 데이터셋. unit(LLM 불필요)·agent(LLM 필요) 두 계층.",
+
+  "unit": [
+    {
+      "id": "find_slots_with_candidates",
+      "tier": "main",
+      "desc": "candidate_slots와 busy_rows를 직접 주면 payload에 ok=true와 candidate_slots가 포함된다",
+      "tool": "find_common_available_slots",
+      "input": {
+        "member_names": ["철수"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "busy_rows": [
+          {"member_name": "나", "date": "2026-08-11", "start_time": "10:00", "end_time": "11:00", "title": "팀 스탠드업"},
+          {"member_name": "철수", "date": "2026-08-11", "start_time": "14:00", "end_time": "15:00", "title": "철수 회의"}
+        ],
+        "candidate_slots": [
+          {"date": "2026-08-12", "start_time": "10:00", "end_time": "11:00", "duration_minutes": 60, "reason": "양쪽 모두 일정 없음"}
+        ],
+        "llm_reason": "8/12 오전은 두 사람 모두 비어 있음"
+      },
+      "expect": {
+        "ok": true,
+        "has_keys": ["candidate_slots", "members", "busy_rows"]
+      }
+    },
+    {
+      "id": "find_slots_no_busy_rows",
+      "tier": "main",
+      "desc": "busy_rows를 생략하면 내부적으로 collect_member_schedules를 호출해 결과를 채운다",
+      "tool": "find_common_available_slots",
+      "input": {
+        "member_names": ["철수"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "candidate_slots": [
+          {"date": "2026-08-13", "start_time": "15:00", "end_time": "16:00", "duration_minutes": 60, "reason": "빈 슬롯"}
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "has_keys": ["candidate_slots", "members"]
+      }
+    },
+    {
+      "id": "decide_final_slot_confirmed",
+      "tier": "main",
+      "desc": "final_slot과 reason을 주면 payload에 final_slot과 reason이 포함된다",
+      "tool": "decide_final_slot",
+      "input": {
+        "final_slot": "2026-08-12 10:00-11:00",
+        "selected_index": 0,
+        "needs_agent_selection": false,
+        "reason": "두 사람 모두 비어 있는 첫 번째 슬롯",
+        "member_names": ["나", "철수"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "candidate_slots": [
+          {"date": "2026-08-12", "start_time": "10:00", "end_time": "11:00", "duration_minutes": 60, "reason": "양쪽 모두 일정 없음"}
+        ],
+        "busy_rows": []
+      },
+      "expect": {
+        "has_keys": ["final_slot", "reason"]
+      }
+    },
+    {
+      "id": "decide_final_slot_pending",
+      "tier": "main",
+      "desc": "final_slot=null, needs_agent_selection=true 이면 payload에 needs_agent_selection이 포함된다",
+      "tool": "decide_final_slot",
+      "input": {
+        "final_slot": null,
+        "needs_agent_selection": true,
+        "reason": "아직 후보를 고르지 못함",
+        "member_names": ["나", "철수"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "candidate_slots": [],
+        "busy_rows": []
+      },
+      "expect": {
+        "has_keys": ["needs_agent_selection"]
+      }
+    },
+    {
+      "id": "find_slots_unknown_member_returns_ok",
+      "tier": "main",
+      "desc": "알 수 없는 멤버로 조회하면 ok=True, rows=[] (일정 없음) — collect 실패와 구별된다",
+      "tool": "find_common_available_slots",
+      "input": {
+        "member_names": ["존재하지않는멤버xyz"],
+        "date_from": "2026-08-11",
+        "date_to": "2026-08-15",
+        "duration_minutes": 60,
+        "candidate_slots": [
+          {"date": "2026-08-12", "start_time": "10:00", "end_time": "11:00", "duration_minutes": 60, "reason": "빈 슬롯"}
+        ]
+      },
+      "expect": {
+        "ok": true,
+        "has_keys": ["candidate_slots", "members"],
+        "_note": "collect ok=True+empty → 후보 검증 계속. collect ok=False → error 전파 (인프라 실패, 단위 테스트 재현 불가)"
+      }
+    },
+    {
+      "id": "supervisor_prompt_delegates",
+      "tier": "main",
+      "desc": "supervisor system prompt에 nana_agent와 kana_agent 위임 지시가 포함된다",
+      "tool": "_prompt_check",
+      "input": {},
+      "expect": {
+        "contains_all": ["nana_agent", "kana_agent"]
+      }
+    }
+  ],
+
+  "agent": [
+    {
+      "id": "agent_personal_schedule_list",
+      "tier": "main",
+      "desc": "'내 일정 보여줘' → supervisor가 nana_agent에 위임 → Nana가 personal_list_saved_schedules 호출",
+      "input": "내 일정 보여줘",
+      "expect_supervisor_calls": "nana_agent",
+      "expect_inner_tool_called": "personal_list_saved_schedules"
+    },
+    {
+      "id": "agent_group_schedule_coordination",
+      "tier": "main",
+      "desc": "'철수랑 회의 잡아줘 다음주' → supervisor가 kana_agent에 위임 → Kana가 collect_member_schedules 호출",
+      "input": "철수랑 다음주 회의 잡아줘",
+      "expect_supervisor_calls": "kana_agent",
+      "expect_inner_tool_called": "collect_member_schedules"
+    },
+    {
+      "id": "agent_personal_save",
+      "tier": "main",
+      "desc": "'내일 오전 10시 팀 미팅 저장해줘' → supervisor가 nana_agent에 위임",
+      "input": "내일 오전 10시 팀 미팅 저장해줘",
+      "expect_supervisor_calls": "nana_agent"
+    },
+    {
+      "id": "agent_external_search",
+      "tier": "main",
+      "desc": "'철수 대화 내역에서 일정 찾아줘' → supervisor가 kana_agent에 위임 → search_previous_conversations 호출",
+      "input": "철수 대화 내역에서 일정 찾아줘",
+      "expect_supervisor_calls": "kana_agent",
+      "expect_inner_tool_called": "search_previous_conversations"
+    },
+    {
+      "id": "agent_external_member_no_name",
+      "tier": "main",
+      "desc": "이름 없는 외부 팀원 일정 조회 → list_shared_schedules 즉시 호출, 되묻지 않음",
+      "input": "외부 팀원들 일정 조회해줘",
+      "expect_supervisor_calls": "kana_agent",
+      "expect_inner_tool_called": "list_shared_schedules",
+      "_eval_note": "search_previous_conversations는 대화 row를 반환해 agent가 다시 이름을 물음. 이름 없는 단순 조회 기본값은 list_shared_schedules"
+    },
+    {
+      "id": "agent_list_all_schedules_short",
+      "tier": "main",
+      "desc": "'내 일정 뭐 있어?' → nana_agent 위임 → personal_list_saved_schedules 호출 (kind 생략 = all)",
+      "input": "내 일정 뭐 있어?",
+      "expect_supervisor_calls": "nana_agent",
+      "expect_inner_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. personal+group 모두 반환이 기본값"
+    },
+    {
+      "id": "agent_list_all_schedules_weekly",
+      "tier": "main",
+      "desc": "'이번 주 전체 일정 보여줘' → nana_agent 위임 → personal_list_saved_schedules 호출 (kind 생략 = all)",
+      "input": "이번 주 전체 일정 보여줘",
+      "expect_supervisor_calls": "nana_agent",
+      "expect_inner_tool_called": "personal_list_saved_schedules",
+      "_eval_note": "kind=None으로 호출해야 함. personal+group 모두 반환이 기본값"
+    },
+    {
+      "id": "agent_final_slot_flow",
+      "tier": "extra",
+      "desc": "'철수랑 최종 회의 시간 잡아줘' → kana_agent trace에 find_common_available_slots + decide_final_slot 호출",
+      "input": "철수랑 다음주 월요일~금요일 사이 1시간짜리 회의 시간 잡아줘",
+      "expect_supervisor_calls": "kana_agent",
+      "expect_inner_tool_sequence": ["collect_member_schedules", "find_common_available_slots", "decide_final_slot"]
+    }
+  ]
+}
